@@ -1,0 +1,2278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Binder</title>
+<meta name="description" content="Magic: The Gathering collection, decks and wishlist. Works offline; your collection stays on this device.">
+<meta name="theme-color" content="#F3F3F6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D0E10" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Binder">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script>
+  /* Theme from Settings, applied before first paint so there's no flash.
+     data-theme = light|dark when overridden; absent = follow the system. */
+  window.mtgLook = function(p){
+    p = p || {};
+    var r = document.documentElement, t = p.theme;
+    if (t === "light" || t === "dark") r.setAttribute("data-theme", t); else r.removeAttribute("data-theme");
+    var dark = t === "dark" || (t !== "light" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    var metas = document.querySelectorAll('meta[name="theme-color"]');
+    for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", dark ? "#0D0E10" : "#F3F3F6");
+  };
+  (function(){
+    var p = {};
+    try { p = JSON.parse(localStorage.getItem("mtg:prefs") || "{}") || {}; } catch(e){}
+    window.mtgLook(p);
+  })();
+</script>
+<style>
+  /* Layout: an app shell. A translucent sticky top bar per screen, the screen body, and a
+     bottom tab bar on phones that becomes a left rail at 900px and up. Card images carry the
+     colour; the chrome stays neutral with one orange accent. Sheets rise from the bottom on
+     phones and sit centred as dialogs on wide screens. */
+  :root{
+    --bg:#F3F3F6; --surface:#FFFFFF; --surface-2:#EFF0F3; --surface-3:#E2E4E9;
+    --text:#15161A; --muted:#5E626E; --faint:#8B8F99;
+    --line:#E3E4E9; --edge:rgb(20 22 30 / .08);
+    --accent:#E0631C; --accent-text:#B44B0C; --accent-soft:#FCEADC; --on-accent:#FFFFFF;
+    --ok:#1B8A4B; --ok-soft:#DFF2E6; --warn:#A16500; --warn-soft:#FAEFD8; --danger:#C53A22; --danger-soft:#FBE4DF;
+    --toast-bg:#1C1D21; --toast-ink:#F2F3F5; --toast-act:#FFAE74;
+    --scrim:rgb(12 13 16 / .45);
+    --shadow:22 24 32;
+    --sh-1:0 0 0 1px var(--edge),0 1px 2px rgb(var(--shadow) / .06);
+    --sh-card:0 0 0 1px var(--edge),0 1px 2px rgb(var(--shadow) / .05),0 10px 28px -14px rgb(var(--shadow) / .22);
+    --sh-img:0 1px 3px rgb(0 0 0 / .22),0 0 0 .5px rgb(0 0 0 / .1);
+    --r-lg:20px; --r-md:14px; --r-sm:10px;
+    --f-ui:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --f-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --gut-l:max(16px, env(safe-area-inset-left, 0px));
+    --gut-r:max(16px, env(safe-area-inset-right, 0px));
+    --safe-t:env(safe-area-inset-top, 0px);
+    --safe-b:env(safe-area-inset-bottom, 0px);
+    --tab-h:58px; --rail-w:88px;
+    /* mana pips */
+    --m-w:#F8F5DF; --m-u:#A7D6F2; --m-b:#C6BDBA; --m-r:#F4A88C; --m-g:#9BD0AD; --m-c:#CFC8C5; --m-ink:#17140F;
+    /* rarity */
+    --ra-c:#6E727C; --ra-u:#5F7A90; --ra-r:#A9822A; --ra-m:#D4521B;
+    --foil:linear-gradient(115deg,#FF9FB3,#FFD27A 30%,#9DF0C0 55%,#8FC7FF 78%,#D7A6FF);
+    --etched:linear-gradient(115deg,#C9CED6,#F5F6F8 40%,#AEB5C0 70%,#E6E8EC);
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0D0E10; --surface:#17181C; --surface-2:#1F2125; --surface-3:#2A2C31;
+      --text:#ECEDF0; --muted:#9A9EA8; --faint:#6C707A;
+      --line:#26282D; --edge:rgb(255 255 255 / .07);
+      --accent:#FF8A3D; --accent-text:#FFA266; --accent-soft:#3A2312; --on-accent:#1F0D02;
+      --ok:#4CD787; --ok-soft:#12301F; --warn:#F2C04E; --warn-soft:#33280F; --danger:#FF7D66; --danger-soft:#3A1913;
+      --toast-bg:#ECEDF0; --toast-ink:#141518; --toast-act:#B44B0C;
+      --scrim:rgb(0 0 0 / .62); --shadow:0 0 0;
+      --ra-c:#9A9EA8; --ra-u:#9FB8CC; --ra-r:#E2BC5E; --ra-m:#FF7A3D;
+      color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0D0E10; --surface:#17181C; --surface-2:#1F2125; --surface-3:#2A2C31;
+    --text:#ECEDF0; --muted:#9A9EA8; --faint:#6C707A;
+    --line:#26282D; --edge:rgb(255 255 255 / .07);
+    --accent:#FF8A3D; --accent-text:#FFA266; --accent-soft:#3A2312; --on-accent:#1F0D02;
+    --ok:#4CD787; --ok-soft:#12301F; --warn:#F2C04E; --warn-soft:#33280F; --danger:#FF7D66; --danger-soft:#3A1913;
+    --toast-bg:#ECEDF0; --toast-ink:#141518; --toast-act:#B44B0C;
+    --scrim:rgb(0 0 0 / .62); --shadow:0 0 0;
+    --ra-c:#9A9EA8; --ra-u:#9FB8CC; --ra-r:#E2BC5E; --ra-m:#FF7A3D;
+    color-scheme:dark;
+  }
+
+  *,*::before,*::after{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+  body{margin:0;min-height:100vh;min-height:100dvh;background:var(--bg);color:var(--text);font:16px/1.45 var(--f-ui);
+    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;-webkit-tap-highlight-color:transparent;overflow-x:hidden}
+  button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+  input,select,textarea{font:inherit;color:inherit}
+  a{color:var(--accent-text)}
+  img{max-width:100%}
+  [hidden]{display:none!important}
+  :focus-visible{outline:2.5px solid var(--accent);outline-offset:2px;border-radius:8px}
+  @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .num{font-variant-numeric:tabular-nums}
+  .muted{color:var(--muted)}
+  .faint{color:var(--faint)}
+  svg.i{width:22px;height:22px;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  svg.i.sm{width:18px;height:18px}
+
+  /* ---------- shell ---------- */
+  .shell{min-height:100vh;min-height:100dvh;overflow-x:clip;padding-bottom:calc(var(--tab-h) + var(--safe-b))}
+  .page{max-width:1280px;margin:0 auto;padding:6px var(--gut-r) 110px var(--gut-l)}
+  .page.narrow{max-width:760px}
+
+  /* ---------- top bar ---------- */
+  .topbar{position:sticky;top:0;z-index:20;padding-top:var(--safe-t);
+    background:var(--bg);background:color-mix(in srgb,var(--bg) 84%,transparent);
+    -webkit-backdrop-filter:saturate(1.6) blur(18px);backdrop-filter:saturate(1.6) blur(18px);
+    border-bottom:.5px solid transparent;transition:border-color .2s}
+  .topbar.scrolled{border-bottom-color:var(--line)}
+  .bar-in{max-width:1280px;margin:0 auto;padding:0 var(--gut-r) 0 var(--gut-l)}
+  .bar-row{display:flex;align-items:center;gap:8px;min-height:56px}
+  .bar-title{flex:1;min-width:0;margin:0;font-size:24px;font-weight:750;letter-spacing:-.02em;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar-title small{display:block;font-size:13px;font-weight:500;letter-spacing:0;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar-sub{padding:0 0 10px}
+  .icon-btn{width:44px;height:44px;border-radius:50%;display:inline-grid;place-items:center;color:var(--text);flex:none;position:relative}
+  .icon-btn:active{background:var(--surface-3)}
+  .icon-btn.tint{color:var(--accent-text)}
+  .icon-btn .dot{position:absolute;top:7px;right:6px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--accent);color:var(--on-accent);font-size:11px;font-weight:700;display:grid;place-items:center}
+  .back{display:inline-flex;align-items:center;gap:2px;height:44px;padding:0 10px 0 0;margin-left:-6px;color:var(--accent-text);font-size:16px;font-weight:500;border-radius:12px}
+
+  .search{display:flex;align-items:center;gap:8px;height:44px;padding:0 6px 0 12px;background:var(--surface-2);border-radius:12px;color:var(--faint);box-shadow:inset 0 0 0 1px var(--edge)}
+  .search:focus-within{box-shadow:inset 0 0 0 1.5px var(--accent)}
+  .search input{flex:1;min-width:0;height:100%;border:0;background:none;outline:none;font-size:16px;color:var(--text);-webkit-appearance:none;appearance:none}
+  .search input::placeholder{color:var(--faint)}
+  .search input::-webkit-search-cancel-button{-webkit-appearance:none}
+  .search .clr{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--faint)}
+
+  /* ---------- nav: bottom tabs on phones, left rail on desktop ---------- */
+  .nav{position:fixed;z-index:30;left:0;right:0;bottom:0;display:flex;justify-content:space-around;
+    padding:0 max(6px,env(safe-area-inset-right,0px)) var(--safe-b) max(6px,env(safe-area-inset-left,0px));
+    background:var(--surface);background:color-mix(in srgb,var(--surface) 88%,transparent);
+    -webkit-backdrop-filter:saturate(1.6) blur(18px);backdrop-filter:saturate(1.6) blur(18px);border-top:.5px solid var(--line)}
+  .nav a{flex:1;max-width:120px;height:var(--tab-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    color:var(--faint);text-decoration:none;font-size:11px;font-weight:600;border-radius:12px}
+  .nav a[aria-current="page"]{color:var(--accent-text)}
+  .nav a[aria-current="page"] svg.i{stroke-width:2.2}
+  .brand{display:none}
+  @media (min-width:900px){
+    .shell{padding-bottom:0;padding-left:calc(var(--rail-w) + env(safe-area-inset-left,0px))}
+    .nav{top:0;right:auto;width:calc(var(--rail-w) + env(safe-area-inset-left,0px));flex-direction:column;justify-content:flex-start;gap:4px;
+      padding:calc(14px + var(--safe-t)) 8px 14px max(8px,env(safe-area-inset-left,0px));border-top:0;border-right:.5px solid var(--line)}
+    .nav a{flex:none;height:64px;max-width:none;font-size:11.5px}
+    .nav a:hover{background:var(--surface-2)}
+    .nav a[aria-current="page"]{background:var(--accent-soft)}
+    .brand{display:grid;place-items:center;height:52px;margin-bottom:10px}
+    .brand svg{width:40px;height:40px}
+  }
+
+  /* ---------- buttons, chips, segmented ---------- */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:12px;
+    background:var(--surface);box-shadow:var(--sh-1);font-weight:600;font-size:15px;color:var(--text);white-space:nowrap;text-decoration:none}
+  .btn:active{transform:scale(.98)}
+  .btn.pri{background:var(--accent);color:var(--on-accent);box-shadow:none}
+  .btn.soft{background:var(--accent-soft);color:var(--accent-text);box-shadow:none}
+  .btn.danger{color:var(--danger)}
+  .btn.pri.danger-fill{background:var(--danger);color:#fff}
+  .btn.block{width:100%}
+  .btn.sm{min-height:36px;padding:0 12px;font-size:14px;border-radius:10px}
+  .btn[disabled]{opacity:.5;pointer-events:none}
+  .btn-row{display:flex;flex-wrap:wrap;gap:8px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chips.scroll{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0 calc(-1 * var(--gut-r)) 0 calc(-1 * var(--gut-l));padding:0 var(--gut-r) 2px var(--gut-l)}
+  .chips.scroll::-webkit-scrollbar{display:none}
+  .chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border-radius:18px;background:var(--surface);box-shadow:var(--sh-1);
+    font-size:14px;font-weight:550;white-space:nowrap;color:var(--text)}
+  .chip[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);box-shadow:none}
+  .chip.on{background:var(--accent-soft);color:var(--accent-text);box-shadow:none}
+  .chip .x{opacity:.7;font-size:17px;line-height:1}
+  .chip .ct{font-size:12px;opacity:.7}
+  .seg{display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;padding:3px;background:var(--surface-3);border-radius:12px}
+  .seg button{min-height:38px;padding:0 14px;border-radius:9px;font-size:14px;font-weight:600;color:var(--muted);white-space:nowrap}
+  .seg button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgb(0 0 0 / .14)}
+  .toolbar{display:flex;align-items:center;gap:6px;padding:10px 0 6px}
+  .toolbar .grow{flex:1;min-width:0}
+  .summary{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14px;color:var(--muted);padding:2px 0 4px}
+  .summary b{color:var(--text);font-weight:700}
+
+  /* ---------- section headings + panels ---------- */
+  .sect{margin:22px 0 8px;display:flex;align-items:baseline;gap:8px}
+  .sect h2{margin:0;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .sect .r{margin-left:auto;font-size:13px;color:var(--muted)}
+  .panel{background:var(--surface);border-radius:var(--r-md);box-shadow:var(--sh-1);overflow:hidden}
+  .panel.pad{padding:14px 16px}
+  .row{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:8px 16px;text-align:left;border-top:.5px solid var(--line);color:var(--text);text-decoration:none}
+  .panel > .row:first-child{border-top:0}
+  button.row:active,a.row:active{background:var(--surface-2)}
+  .row .main{flex:1;min-width:0}
+  .row .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .s{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .end{flex:none;text-align:right;font-size:14px}
+  .row .chev{color:var(--faint)}
+  .empty{padding:48px 20px;text-align:center;color:var(--muted)}
+  .empty b{display:block;color:var(--text);font-size:17px;margin-bottom:4px}
+  .empty .btn{margin-top:14px}
+  .note{font-size:13px;color:var(--muted)}
+
+  /* ---------- card images ---------- */
+  .cimg{position:relative;aspect-ratio:488/680;border-radius:4.75% / 3.41%;overflow:hidden;background:var(--surface-3);box-shadow:var(--sh-img)}
+  .cimg img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+  .cimg .ph{position:absolute;inset:0;padding:10% 9%;font-size:12px;font-weight:600;color:var(--muted);line-height:1.25;overflow:hidden}
+  .cimg.err img{display:none}
+
+  /* ---------- collection grid ---------- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(102px,1fr));gap:14px 10px;padding-top:6px}
+  @media (min-width:600px){.grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:18px 14px}}
+  @media (min-width:1200px){.grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}}
+  .tile{display:block;width:100%;text-align:left;content-visibility:auto;contain-intrinsic-size:auto 200px;border-radius:8px}
+  .tile:active .cimg{transform:scale(.97)}
+  .tile .cimg{transition:transform .12s}
+  .tile .qty{position:absolute;top:6%;right:6%;min-width:24px;height:22px;padding:0 6px;border-radius:11px;background:rgb(10 10 12 / .82);color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center;box-shadow:0 1px 3px rgb(0 0 0 / .3)}
+  .tile .own{position:absolute;left:6%;bottom:5%;padding:2px 7px;border-radius:9px;background:rgb(10 10 12 / .82);color:#fff;font-size:11px;font-weight:700}
+  .tile .meta{display:flex;align-items:center;gap:5px;margin-top:6px;font-size:12.5px;min-width:0}
+  .tile .meta .p{margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums}
+  .tile .nm{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+  .setc{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--ra-c);white-space:nowrap}
+  .setc.uncommon{color:var(--ra-u)} .setc.rare{color:var(--ra-r)} .setc.mythic{color:var(--ra-m)}
+  .fin{display:inline-block;padding:1px 5px;border-radius:5px;font-size:10px;font-weight:800;color:#2A1A2E;background:var(--foil);letter-spacing:.02em}
+  .fin.etched{background:var(--etched);color:#24272D}
+  .tile .cimg .fin{position:absolute;top:6%;left:6%;box-shadow:0 1px 3px rgb(0 0 0 / .35)}
+
+  /* ---------- collection list ---------- */
+  .list{background:var(--surface);border-radius:var(--r-md);box-shadow:var(--sh-1);overflow:hidden;margin-top:6px}
+  .lrow{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:6px 14px 6px 10px;text-align:left;border-top:.5px solid var(--line);content-visibility:auto;contain-intrinsic-size:auto 56px}
+  .lrow:first-child{border-top:0}
+  .lrow:active{background:var(--surface-2)}
+  .lrow .thumb{width:30px;flex:none;border-radius:3px}
+  .lrow .q{flex:none;min-width:26px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted);text-align:right}
+  .lrow .main{flex:1;min-width:0}
+  .lrow .t{display:flex;align-items:center;gap:6px;min-width:0}
+  .lrow .t span.n{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .lrow .s{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden}
+  .lrow .mana{flex:none;margin-left:auto}
+  .lrow .p{flex:none;min-width:58px;text-align:right;font-weight:650;font-variant-numeric:tabular-nums}
+  .sentinel{height:1px}
+
+  /* ---------- mana pips ---------- */
+  .mana{display:inline-flex;align-items:center;gap:1px;vertical-align:-.12em;white-space:nowrap}
+  .ms{display:inline-grid;place-items:center;width:1.05em;height:1.05em;border-radius:50%;background:var(--m-c);color:var(--m-ink);
+    font:800 .7em/1 var(--f-ui);box-shadow:-.05em .07em 0 rgb(0 0 0 / .55);flex:none;overflow:hidden;letter-spacing:-.04em}
+  .mana .ms{font-size:.7em;width:1.5em;height:1.5em}
+  .ms.w{background:var(--m-w)} .ms.u{background:var(--m-u)} .ms.b{background:var(--m-b)} .ms.r{background:var(--m-r)} .ms.g{background:var(--m-g)}
+  .ms.q{background:#1D1D1F;color:#fff}
+  .ms svg{width:72%;height:72%;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+  .otext .mana .ms,.otext .ms{font-size:.62em;width:1.6em;height:1.6em;vertical-align:-.1em}
+  .pips{display:inline-flex;gap:3px}
+  .pips .ms{font-size:11px;width:18px;height:18px}
+
+  /* ---------- toast ---------- */
+  .toast{position:fixed;left:50%;bottom:calc(var(--tab-h) + var(--safe-b) + 14px);z-index:70;transform:translateX(-50%);
+    display:flex;align-items:center;gap:14px;width:max-content;max-width:calc(100% - 32px);
+    padding:12px 14px 12px 16px;border-radius:14px;background:var(--toast-bg);color:var(--toast-ink);font-size:14.5px;
+    box-shadow:0 10px 28px rgb(0 0 0 / .28);animation:toastIn .2s ease}
+  .toast button{color:var(--toast-act);font-weight:700;min-height:32px;padding:0 4px}
+  .toast .bar{height:4px;border-radius:2px;background:rgb(128 128 128 / .35);width:120px;overflow:hidden}
+  .toast .bar i{display:block;height:100%;width:0;background:var(--toast-act);transition:width .2s}
+  @media (min-width:900px){.toast{bottom:24px;left:calc(50% + var(--rail-w) / 2)}}
+  @keyframes toastIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+
+  /* ---------- FAB ---------- */
+  .fab{position:fixed;z-index:25;right:var(--gut-r);bottom:calc(var(--tab-h) + var(--safe-b) + 16px);display:flex;align-items:center;gap:8px;height:52px;padding:0 20px 0 16px;border-radius:26px;
+    background:var(--accent);color:var(--on-accent);font-weight:650;font-size:16px;text-decoration:none;
+    box-shadow:0 10px 26px color-mix(in srgb,var(--accent) 34%,transparent),0 2px 6px rgb(0 0 0 / .14);transition:transform .2s}
+  .fab:active{transform:scale(.96)}
+  @media (min-width:900px){.fab{bottom:28px;right:32px}}
+
+  /* ---------- sheets ---------- */
+  .scrim{position:fixed;inset:0;z-index:50;background:var(--scrim);opacity:0;transition:opacity .22s}
+  body.sheet-open .scrim{opacity:1}
+  body.sheet-open{overflow:hidden}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:51;max-width:640px;margin:0 auto;
+    max-height:calc(100vh - 24px - var(--safe-t));max-height:calc(100dvh - 24px - var(--safe-t));
+    display:flex;flex-direction:column;background:var(--surface);border-radius:var(--r-lg) var(--r-lg) 0 0;
+    box-shadow:0 -10px 40px rgb(0 0 0 / .25);transform:translateY(105%);transition:transform .28s cubic-bezier(.2,.8,.2,1)}
+  body.sheet-open .sheet{transform:none}
+  .sheet-grab{flex:none;height:22px;display:grid;place-items:center}
+  .sheet-grab::before{content:"";width:38px;height:5px;border-radius:3px;background:var(--surface-3)}
+  .sheet-x{position:absolute;top:8px;right:8px;z-index:2;background:var(--surface-2)}
+  .sheet-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 var(--gut-r) calc(20px + var(--safe-b)) var(--gut-l)}
+  .sheet-body h2{margin:0 0 4px;font-size:20px;font-weight:750;letter-spacing:-.01em;padding-right:44px}
+  .sheet-body .lead{margin:0 0 14px;color:var(--muted);font-size:14.5px}
+  @media (min-width:900px){
+    .sheet{top:50%;bottom:auto;left:calc(50% + var(--rail-w) / 2);right:auto;max-width:none;width:min(620px,calc(100vw - var(--rail-w) - 48px));
+      max-height:min(860px,calc(100vh - 64px));border-radius:var(--r-lg);transform:translate(-50%,-46%) scale(.98);opacity:0;transition:transform .22s,opacity .22s}
+    body.sheet-open .sheet{transform:translate(-50%,-50%);opacity:1}
+    .sheet.wide{width:min(980px,calc(100vw - var(--rail-w) - 48px))}
+    .sheet-grab{height:16px}
+    .sheet-grab::before{display:none}
+    .sheet-body{padding:6px 24px 24px}
+  }
+  .field{display:block;margin:0 0 14px}
+  .field > span{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px}
+  .inp{display:block;width:100%;min-height:46px;padding:10px 13px;border:1px solid var(--surface-3);border-radius:12px;background:var(--surface-2);font-size:16px;color:var(--text);-webkit-appearance:none;appearance:none}
+  textarea.inp{min-height:160px;font:14px/1.45 var(--f-mono);resize:vertical}
+  select.inp{padding-right:36px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+    background-position:calc(100% - 19px) 50%,calc(100% - 14px) 50%;background-size:5px 5px;background-repeat:no-repeat}
+  .inp:focus{outline:none;border-color:var(--accent)}
+  .sheet-actions{display:flex;gap:8px;margin-top:18px}
+  .sheet-actions .btn{flex:1}
+  .opt{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:0 4px;border-top:.5px solid var(--line);font-size:16.5px;text-align:left}
+  .opt:first-of-type{border-top:0}
+  .opt:active{background:var(--surface-2)}
+  .opt.danger{color:var(--danger)}
+  .opt svg.i{color:var(--accent-text)}
+  .opt.danger svg.i{color:var(--danger)}
+  .opt .chk{margin-left:auto;color:var(--accent-text)}
+  .fgroup{margin:4px 0 16px}
+  .fgroup h3{margin:0 0 8px;font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .setlist{max-height:220px;overflow-y:auto;padding:2px;margin:-2px}
+
+  /* ---------- card sheet ---------- */
+  .cs{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+  .cs-art{position:relative;max-width:300px;width:72%;margin:0 auto}
+  .cs-art .flip{position:absolute;right:-8px;bottom:14%;background:var(--surface);box-shadow:var(--sh-card);color:var(--text)}
+  @media (min-width:900px){
+    .cs{grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:24px;align-items:start}
+    .cs-art{width:100%;max-width:none;position:sticky;top:0}
+  }
+  .cs-name{margin:0;font-size:21px;font-weight:750;letter-spacing:-.01em;display:flex;align-items:flex-start;gap:10px;justify-content:space-between;padding-right:40px}
+  .cs-name .mana{font-size:20px;margin-top:2px}
+  .cs-real{font-size:13.5px;color:var(--muted);margin-top:2px}
+  .cs-type{margin:8px 0 0;font-weight:600;font-size:15px}
+  .otext{margin:8px 0 0;font-size:15px;line-height:1.5}
+  .otext p{margin:0 0 6px}
+  .otext i{color:var(--muted)}
+  .face + .face{margin-top:12px;padding-top:12px;border-top:.5px dashed var(--line)}
+  .face h4{margin:0;display:flex;justify-content:space-between;gap:8px;font-size:15.5px}
+  .cs-pt{display:inline-block;margin-top:6px;padding:2px 10px;border-radius:8px;background:var(--surface-2);font-weight:750;font-variant-numeric:tabular-nums}
+  .cs-set{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:14px;color:var(--muted);margin-top:10px}
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:8px;font-size:12.5px;font-weight:700;background:var(--surface-2);color:var(--muted)}
+  .badge.ok{background:var(--ok-soft);color:var(--ok)} .badge.warn{background:var(--warn-soft);color:var(--warn)} .badge.bad{background:var(--danger-soft);color:var(--danger)}
+  .badge.acc{background:var(--accent-soft);color:var(--accent-text)}
+  .prices{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-top:4px}
+  .prices div{padding:8px 10px;border-radius:12px;background:var(--surface-2)}
+  .prices span{display:block;font-size:12px;color:var(--muted);font-weight:600}
+  .prices b{font-size:16px;font-variant-numeric:tabular-nums}
+  .box{border-radius:var(--r-md);background:var(--surface-2);padding:4px 14px}
+  .box h3{margin:10px 0 2px;font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .qrow{display:flex;align-items:center;gap:10px;min-height:52px;border-top:.5px solid var(--line)}
+  .box h3 + .qrow{border-top:0}
+  .qrow .lbl{flex:1;min-width:0;font-weight:600}
+  .qrow .lbl small{display:block;font-weight:500;color:var(--muted);font-size:12.5px}
+  .qrow select.inp{min-height:40px;padding:6px 32px 6px 10px;font-size:15px;width:auto;max-width:60%;background-color:var(--surface)}
+  .step{display:inline-flex;align-items:center;background:var(--surface);border-radius:12px;box-shadow:var(--sh-1)}
+  .step button{width:44px;height:40px;display:grid;place-items:center;color:var(--accent-text);font-size:22px;font-weight:600}
+  .step button[disabled]{color:var(--faint)}
+  .step output{min-width:28px;text-align:center;font-weight:750;font-variant-numeric:tabular-nums}
+  .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .acts .btn{justify-content:flex-start;font-size:14.5px}
+  .prints{display:grid;gap:0}
+  .prow{display:flex;align-items:center;gap:10px;min-height:60px;padding:6px 0;border-top:.5px solid var(--line)}
+  .prow:first-child{border-top:0}
+  .prow .thumb{width:36px;flex:none}
+  .prow .main{flex:1;min-width:0;font-size:14px}
+  .prow .main b{display:block;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .prow.cur{background:var(--accent-soft);margin:0 -8px;padding:6px 8px;border-radius:10px}
+
+  /* ---------- decks ---------- */
+  .decks{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;padding-top:8px}
+  .dtile{display:block;text-align:left;background:var(--surface);border-radius:var(--r-md);box-shadow:var(--sh-card);overflow:hidden;color:var(--text);text-decoration:none}
+  .dtile:active{transform:scale(.99)}
+  .dart{position:relative;aspect-ratio:626/300;background:var(--surface-3) center/cover no-repeat}
+  .dart img{width:100%;height:100%;object-fit:cover;display:block}
+  .dart .pips{position:absolute;left:10px;bottom:10px;padding:3px 5px;border-radius:12px;background:rgb(10 10 12 / .6)}
+  .dart .br{position:absolute;right:10px;top:10px;padding:2px 8px;border-radius:8px;background:rgb(10 10 12 / .7);color:#fff;font-size:12px;font-weight:700}
+  .dtile .body{padding:10px 14px 12px}
+  .dtile .nm{font-weight:700;font-size:16px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .dtile .sub{font-size:13px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dtile .stats{display:flex;gap:12px;margin-top:8px;font-size:13.5px;color:var(--muted)}
+  .dtile .stats b{color:var(--text)}
+  .dhead{display:flex;gap:14px;align-items:center;padding:8px 0 4px}
+  .dhead .art{width:108px;flex:none;aspect-ratio:626/457;border-radius:10px;overflow:hidden;background:var(--surface-3);box-shadow:var(--sh-img)}
+  .dhead .art img{width:100%;height:100%;object-fit:cover;display:block}
+  .dhead .info{min-width:0;flex:1}
+  .dhead .cmd{font-weight:700;font-size:16px}
+  .dhead .arch{font-size:13.5px;color:var(--muted);margin-top:2px}
+  .dhead .line{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-top:6px;font-size:13.5px;color:var(--muted)}
+  .dlayout{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+  @media (min-width:1100px){.dlayout{grid-template-columns:minmax(0,1fr) 380px;align-items:start}.tabsw{display:none}.dlayout .stats-col{position:sticky;top:76px}}
+  @media (max-width:1099.98px){.dlayout[data-tab="cards"] .stats-col,.dlayout[data-tab="stats"] .cards-col{display:none}}
+  .dsec{margin-top:14px}
+  .dsec h3{display:flex;align-items:baseline;gap:8px;margin:0 0 6px;font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .dsec h3 .r{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:600}
+  .drow{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;padding:4px 12px 4px 12px;text-align:left;border-top:.5px solid var(--line)}
+  .drow:first-child{border-top:0}
+  .drow:active{background:var(--surface-2)}
+  .drow .q{flex:none;width:22px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted)}
+  .drow .n{flex:1;min-width:0;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .drow .p{flex:none;min-width:52px;text-align:right;font-size:14px;font-variant-numeric:tabular-nums}
+  .om{flex:none;width:10px;height:10px;border-radius:50%;background:var(--ok)}
+  .om.alt{background:transparent;box-shadow:inset 0 0 0 2px var(--ok)}
+  .om.miss{background:transparent;box-shadow:inset 0 0 0 2px var(--danger)}
+  .om.basic{background:var(--faint)}
+  .legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--muted);margin-top:8px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .addbox{position:relative;margin-top:10px}
+  .suggest{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:15;background:var(--surface);border-radius:12px;box-shadow:var(--sh-card);overflow:hidden;max-height:320px;overflow-y:auto}
+  .suggest button{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:6px 14px;text-align:left;border-top:.5px solid var(--line)}
+  .suggest button:first-child{border-top:0}
+  .suggest button:hover,.suggest button:focus-visible{background:var(--surface-2)}
+  .suggest .own{margin-left:auto;font-size:12px;color:var(--ok);font-weight:700}
+
+  /* ---------- stats ---------- */
+  .curve{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;align-items:end;height:130px;padding-top:16px}
+  .curve div{position:relative;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+  .curve i{display:block;background:var(--accent);border-radius:5px 5px 2px 2px;min-height:2px}
+  .curve b{position:absolute;left:0;right:0;text-align:center;font-size:11.5px;font-weight:700;color:var(--muted)}
+  .curve-x{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:4px;font-size:12px;color:var(--muted);text-align:center;font-weight:600}
+  .bars{display:grid;gap:8px}
+  .bar{display:grid;grid-template-columns:minmax(78px,30%) 1fr auto;gap:10px;align-items:center;font-size:14px}
+  .bar .l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px}
+  .bar .t{height:10px;border-radius:5px;background:var(--surface-3);overflow:hidden}
+  .bar .t i{display:block;height:100%;border-radius:5px;background:var(--accent)}
+  .bar .v{font-variant-numeric:tabular-nums;font-weight:650;text-align:right;white-space:nowrap}
+  .bar .v small{font-weight:500;color:var(--muted);margin-left:6px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+  .kpi{padding:12px 14px;border-radius:var(--r-md);background:var(--surface);box-shadow:var(--sh-1)}
+  .kpi span{display:block;font-size:12.5px;color:var(--muted);font-weight:600}
+  .kpi b{display:block;font-size:22px;font-weight:750;letter-spacing:-.01em;font-variant-numeric:tabular-nums;margin-top:2px}
+  .check{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:.5px solid var(--line);font-size:14.5px}
+  .check:first-child{border-top:0}
+  .check .ic{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:800;margin-top:1px}
+  .check.pass .ic{background:var(--ok-soft);color:var(--ok)}
+  .check.warn .ic{background:var(--warn-soft);color:var(--warn)}
+  .check .d{font-size:13px;color:var(--muted);margin-top:2px}
+  details.more summary{cursor:pointer;color:var(--accent-text);font-size:13.5px;font-weight:600;min-height:32px;display:flex;align-items:center}
+  .grid2{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+  @media (min-width:900px){.grid2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+  .footer{margin:32px 0 0;font-size:12.5px;color:var(--faint);text-align:center;line-height:1.6}
+  .loading{padding:80px 20px;text-align:center;color:var(--muted)}
+  .spin{display:inline-block;width:22px;height:22px;border-radius:50%;border:2.5px solid var(--surface-3);border-top-color:var(--accent);animation:spin .8s linear infinite;vertical-align:middle}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .hint{font-size:13px;color:var(--muted);margin:10px 0 0}
+  .hint code{font:12.5px var(--f-mono);background:var(--surface-2);padding:1px 5px;border-radius:5px;color:var(--text)}
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="nav" id="nav" aria-label="Main">
+    <div class="brand" aria-hidden="true"><svg viewBox="0 0 64 64"><rect x="10" y="6" width="44" height="52" rx="7" fill="var(--accent)"/><rect x="17" y="13" width="30" height="20" rx="3" fill="var(--on-accent)" opacity=".9"/><rect x="17" y="38" width="30" height="4" rx="2" fill="var(--on-accent)" opacity=".75"/><rect x="17" y="46" width="20" height="4" rx="2" fill="var(--on-accent)" opacity=".55"/></svg></div>
+    <a href="#/collection" data-tab="collection"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="7.5" height="10" rx="1.4"/><rect x="13.5" y="4" width="7.5" height="10" rx="1.4"/><path d="M3 18h18M3 21h12"/></svg>Collection</a>
+    <a href="#/search" data-tab="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>Search</a>
+    <a href="#/decks" data-tab="decks"><svg class="i" viewBox="0 0 24 24"><rect x="7" y="3" width="12" height="16" rx="1.8"/><path d="M4.5 6.5v12.2c0 1.2 1 2.3 2.3 2.3H15"/></svg>Decks</a>
+    <a href="#/lists" data-tab="lists"><svg class="i" viewBox="0 0 24 24"><path d="M5 4h11.5A2.5 2.5 0 0 1 19 6.5V20H7.5A2.5 2.5 0 0 1 5 17.5z"/><path d="M5 17.5A2.5 2.5 0 0 1 7.5 15H19M9 8h6"/></svg>Lists</a>
+    <a href="#/more" data-tab="more"><svg class="i" viewBox="0 0 24 24"><path d="M4 19V11M10 19V5M16 19v-6M22 19H2"/></svg>More</a>
+  </nav>
+  <main id="screen" aria-live="polite"><div class="loading"><span class="spin"></span><p>Opening your binder…</p></div></main>
+</div>
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+  <div class="sheet-grab" aria-hidden="true"></div>
+  <button class="icon-btn sheet-x" data-act="sheetClose" aria-label="Close"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  <div class="sheet-body" id="sheetBody"></div>
+</div>
+<input type="file" id="filePick" hidden>
+<script>
+(function(){
+  "use strict";
+  const VERSION = "1.0.0";
+  const PREFS_KEY = "mtg:prefs";
+  const API = "https://api.scryfall.com";
+
+  /* ============================ helpers ============================ */
+  const $ = (id) => document.getElementById(id);
+  const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+  function esc(s){ return s == null ? "" : String(s).replace(/[&<>"']/g, (c) => ESC[c]); }
+  // Tiny DOM builder for the few places that build nodes directly (toasts).
+  function h(tag, cls, text){ const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; }
+  const today = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  const fmtUSD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+  const money = (n) => (n == null || !isFinite(n)) ? "—" : fmtUSD.format(n);
+  const moneyShort = (n) => (n == null || !isFinite(n)) ? "—" : n >= 1000 ? "$" + (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : fmtUSD.format(n);
+  const plural = (n, one, many) => n + " " + (n === 1 ? one : (many || one + "s"));
+  const uid = (p) => (p || "") + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const slug = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "deck";
+  const clone = (o) => (typeof structuredClone === "function") ? structuredClone(o) : JSON.parse(JSON.stringify(o));
+  const fold = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "");
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function debounce(fn, ms){ let t; return function(){ const a = arguments; clearTimeout(t); t = setTimeout(() => fn.apply(null, a), ms); }; }
+  const cnNum = (cn) => { const m = /\d+/.exec(cn || ""); return m ? parseInt(m[0], 10) : 0; };
+  const fmtDate = (s) => { if (!s) return "—"; const d = new Date(s.length <= 10 ? s + "T12:00:00" : s); return isNaN(d) ? s : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }); };
+
+  const ICON = {
+    plus: '<svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+    close: '<svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+    back: '<svg class="i" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg>',
+    chev: '<svg class="i sm chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>',
+    grid: '<svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="7" rx="1.2"/><rect x="13.5" y="4" width="6.5" height="7" rx="1.2"/><rect x="4" y="13.5" width="6.5" height="7" rx="1.2"/><rect x="13.5" y="13.5" width="6.5" height="7" rx="1.2"/></svg>',
+    list: '<svg class="i" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>',
+    filter: '<svg class="i" viewBox="0 0 24 24"><path d="M4 5h16l-6.2 7.4V19l-3.6-1.8v-4.8z"/></svg>',
+    sort: '<svg class="i" viewBox="0 0 24 24"><path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M17 20V4M13.5 7.5 17 4l3.5 3.5"/></svg>',
+    search: '<svg class="i sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>',
+    dots: '<svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>',
+    flip: '<svg class="i" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 9M20 4v5h-5M20 12a8 8 0 0 1-13.7 5.6L4 15M4 20v-5h5"/></svg>',
+    ext: '<svg class="i sm" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
+    deck: '<svg class="i sm" viewBox="0 0 24 24"><rect x="7" y="3" width="12" height="16" rx="1.8"/><path d="M4.5 6.5v12.2c0 1.2 1 2.3 2.3 2.3H15"/></svg>',
+    star: '<svg class="i sm" viewBox="0 0 24 24"><path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/></svg>',
+    prints: '<svg class="i sm" viewBox="0 0 24 24"><rect x="3" y="6" width="9" height="13" rx="1.4"/><rect x="12" y="4" width="9" height="13" rx="1.4"/></svg>',
+    trash: '<svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+    edit: '<svg class="i" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+    copy: '<svg class="i" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>',
+    share: '<svg class="i" viewBox="0 0 24 24"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/></svg>',
+    imp: '<svg class="i" viewBox="0 0 24 24"><path d="M12 3v12M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg>',
+    check: '<svg class="i sm" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></svg>',
+    binder: '<svg class="i sm" viewBox="0 0 24 24"><path d="M5 4h11.5A2.5 2.5 0 0 1 19 6.5V20H7.5A2.5 2.5 0 0 1 5 17.5z"/><path d="M5 17.5A2.5 2.5 0 0 1 7.5 15H19"/></svg>',
+    refresh: '<svg class="i" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>',
+  };
+
+  /* ============================ prefs (localStorage) ============================ */
+  const prefs = Object.assign({ theme: "system", view: "grid", sort: "name", dir: "asc", deckGroup: "section", wishView: "list" }, readPrefs());
+  function readPrefs(){ try { return JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") || {}; } catch(e){ return {}; } }
+  function savePrefs(){ try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch(e){} }
+  function applyLook(){ window.mtgLook(prefs); }
+  if (window.matchMedia){
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onScheme = () => { if (prefs.theme === "system") applyLook(); };
+    if (mq.addEventListener) mq.addEventListener("change", onScheme); else if (mq.addListener) mq.addListener(onScheme);
+  }
+
+  /* ============================ state + IndexedDB ============================ */
+  // One object so window.mtgApp.state stays the live reference; replace-all mutates in place.
+  const state = { collection: {}, wishlist: {}, decks: [], binders: [], cards: {}, meta: {} };
+  const KEYS = ["collection", "wishlist", "decks", "binders", "cards", "meta"];
+  const idb = {
+    db: null, ok: false,
+    open(){
+      return new Promise((resolve) => {
+        if (!("indexedDB" in window)) return resolve(false);
+        let req;
+        try { req = indexedDB.open("mtg", 1); } catch(e){ return resolve(false); }
+        req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains("kv")) req.result.createObjectStore("kv"); };
+        req.onsuccess = () => { this.db = req.result; this.ok = true; resolve(true); };
+        req.onerror = () => resolve(false);
+        req.onblocked = () => resolve(false);
+      });
+    },
+    getAll(keys){
+      return new Promise((resolve) => {
+        if (!this.ok) return resolve({});
+        const out = {};
+        try {
+          const tx = this.db.transaction("kv", "readonly"), st = tx.objectStore("kv");
+          keys.forEach((k) => { const r = st.get(k); r.onsuccess = () => { out[k] = r.result; }; });
+          tx.oncomplete = () => resolve(out);
+          tx.onerror = () => resolve(out);
+        } catch(e){ resolve(out); }
+      });
+    },
+    putAll(obj){
+      return new Promise((resolve) => {
+        if (!this.ok) return resolve(false);
+        try {
+          const tx = this.db.transaction("kv", "readwrite"), st = tx.objectStore("kv");
+          Object.keys(obj).forEach((k) => st.put(obj[k], k));
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => resolve(false);
+          tx.onabort = () => resolve(false);
+        } catch(e){ resolve(false); }
+      });
+    },
+  };
+  const dirty = new Set();
+  let saveTimer = null, saveWarned = false;
+  // save("collection", "cards") marks keys dirty and writes them shortly after; save() writes everything.
+  function save(){
+    const keys = arguments.length ? Array.from(arguments) : KEYS;
+    keys.forEach((k) => dirty.add(k));
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flush, 350);
+  }
+  async function flush(){
+    clearTimeout(saveTimer);
+    if (!dirty.size) return;
+    const obj = {};
+    dirty.forEach((k) => { obj[k] = state[k]; });
+    dirty.clear();
+    const ok = await idb.putAll(obj);
+    if (!ok && !saveWarned){ saveWarned = true; toast("Couldn't save to this device. Changes may not survive a reload."); }
+  }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
+  window.addEventListener("pagehide", flush);
+
+  /* ============================ derived indexes ============================ */
+  let idxVer = 0, builtVer = -1;
+  const IX = { byOracle: new Map(), byPrint: new Map(), byId: new Map(), byName: new Map() };
+  function touch(){ idxVer++; }
+  function ix(){
+    if (builtVer === idxVer) return IX;
+    IX.byOracle = new Map(); IX.byPrint = new Map(); IX.byId = new Map(); IX.byName = new Map();
+    Object.keys(state.cards).forEach((k) => {
+      const c = state.cards[k];
+      if (c.id) IX.byId.set(c.id, k);
+      nameKeys(c).forEach((n) => { if (!IX.byName.has(n)) IX.byName.set(n, []); IX.byName.get(n).push(k); });
+    });
+    Object.values(state.collection).forEach((e) => {
+      const ck = e.set + ":" + e.cn, c = state.cards[ck];
+      IX.byPrint.set(ck, (IX.byPrint.get(ck) || 0) + e.qty);
+      if (c && c.oracle_id) IX.byOracle.set(c.oracle_id, (IX.byOracle.get(c.oracle_id) || 0) + e.qty);
+    });
+    builtVer = idxVer;
+    return IX;
+  }
+  function nameKeys(c){
+    const out = [fold(c.name)];
+    if (c.name.indexOf(" // ") > 0) c.name.split(" // ").forEach((n) => out.push(fold(n)));
+    if (c.flavor_name) out.push(fold(c.flavor_name));
+    return out;
+  }
+  const ownedOracle = (c) => (c && c.oracle_id && ix().byOracle.get(c.oracle_id)) || 0;
+  const ownedPrint = (ck) => ix().byPrint.get(ck) || 0;
+
+  /* ============================ card model ============================ */
+  // Normalise a raw Scryfall card into the trimmed shape the seed uses.
+  function trimCard(c){
+    const face0 = (c.card_faces && c.card_faces[0]) || {};
+    const img = (u) => (u && u.normal ? String(u.normal).split("?")[0] : null);
+    const out = {
+      id: c.id,
+      oracle_id: c.oracle_id || face0.oracle_id || null,
+      name: c.name,
+      set: c.set,
+      set_name: c.set_name,
+      cn: c.collector_number,
+      rarity: c.rarity,
+      released: c.released_at,
+      mana_cost: c.mana_cost != null ? c.mana_cost : (face0.mana_cost != null ? face0.mana_cost : ""),
+      cmc: c.cmc != null ? c.cmc : 0,
+      type_line: c.type_line != null ? c.type_line : (face0.type_line != null ? face0.type_line : ""),
+      oracle_text: c.oracle_text != null ? c.oracle_text : "",
+      colors: c.colors || face0.colors || [],
+      color_identity: c.color_identity || [],
+      legal_commander: (c.legalities && c.legalities.commander) || "not_legal",
+      img: img(c.image_uris) || img(face0.image_uris),
+      finishes: c.finishes || [],
+      prices: {
+        usd: (c.prices && c.prices.usd != null) ? c.prices.usd : null,
+        usd_foil: (c.prices && c.prices.usd_foil != null) ? c.prices.usd_foil : null,
+        usd_etched: (c.prices && c.prices.usd_etched != null) ? c.prices.usd_etched : null,
+      },
+    };
+    if (c.power != null) out.pt = c.power + "/" + c.toughness;
+    if (c.loyalty != null) out.loyalty = c.loyalty;
+    if (c.flavor_name) out.flavor_name = c.flavor_name;
+    if (c.game_changer) out.game_changer = true;
+    if (c.card_faces && c.card_faces.length > 1){
+      out.faces = c.card_faces.map((f) => {
+        const o = { name: f.name, mana_cost: f.mana_cost || "", type_line: f.type_line || "", oracle_text: f.oracle_text || "" };
+        if (f.power != null) o.pt = f.power + "/" + f.toughness;
+        const im = img(f.image_uris); if (im) o.img = im;
+        return o;
+      });
+    }
+    return out;
+  }
+  const tempCards = new Map();      // cards seen in search / printings but not yet stored
+  const cardKey = (c) => c.set + ":" + c.cn;
+  function getCard(k){ return state.cards[k] || tempCards.get(k) || null; }
+  function rememberTemp(c){ const k = cardKey(c); if (!state.cards[k]) tempCards.set(k, c); return k; }
+  function ensureCard(k){
+    if (!state.cards[k] && tempCards.has(k)){ state.cards[k] = tempCards.get(k); touch(); save("cards"); }
+    return state.cards[k];
+  }
+  function storeCard(c){ const k = cardKey(c); state.cards[k] = c; tempCards.delete(k); touch(); return k; }
+  const imgSize = (url, size) => url ? url.replace("/normal/", "/" + size + "/") : "";
+  const artCrop = (url) => url ? url.replace("/normal/", "/art_crop/") : "";
+  const displayName = (c) => c ? (c.flavor_name || c.name) : "Unknown card";
+  const frontType = (c) => String((c && c.type_line) || "").split(" // ")[0];
+  const FINISH_PRICE = { nonfoil: "usd", foil: "usd_foil", etched: "usd_etched" };
+  const FINISH_LABEL = { nonfoil: "Normal", foil: "Foil", etched: "Etched" };
+  function cardPrice(c, finish){
+    if (!c || !c.prices) return null;
+    const order = [FINISH_PRICE[finish] || "usd", "usd", "usd_foil", "usd_etched"];
+    for (const f of order){ const v = parseFloat(c.prices[f]); if (isFinite(v)) return v; }
+    return null;
+  }
+  function entryPrice(e){
+    const p = cardPrice(getCard(e.set + ":" + e.cn), e.finish);
+    if (p != null) return p;
+    const pu = parseFloat(e.price_usd);
+    return isFinite(pu) ? pu : null;
+  }
+  const ekey = (set, cn, finish) => set + ":" + cn + ":" + finish;
+  const BASICS = new Set(["plains", "island", "swamp", "mountain", "forest", "wastes", "snow-covered plains", "snow-covered island", "snow-covered swamp", "snow-covered mountain", "snow-covered forest", "snow-covered wastes"]);
+  const isBasic = (c) => !!c && BASICS.has(fold(c.name));
+  const anyNumber = (c) => !!c && /a deck can have any number of cards named/i.test(c.oracle_text + " " + (c.faces || []).map((f) => f.oracle_text).join(" "));
+  const TYPE_ORDER = ["Creature", "Planeswalker", "Battle", "Instant", "Sorcery", "Artifact", "Enchantment", "Land"];
+  const TYPE_SECTION = { Creature: "Creatures", Planeswalker: "Planeswalkers", Battle: "Battles", Instant: "Instants", Sorcery: "Sorceries", Artifact: "Artifacts", Enchantment: "Enchantments", Land: "Lands", Other: "Other" };
+  function mainType(c){
+    const t = frontType(c);
+    if (/\bLand\b/.test(t) && !/\bCreature\b/.test(t)) return "Land";
+    for (const k of TYPE_ORDER) if (new RegExp("\\b" + k + "\\b").test(t)) return k;
+    return "Other";
+  }
+  const isLand = (c) => mainType(c) === "Land";
+  function tierOf(p){
+    const t = (state.meta.tiers && state.meta.tiers.length === 3) ? state.meta.tiers : [2, 10, 40];
+    if (p == null) return "budget";
+    if (p <= t[0]) return "budget"; if (p <= t[1]) return "mid"; if (p <= t[2]) return "high"; return "collector";
+  }
+  function tierLabels(){
+    const t = (state.meta.tiers && state.meta.tiers.length === 3) ? state.meta.tiers : [2, 10, 40];
+    return [["budget", "Budget", "≤ $" + t[0]], ["mid", "Mid", "≤ $" + t[1]], ["high", "High", "≤ $" + t[2]], ["collector", "Collector", "> $" + t[2]]];
+  }
+
+  /* ============================ mana symbols ============================ */
+  const MCLR = { W: "w", U: "u", B: "b", R: "r", G: "g" };
+  const TAP_SVG = '<svg viewBox="0 0 24 24"><path d="M6 17V9a4 4 0 0 1 4-4h6M13 2l3.5 3L13 8"/></svg>';
+  const UNTAP_SVG = '<svg viewBox="0 0 24 24"><path d="M18 7v8a4 4 0 0 1-4 4H8M11 22l-3.5-3L11 16"/></svg>';
+  function pip(sym){
+    const s = String(sym).toUpperCase();
+    const t = esc("{" + s + "}");
+    if (s === "T") return '<span class="ms" title="' + t + '" aria-label="tap">' + TAP_SVG + "</span>";
+    if (s === "Q") return '<span class="ms q" title="' + t + '" aria-label="untap">' + UNTAP_SVG + "</span>";
+    if (MCLR[s]) return '<span class="ms ' + MCLR[s] + '" title="' + t + '">' + s + "</span>";
+    if (s === "C") return '<span class="ms" title="' + t + '">C</span>';
+    if (s.indexOf("/") > 0){
+      const parts = s.split("/");
+      if (parts[parts.length - 1] === "P"){
+        const base = parts[0];
+        const bg = MCLR[base] ? "var(--m-" + MCLR[base] + ")" : "var(--m-c)";
+        const bg2 = parts.length === 3 && MCLR[parts[1]] ? "var(--m-" + MCLR[parts[1]] + ")" : bg;
+        return '<span class="ms" title="' + t + '" style="background:linear-gradient(135deg,' + bg + ' 50%,' + bg2 + ' 50%)">ϕ</span>';
+      }
+      const a = parts[0], b = parts[1];
+      const ca = MCLR[a] ? "var(--m-" + MCLR[a] + ")" : "var(--m-c)";
+      const cb = MCLR[b] ? "var(--m-" + MCLR[b] + ")" : "var(--m-c)";
+      const label = /^\d+$/.test(a) ? a : "";
+      return '<span class="ms" title="' + t + '" style="background:linear-gradient(135deg,' + ca + ' 50%,' + cb + ' 50%)">' + esc(label) + "</span>";
+    }
+    return '<span class="ms" title="' + t + '">' + esc(s.length > 2 ? s.slice(0, 2) : s) + "</span>";
+  }
+  // manaHtml("{2}{U}{B}") → a run of pips. Used for costs, rows and inline oracle text.
+  function manaHtml(cost){
+    if (!cost) return "";
+    const parts = String(cost).split(" // ");
+    return parts.map((p) => {
+      const syms = []; p.replace(/\{([^}]+)\}/g, (m, s) => { syms.push(s); return m; });
+      return syms.length ? '<span class="mana" aria-label="' + esc(p) + '">' + syms.map(pip).join("") + "</span>" : "";
+    }).filter(Boolean).join('<span class="faint"> // </span>');
+  }
+  // Oracle text: escape, then swap {X} for pips, italicise reminder text, one <p> per line.
+  function textHtml(s){
+    if (!s) return "";
+    return String(s).split("\n").map((line) => {
+      let x = esc(line).replace(/\{([^}]+)\}/g, (m, sym) => pip(sym));
+      x = x.replace(/\(([^()]*)\)/g, "<i>($1)</i>");
+      return "<p>" + x + "</p>";
+    }).join("");
+  }
+  function pipsHtml(colors){
+    const list = (colors && colors.length) ? ["W", "U", "B", "R", "G"].filter((c) => colors.indexOf(c) >= 0) : ["C"];
+    return '<span class="pips">' + list.map(pip).join("") + "</span>";
+  }
+  function cimg(c, size, extra){
+    const url = c ? imgSize(c.img, size || "small") : "";
+    return '<div class="cimg">' + '<div class="ph">' + esc(displayName(c)) + "</div>" +
+      (url ? '<img src="' + esc(url) + '" alt="' + esc(displayName(c)) + '" loading="lazy" decoding="async">' : "") + (extra || "") + "</div>";
+  }
+  const finBadge = (f) => f === "foil" ? '<span class="fin" title="Foil">F</span>' : f === "etched" ? '<span class="fin etched" title="Etched">E</span>' : "";
+  // Hide broken images and leave the name placeholder showing.
+  document.addEventListener("error", (e) => {
+    const t = e.target;
+    if (t && t.tagName === "IMG"){ const p = t.closest(".cimg"); if (p) p.classList.add("err"); else t.style.visibility = "hidden"; }
+  }, true);
+
+  /* ============================ Scryfall request queue ============================ */
+  // Every call goes through one chain: ≥120 ms between requests (≥600 ms for /cards/search),
+  // 429 retried with backoff. Errors carry .status; offline errors carry .offline.
+  let qChain = Promise.resolve(), qLast = 0;
+  function sf(pathOrUrl, opts){
+    opts = opts || {};
+    let url = pathOrUrl.indexOf("http") === 0 ? pathOrUrl : API + pathOrUrl;
+    if (url.indexOf(API + "/") !== 0) return Promise.reject(Object.assign(new Error("Blocked request"), { status: 0 }));
+    const isSearch = /\/cards\/search/.test(url);
+    const run = async () => {
+      for (let attempt = 0; attempt < 5; attempt++){
+        const gap = isSearch ? 600 : 120;
+        const wait = qLast + gap - Date.now();
+        if (wait > 0) await sleep(wait);
+        qLast = Date.now();
+        let res;
+        try {
+          res = await fetch(url, opts.body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(opts.body) } : undefined);
+        } catch(e){
+          throw Object.assign(new Error("offline"), { status: 0, offline: true });
+        }
+        if (res.status === 429){ await sleep(1000 * Math.pow(2, attempt)); continue; }
+        let data = null;
+        try { data = await res.json(); } catch(e){}
+        if (!res.ok){
+          const err = new Error((data && data.details) || ("Scryfall error " + res.status));
+          err.status = res.status; err.data = data;
+          throw err;
+        }
+        return data;
+      }
+      throw Object.assign(new Error("Scryfall is busy. Try again in a minute."), { status: 429 });
+    };
+    const p = qChain.then(run, run);
+    qChain = p.catch(() => {});
+    return p;
+  }
+  function netError(e, what){
+    if (e && e.offline) toast("You're offline, or Scryfall didn't answer. " + (what || "") );
+    else toast((what ? what + " " : "") + ((e && e.message) || "Something went wrong."));
+  }
+  // POST /cards/collection in batches of 75. identifiers: [{id}|{set,collector_number}|{name}].
+  async function fetchCollection(identifiers, onProgress){
+    const found = [], notFound = [];
+    for (let i = 0; i < identifiers.length; i += 75){
+      const batch = identifiers.slice(i, i + 75);
+      const data = await sf("/cards/collection", { body: { identifiers: batch } });
+      (data && data.data || []).forEach((c) => found.push(c));
+      (data && data.not_found || []).forEach((n) => notFound.push(n));
+      if (onProgress) onProgress(Math.min(i + 75, identifiers.length), identifiers.length);
+    }
+    return { found, notFound };
+  }
+
+  /* ============================ toast ============================ */
+  let toastTimer = null;
+  function toast(msg, action, ms){
+    const old = document.querySelector(".toast");
+    if (old) old.remove();
+    const el = h("div", "toast");
+    el.setAttribute("role", "status");
+    el.appendChild(h("span", "", msg));
+    if (action){
+      const b = h("button", "", action.label);
+      b.addEventListener("click", () => { el.remove(); action.run(); });
+      el.appendChild(b);
+    }
+    document.body.appendChild(el);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.remove(), ms || (action ? 6000 : 2600));
+  }
+  // A sticky progress toast for long jobs (imports, price refresh).
+  function progress(label){
+    const old = document.querySelector(".toast"); if (old) old.remove();
+    clearTimeout(toastTimer);
+    const el = h("div", "toast"); el.setAttribute("role", "status");
+    const txt = h("span", "", label + "…"); const bar = h("div", "bar"); const fill = h("i");
+    bar.appendChild(fill); el.appendChild(txt); el.appendChild(bar);
+    document.body.appendChild(el);
+    return {
+      set(n, total){ txt.textContent = label + " " + n + "/" + total; fill.style.width = Math.round(100 * n / Math.max(1, total)) + "%"; },
+      done(){ el.remove(); },
+    };
+  }
+  // Snapshot the user's data, run a change, offer Undo.
+  function withUndo(msg, fn){
+    const snap = { collection: clone(state.collection), wishlist: clone(state.wishlist), decks: clone(state.decks) };
+    fn();
+    toast(msg, { label: "Undo", run: () => {
+      state.collection = snap.collection; state.wishlist = snap.wishlist; state.decks = snap.decks;
+      touch(); save("collection", "wishlist", "decks"); refresh(); rerenderSheet();
+    } });
+  }
+
+  /* ============================ sheets ============================ */
+  // One sheet element; opening while open swaps content. Opening pushes a history entry so the
+  // phone's back button closes it; closing from the UI pops that entry.
+  const sheet = { open: false, pushed: false, render: null, onClose: null, after: null };
+  function openSheet(render, opts){
+    opts = opts || {};
+    const was = sheet.open;
+    if (was && sheet.onClose){ const f = sheet.onClose; sheet.onClose = null; f(); }
+    sheet.render = render; sheet.onClose = opts.onClose || null;
+    $("sheet").classList.toggle("wide", !!opts.wide);
+    $("sheetBody").innerHTML = render();
+    $("sheetBody").scrollTop = 0;
+    if (!was){
+      sheet.open = true; sheet.ret = document.activeElement;
+      $("scrim").hidden = false; $("sheet").hidden = false;
+      try { history.pushState({ sheet: 1 }, ""); sheet.pushed = true; } catch(e){ sheet.pushed = false; }
+      requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.add("sheet-open")));
+    }
+    setTimeout(() => {
+      const f = $("sheetBody").querySelector("[autofocus]") || (matchMedia("(pointer:fine)").matches ? $("sheet").querySelector(".sheet-x") : null);
+      if (f) f.focus();
+    }, 60);
+  }
+  function rerenderSheet(){
+    if (!sheet.open || !sheet.render) return;
+    const body = $("sheetBody"), top = body.scrollTop;
+    body.innerHTML = sheet.render();
+    body.scrollTop = top;
+  }
+  function hideSheet(){
+    if (!sheet.open) return;
+    sheet.open = false; sheet.pushed = false; sheet.render = null;
+    if (sheet.onClose){ const f = sheet.onClose; sheet.onClose = null; f(); }
+    document.body.classList.remove("sheet-open");
+    setTimeout(() => { if (!sheet.open){ $("scrim").hidden = true; $("sheet").hidden = true; $("sheetBody").innerHTML = ""; } }, 280);
+    if (sheet.ret && sheet.ret.focus && document.contains(sheet.ret)) try { sheet.ret.focus({ preventScroll: true }); } catch(e){}
+    const after = sheet.after; sheet.after = null;
+    if (after) after();
+  }
+  // closeSheet(then) — `then` runs after the history entry is popped (safe to navigate).
+  function closeSheet(then){
+    if (!sheet.open){ if (then) then(); return; }
+    sheet.after = then || null;
+    if (sheet.pushed && history.state && history.state.sheet) history.back();
+    else hideSheet();
+  }
+  window.addEventListener("popstate", () => { if (sheet.open) hideSheet(); });
+  $("scrim").addEventListener("click", () => closeSheet());
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && sheet.open){ e.preventDefault(); closeSheet(); } });
+
+  // Promise-returning confirm / prompt built on the sheet.
+  function confirmSheet(o){
+    return new Promise((resolve) => {
+      let done = false;
+      const fin = (v) => { if (!done){ done = true; resolve(v); } };
+      openSheet(() => '<h2 id="sheetTitle">' + esc(o.title) + "</h2>" + (o.message ? '<p class="lead">' + esc(o.message) + "</p>" : "") +
+        '<div class="sheet-actions"><button class="btn" data-act="cfNo">Cancel</button><button class="btn ' + (o.danger ? "pri danger-fill" : "pri") + '" data-act="cfYes" autofocus>' + esc(o.ok || "OK") + "</button></div>",
+        { onClose: () => fin(false) });
+      CONFIRM.resolve = (v) => { sheet.onClose = null; closeSheet(() => fin(v)); };
+    });
+  }
+  const CONFIRM = { resolve: null };
+  function promptSheet(o){
+    return new Promise((resolve) => {
+      let done = false;
+      const fin = (v) => { if (!done){ done = true; resolve(v); } };
+      openSheet(() => '<h2 id="sheetTitle">' + esc(o.title) + "</h2>" + (o.message ? '<p class="lead">' + esc(o.message) + "</p>" : "") +
+        '<form data-submit="prompt"><label class="field"><span>' + esc(o.label || "Name") + '</span><input class="inp" id="promptIn" maxlength="120" autocomplete="off" value="' + esc(o.value || "") + '" placeholder="' + esc(o.placeholder || "") + '" autofocus></label>' +
+        '<div class="sheet-actions"><button type="button" class="btn" data-act="cfNo">Cancel</button><button class="btn pri" type="submit">' + esc(o.ok || "Save") + "</button></div></form>",
+        { onClose: () => fin(null) });
+      PROMPT.resolve = (v) => { sheet.onClose = null; closeSheet(() => fin(v)); };
+    });
+  }
+  const PROMPT = { resolve: null };
+  function optionSheet(title, items, lead){
+    openSheet(() => '<h2 id="sheetTitle">' + esc(title) + "</h2>" + (lead ? '<p class="lead">' + esc(lead) + "</p>" : "") +
+      items.map((it, i) => '<button class="opt' + (it.danger ? " danger" : "") + '" data-act="opt" data-i="' + i + '">' + (it.icon || "") + "<span>" + esc(it.label) + "</span>" + (it.current ? '<span class="chk">' + ICON.check + "</span>" : "") + "</button>").join(""));
+    OPTS.items = items;
+  }
+  const OPTS = { items: [] };
+
+  /* ============================ router ============================ */
+  // Hash routes so the browser / phone back button works: #/collection, #/search, #/decks,
+  // #/deck/<id>, #/lists, #/binder/<id>, #/wishlist, #/more.
+  const TAB_OF = { collection: "collection", binder: "lists", search: "search", decks: "decks", deck: "decks", lists: "lists", wishlist: "lists", more: "more" };
+  const cur = { name: "", arg: "" };
+  function parseHash(){
+    const parts = location.hash.replace(/^#\/?/, "").split("/");
+    let name = parts[0] || "collection";
+    if (!routes[name]) name = "collection";
+    let arg = "";
+    try { arg = decodeURIComponent(parts.slice(1).join("/")); } catch(e){}
+    return { name, arg };
+  }
+  function render(){
+    const r = parseHash();
+    const same = r.name === cur.name && r.arg === cur.arg;
+    cur.name = r.name; cur.arg = r.arg;
+    document.querySelectorAll("#nav a").forEach((a) => { if (a.dataset.tab === TAB_OF[r.name]) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+    routes[r.name].mount(r.arg);
+    if (!same) window.scrollTo(0, 0);
+  }
+  let refreshQueued = false;
+  // Re-draw the current screen after a data change, keeping the scroll position.
+  function refresh(){
+    if (refreshQueued) return;
+    refreshQueued = true;
+    requestAnimationFrame(() => {
+      refreshQueued = false;
+      const rt = routes[cur.name];
+      if (!rt) return;
+      const y = window.scrollY;
+      if (rt.update) rt.update(); else rt.mount(cur.arg);
+      window.scrollTo(0, y);
+    });
+  }
+  window.addEventListener("hashchange", () => { if (!booted) return; if (sheet.open) hideSheet(); render(); });
+  window.addEventListener("scroll", () => { const tb = document.querySelector(".topbar"); if (tb) tb.classList.toggle("scrolled", window.scrollY > 4); }, { passive: true });
+
+  function topbar(o){
+    return '<header class="topbar"><div class="bar-in"><div class="bar-row">' +
+      (o.back ? '<a class="back" href="' + esc(o.back) + '">' + ICON.back + "<span>" + esc(o.backLabel || "Back") + "</span></a>" : "") +
+      '<h1 class="bar-title">' + esc(o.title) + (o.sub ? "<small>" + esc(o.sub) + "</small>" : "") + "</h1>" + (o.actions || "") +
+      "</div>" + (o.below ? '<div class="bar-sub">' + o.below + "</div>" : "") + "</div></header>";
+  }
+  const emptyHtml = (title, msg, btn) => '<div class="empty"><b>' + esc(title) + "</b>" + esc(msg || "") + (btn || "") + "</div>";
+
+  /* ============================ collection screen ============================ */
+  const coll = { q: "", f: { colors: [], types: [], rarity: [], sets: [], tiers: [], finish: [], binder: "" }, list: [], shown: 0, binder: "" };
+  const COLOR_OPTS = [["W", "White"], ["U", "Blue"], ["B", "Black"], ["R", "Red"], ["G", "Green"], ["C", "Colorless"], ["M", "Multicolor"]];
+  const TYPE_OPTS = ["Creature", "Instant", "Sorcery", "Artifact", "Enchantment", "Planeswalker", "Land", "Battle"];
+  const RARITY_OPTS = [["common", "Common"], ["uncommon", "Uncommon"], ["rare", "Rare"], ["mythic", "Mythic"], ["special", "Special"]];
+  const SORTS = [["name", "Name"], ["price", "Price"], ["cmc", "Mana value"], ["added", "Date added"], ["set", "Set & number"]];
+  const hayCache = new WeakMap();
+  function hay(c){
+    let s = hayCache.get(c);
+    if (s == null){
+      s = fold([c.name, c.flavor_name, c.type_line, c.oracle_text, c.set, c.set_name].concat((c.faces || []).map((f) => f.oracle_text)).join(" \u0001 "));
+      hayCache.set(c, s);
+    }
+    return s;
+  }
+  function collRows(source, opts){
+    opts = opts || {};
+    const tokens = fold(opts.q != null ? opts.q : "").split(/\s+/).filter(Boolean);
+    const f = opts.f || null;
+    const rows = [];
+    Object.keys(source).forEach((k) => {
+      const e = source[k], c = getCard(e.set + ":" + e.cn);
+      if (!c) return;
+      if (opts.binder && (opts.binder === "none" ? e.binder : e.binder !== opts.binder)) return;
+      if (tokens.length){ const hs = hay(c); for (const t of tokens) if (hs.indexOf(t) < 0) return; }
+      const p = entryPrice(e);
+      if (f){
+        if (f.colors.length){
+          const cl = c.colors || [];
+          const ok = f.colors.some((x) => x === "C" ? cl.length === 0 : x === "M" ? cl.length > 1 : cl.indexOf(x) >= 0);
+          if (!ok) return;
+        }
+        if (f.types.length && !f.types.some((t) => new RegExp("\\b" + t + "\\b").test(c.type_line))) return;
+        if (f.rarity.length && f.rarity.indexOf(c.rarity === "bonus" ? "special" : c.rarity) < 0) return;
+        if (f.sets.length && f.sets.indexOf(c.set) < 0) return;
+        if (f.tiers.length && f.tiers.indexOf(tierOf(p)) < 0) return;
+        if (f.finish.length && f.finish.indexOf(e.finish) < 0) return;
+        if (!opts.binder && f.binder && (f.binder === "none" ? e.binder : e.binder !== f.binder)) return;
+      }
+      rows.push({ k, e, c, p });
+    });
+    const dir = prefs.dir === "desc" ? -1 : 1;
+    const byName = (a, b) => displayName(a.c).localeCompare(displayName(b.c));
+    const cmp = {
+      name: byName,
+      price: (a, b) => ((a.p || 0) - (b.p || 0)) || byName(a, b),
+      cmc: (a, b) => ((a.c.cmc || 0) - (b.c.cmc || 0)) || byName(a, b),
+      added: (a, b) => String(a.e.added || "").localeCompare(String(b.e.added || "")) || byName(a, b),
+      set: (a, b) => a.c.set.localeCompare(b.c.set) || (cnNum(a.c.cn) - cnNum(b.c.cn)) || String(a.c.cn).localeCompare(String(b.c.cn)),
+    }[prefs.sort] || byName;
+    rows.sort((a, b) => dir * cmp(a, b));
+    return rows;
+  }
+  function tileHtml(r, ownBadge){
+    const c = r.c;
+    const badges = (r.e && r.e.qty > 1 ? '<span class="qty">×' + r.e.qty + "</span>" : "") + (r.e ? finBadge(r.e.finish) : "") +
+      (ownBadge ? '<span class="own">Owned ×' + ownBadge + "</span>" : "");
+    return '<button class="tile" data-act="card" data-k="' + esc(cardKey(c)) + '"' + (r.ctx ? ' data-ctx="' + r.ctx + '"' : "") + ' aria-label="' + esc(displayName(c) + (r.e ? ", " + r.e.qty + " owned" : "")) + '">' +
+      cimg(c, "small", badges) +
+      '<div class="meta"><span class="setc ' + esc(c.rarity) + '">' + esc(c.set) + "</span>" + '<span class="faint">#' + esc(c.cn) + '</span><span class="p">' + money(r.p) + "</span></div></button>";
+  }
+  function rowHtml(r){
+    const c = r.c;
+    return '<button class="lrow" data-act="card" data-k="' + esc(cardKey(c)) + '"' + (r.ctx ? ' data-ctx="' + r.ctx + '"' : "") + ">" +
+      '<span class="q">' + (r.e ? r.e.qty + "×" : "") + "</span>" +
+      '<div class="main"><div class="t"><span class="n">' + esc(displayName(c)) + "</span>" + (r.e ? finBadge(r.e.finish) : "") + "</div>" +
+      '<div class="s"><span class="setc ' + esc(c.rarity) + '">' + esc(c.set) + "</span><span>#" + esc(c.cn) + "</span><span>" + esc(frontType(c)) + "</span></div></div>" +
+      manaHtml(c.mana_cost) + '<span class="p">' + money(r.p) + "</span></button>";
+  }
+  // Chunked rendering: draw the first chunk, append more as the sentinel nears the viewport.
+  let chunkObs = null;
+  function renderChunked(container, items, htmlFn, view, keep){
+    if (chunkObs){ chunkObs.disconnect(); chunkObs = null; }
+    const CH = 90;
+    let shown = Math.min(items.length, Math.max(CH, keep || 0));
+    const wrapCls = view === "grid" ? "grid" : "list";
+    container.innerHTML = '<div class="' + wrapCls + '">' + items.slice(0, shown).map(htmlFn).join("") + "</div>" + '<div class="sentinel"></div>';
+    const wrap = container.firstChild, sent = container.lastChild;
+    if (shown >= items.length) return () => shown;
+    if (!("IntersectionObserver" in window)){ wrap.insertAdjacentHTML("beforeend", items.slice(shown).map(htmlFn).join("")); shown = items.length; return () => shown; }
+    chunkObs = new IntersectionObserver((ents) => {
+      if (!ents.some((e) => e.isIntersecting)) return;
+      const next = items.slice(shown, shown + CH * 2);
+      wrap.insertAdjacentHTML("beforeend", next.map(htmlFn).join(""));
+      shown += next.length;
+      if (shown >= items.length){ chunkObs.disconnect(); chunkObs = null; }
+    }, { rootMargin: "1400px 0px" });
+    chunkObs.observe(sent);
+    return () => shown;
+  }
+  function filterCount(){
+    const f = coll.f;
+    return f.colors.length + f.types.length + f.rarity.length + f.sets.length + f.tiers.length + f.finish.length + (f.binder && !coll.binder ? 1 : 0);
+  }
+  function chipsHtml(){
+    const f = coll.f, out = [];
+    const chip = (group, v, label) => out.push('<button class="chip on" data-act="unfilter" data-g="' + group + '" data-v="' + esc(v) + '" aria-label="Remove filter ' + esc(label) + '">' + esc(label) + '<span class="x" aria-hidden="true">×</span></button>');
+    f.colors.forEach((v) => chip("colors", v, (COLOR_OPTS.find((o) => o[0] === v) || [v, v])[1]));
+    f.types.forEach((v) => chip("types", v, v));
+    f.rarity.forEach((v) => chip("rarity", v, (RARITY_OPTS.find((o) => o[0] === v) || [v, v])[1]));
+    f.sets.forEach((v) => chip("sets", v, v.toUpperCase()));
+    f.tiers.forEach((v) => chip("tiers", v, (tierLabels().find((o) => o[0] === v) || [v, v])[1]));
+    f.finish.forEach((v) => chip("finish", v, FINISH_LABEL[v] || v));
+    if (f.binder && !coll.binder){ const b = state.binders.find((x) => x.id === f.binder); chip("binder", f.binder, f.binder === "none" ? "No binder" : b ? b.name : "Binder"); }
+    if (out.length > 1) out.push('<button class="chip" data-act="clearFilters">Clear all</button>');
+    return out.join("");
+  }
+  const collScreen = {
+    mount(binderId){
+      coll.binder = binderId || "";
+      const b = coll.binder ? state.binders.find((x) => x.id === coll.binder) : null;
+      if (coll.binder && !b){ $("screen").innerHTML = topbar({ title: "Binder", back: "#/lists", backLabel: "Lists" }) + '<div class="page">' + emptyHtml("Binder not found", "It may have been deleted.", '<br><a class="btn" href="#/lists">Back to Lists</a>') + "</div>"; return; }
+      const actions = '<button class="icon-btn" data-act="toggleView" aria-label="' + (prefs.view === "grid" ? "Show as list" : "Show as grid") + '">' + (prefs.view === "grid" ? ICON.list : ICON.grid) + "</button>" +
+        '<button class="icon-btn" data-act="sortSheet" aria-label="Sort">' + ICON.sort + "</button>" +
+        '<button class="icon-btn" data-act="filterSheet" aria-label="Filters" id="fBtn">' + ICON.filter + "</button>";
+      const below = '<form class="search" role="search" data-submit="noop">' + ICON.search + '<input id="cQ" type="search" placeholder="Filter by name, type or text" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" data-input="collQ" value="' + esc(coll.q) + '" aria-label="Filter collection"><button type="button" class="clr" data-act="clearQ" aria-label="Clear filter"' + (coll.q ? "" : " hidden") + ">" + ICON.close + "</button></form>";
+      $("screen").innerHTML = topbar(b ? { title: b.name, back: "#/lists", backLabel: "Lists", actions, below } : { title: "Collection", actions, below }) +
+        '<div class="page"><div class="summary num" id="cSum"></div><div class="chips" id="cChips"></div><div id="cRes"></div></div>' +
+        (b ? "" : '<a class="fab" href="#/search">' + ICON.plus + "<span>Add cards</span></a>");
+      collScreen.update();
+    },
+    update(){
+      const res = $("cRes"); if (!res) return;
+      const keep = coll.shownFn ? coll.shownFn() : 0;
+      const all = collRows(state.collection, { binder: coll.binder });
+      const rows = collRows(state.collection, { q: coll.q, f: coll.f, binder: coll.binder });
+      const sum = (rs) => rs.reduce((a, r) => a + r.e.qty, 0), val = (rs) => rs.reduce((a, r) => a + (r.p || 0) * r.e.qty, 0);
+      const filtered = rows.length !== all.length;
+      $("cSum").innerHTML = "<span><b>" + rows.length.toLocaleString() + "</b> " + (rows.length === 1 ? "printing" : "printings") + "</span><span><b>" + sum(rows).toLocaleString() + "</b> cards</span><span><b>" + money(val(rows)) + "</b></span>" +
+        (filtered ? '<span class="faint">of ' + all.length + "</span>" : "");
+      $("cChips").innerHTML = chipsHtml();
+      $("cChips").style.marginBottom = filterCount() ? "6px" : "0";
+      const fb = $("fBtn"); if (fb){ const n = filterCount(); fb.innerHTML = ICON.filter + (n ? '<span class="dot">' + n + "</span>" : ""); }
+      const clr = document.querySelector("#screen .clr"); if (clr) clr.hidden = !coll.q;
+      coll.list = rows;
+      if (!all.length){
+        res.innerHTML = coll.binder ? emptyHtml("This binder is empty", "Open a card and use “Binder” to file it here.") :
+          emptyHtml("No cards yet", "Search Scryfall to add cards, or import a CSV from More.", '<br><a class="btn pri" href="#/search">Search cards</a>');
+        coll.shownFn = null; return;
+      }
+      if (!rows.length){ res.innerHTML = emptyHtml("No matches", "Try a different filter.", '<br><button class="btn" data-act="clearAll">Clear filters</button>'); coll.shownFn = null; return; }
+      coll.shownFn = renderChunked(res, rows, prefs.view === "grid" ? (r) => tileHtml(r) : rowHtml, prefs.view, keep);
+    },
+  };
+  function filterSheetHtml(){
+    const f = coll.f;
+    const group = (title, g, opts) => '<div class="fgroup"><h3>' + esc(title) + '</h3><div class="chips">' + opts.map((o) =>
+      '<button class="chip" data-act="fToggle" data-g="' + g + '" data-v="' + esc(o[0]) + '" aria-pressed="' + (f[g].indexOf(o[0]) >= 0) + '">' + (o[2] || "") + esc(o[1]) + (o[3] != null ? ' <span class="ct">' + o[3] + "</span>" : "") + "</button>").join("") + "</div></div>";
+    const setCounts = {};
+    Object.values(state.collection).forEach((e) => { if (!coll.binder || e.binder === coll.binder) setCounts[e.set] = (setCounts[e.set] || 0) + e.qty; });
+    const setOpts = Object.keys(setCounts).map((s) => { const c = Object.values(state.cards).find((x) => x.set === s); return [s, (c ? c.set_name : s.toUpperCase()), "", setCounts[s]]; }).sort((a, b) => a[1].localeCompare(b[1]));
+    const binderOpts = '<option value="">Any binder</option><option value="none"' + (f.binder === "none" ? " selected" : "") + ">Not in a binder</option>" +
+      state.binders.map((b) => '<option value="' + esc(b.id) + '"' + (f.binder === b.id ? " selected" : "") + ">" + esc(b.name) + "</option>").join("");
+    return '<h2 id="sheetTitle">Filters</h2><p class="lead">' + plural(collRows(state.collection, { q: coll.q, f: coll.f, binder: coll.binder }).length, "printing") + " match.</p>" +
+      group("Colour", "colors", COLOR_OPTS.map((o) => [o[0], o[1], (o[0] === "M" ? "" : pip(o[0]) + " ")])) +
+      group("Card type", "types", TYPE_OPTS.map((t) => [t, t])) +
+      group("Rarity", "rarity", RARITY_OPTS) +
+      group("Price", "tiers", tierLabels().map((t) => [t[0], t[1] + " " + t[2]])) +
+      group("Finish", "finish", [["nonfoil", "Normal"], ["foil", "Foil"], ["etched", "Etched"]]) +
+      (!coll.binder ? '<div class="fgroup"><h3>Binder</h3><select class="inp" data-change="fBinder" aria-label="Binder">' + binderOpts + "</select></div>" : "") +
+      '<div class="fgroup"><h3>Set</h3><div class="setlist"><div class="chips">' + setOpts.map((o) =>
+        '<button class="chip" data-act="fToggle" data-g="sets" data-v="' + esc(o[0]) + '" aria-pressed="' + (f.sets.indexOf(o[0]) >= 0) + '">' + esc(o[1]) + ' <span class="ct">' + o[3] + "</span></button>").join("") + "</div></div></div>" +
+      '<div class="sheet-actions"><button class="btn" data-act="clearFilters">Clear all</button><button class="btn pri" data-act="sheetClose">Done</button></div>';
+  }
+  function sortSheetHtml(){
+    return '<h2 id="sheetTitle">Sort</h2>' + SORTS.map((s) => '<button class="opt" data-act="setSort" data-v="' + s[0] + '"><span>' + esc(s[1]) + "</span>" + (prefs.sort === s[0] ? '<span class="chk">' + ICON.check + "</span>" : "") + "</button>").join("") +
+      '<div style="margin-top:14px"><div class="seg" role="group" aria-label="Direction" style="width:100%"><button data-act="setDir" data-v="asc" aria-pressed="' + (prefs.dir !== "desc") + '">Ascending</button><button data-act="setDir" data-v="desc" aria-pressed="' + (prefs.dir === "desc") + '">Descending</button></div></div>' +
+      '<div class="sheet-actions"><button class="btn pri" data-act="sheetClose">Done</button></div>';
+  }
+
+  /* ============================ search screen ============================ */
+  const srch = { q: "", keys: [], next: null, total: 0, loading: false, error: "", seq: 0, ran: false };
+  const SEARCH_EXAMPLES = [["t:dragon c:r", "red dragons"], ['o:"draw a card" id<=ub', "Dimir card draw"], ["is:commander t:legendary c:g", "green commanders"], ["set:mh3 r:mythic", "set + rarity"], ["cmc<=2 t:creature usd<1", "cheap two-drops"], ["otag:ramp id:g", "ramp"]];
+  const searchScreen = {
+    mount(){
+      const below = '<form class="search" role="search" data-submit="search">' + ICON.search + '<input id="sQ" type="search" placeholder="Search Scryfall, e.g. t:goblin c:r" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" data-input="searchQ" value="' + esc(srch.q) + '" aria-label="Scryfall search"><button type="button" class="clr" data-act="clearS" aria-label="Clear search"' + (srch.q ? "" : " hidden") + ">" + ICON.close + "</button></form>";
+      $("screen").innerHTML = topbar({ title: "Search", below }) + '<div class="page"><div id="sRes"></div></div>';
+      searchScreen.update();
+      if (!srch.q && matchMedia("(pointer:fine)").matches) $("sQ").focus();
+    },
+    update(){
+      const box = $("sRes"); if (!box) return;
+      const clr = document.querySelector("#screen .clr"); if (clr) clr.hidden = !srch.q;
+      if (!srch.q.trim()){
+        box.innerHTML = '<div class="hint">Full <a href="https://scryfall.com/docs/syntax" target="_blank" rel="noopener">Scryfall syntax</a> works. Try:</div><div class="chips" style="margin-top:10px">' +
+          SEARCH_EXAMPLES.map((x) => '<button class="chip" data-act="exSearch" data-v="' + esc(x[0]) + '"><code style="font:12.5px var(--f-mono)">' + esc(x[0]) + '</code> <span class="ct">' + esc(x[1]) + "</span></button>").join("") + "</div>" +
+          '<p class="hint"><code>t:</code> type · <code>o:</code> text · <code>c:</code> colour · <code>id:</code> colour identity · <code>cmc</code> mana value · <code>r:</code> rarity · <code>set:</code> · <code>usd&lt;</code> price · <code>is:commander</code></p>';
+        return;
+      }
+      if (srch.loading && !srch.keys.length){ box.innerHTML = '<div class="loading"><span class="spin"></span></div>'; return; }
+      if (srch.error){ box.innerHTML = emptyHtml("Search didn't work", srch.error, '<br><button class="btn" data-act="retrySearch">Try again</button>'); return; }
+      if (!srch.keys.length){ box.innerHTML = srch.ran ? emptyHtml("No cards found", "Check the spelling or loosen the query.") : ""; return; }
+      const rows = srch.keys.map((k) => { const c = getCard(k); return c ? { k, c, p: cardPrice(c, "nonfoil") } : null; }).filter(Boolean);
+      box.innerHTML = '<div class="summary num"><span><b>' + srch.total.toLocaleString() + "</b> " + (srch.total === 1 ? "card" : "cards") + "</span></div>" +
+        '<div class="grid">' + rows.map((r) => tileHtml(r, ownedOracle(r.c))).join("") + "</div>" +
+        (srch.next ? '<div style="text-align:center;margin-top:20px"><button class="btn" data-act="moreSearch"' + (srch.loading ? " disabled" : "") + ">" + (srch.loading ? '<span class="spin" style="width:16px;height:16px"></span> Loading…' : "Load more") + "</button></div>" : "");
+    },
+  };
+  async function runSearch(q, more){
+    q = (q || "").trim();
+    const seq = ++srch.seq;
+    if (!q){ srch.keys = []; srch.next = null; srch.ran = false; srch.error = ""; searchScreen.update(); return; }
+    srch.loading = true; srch.error = "";
+    if (!more){ srch.keys = []; srch.next = null; }
+    if (cur.name === "search") searchScreen.update();
+    try {
+      const data = more ? await sf(srch.next) : await sf("/cards/search?q=" + encodeURIComponent(q));
+      if (seq !== srch.seq) return;
+      (data.data || []).forEach((raw) => { const c = trimCard(raw); const k = cardKey(c); if (!state.cards[k]) tempCards.set(k, c); else storeFresh(k, c); srch.keys.push(k); });
+      srch.total = data.total_cards || srch.keys.length;
+      srch.next = data.has_more && data.next_page ? data.next_page : null;
+    } catch(e){
+      if (seq !== srch.seq) return;
+      if (e.status === 404){ srch.keys = more ? srch.keys : []; srch.next = null; srch.total = srch.keys.length; }
+      else if (e.status === 400){ srch.error = e.message; }
+      else { srch.error = e.offline ? "You're offline, or Scryfall didn't answer." : e.message; }
+    }
+    srch.loading = false; srch.ran = true;
+    if (cur.name === "search") searchScreen.update();
+  }
+  // A fresher copy of a stored card (e.g. from search) updates prices without losing anything.
+  function storeFresh(k, c){ if (state.cards[k] && state.cards[k].id === c.id){ state.cards[k].prices = c.prices; save("cards"); } }
+  const debouncedSearch = debounce((q) => runSearch(q), 400);
+
+  /* ============================ card sheet ============================ */
+  // ctx: { deck: id, entry: <entry object> } | { wish: true } | {}
+  const CS = { k: "", ctx: {}, face: 0, prints: null, printsLoading: false, printsErr: "" };
+  function openCard(k, ctx){
+    CS.k = k; CS.ctx = ctx || {}; CS.face = 0; CS.prints = null; CS.printsLoading = false; CS.printsErr = "";
+    openSheet(cardSheetHtml, { wide: true });
+  }
+  function finishesFor(c){
+    const fs = (c.finishes && c.finishes.length ? c.finishes.slice() : ["nonfoil"]);
+    ["nonfoil", "foil", "etched"].forEach((f) => { if (state.collection[ekey(c.set, c.cn, f)] && fs.indexOf(f) < 0) fs.push(f); });
+    return fs;
+  }
+  function stepper(act, f, q, label){
+    return '<div class="step" role="group" aria-label="' + esc(label) + '"><button data-act="' + act + '" data-f="' + esc(f) + '" data-d="-1" aria-label="One fewer"' + (q ? "" : " disabled") + '>−</button><output aria-live="polite">' + q + '</output><button data-act="' + act + '" data-f="' + esc(f) + '" data-d="1" aria-label="One more">+</button></div>';
+  }
+  function deckSections(d){
+    const out = [];
+    d.entries.forEach((e) => { if (out.indexOf(e.section) < 0) out.push(e.section); });
+    return out;
+  }
+  function cardSheetHtml(){
+    const k = CS.k, c = getCard(k);
+    if (!c) return '<h2 id="sheetTitle">Card not found</h2><p class="lead">This printing isn\'t in the local card data.</p>';
+    const faces = c.faces || [];
+    const back = faces[1] && faces[1].img;
+    const imgUrl = imgSize(CS.face && back ? faces[1].img : c.img, "large");
+    const art = '<div class="cs-art"><div class="cimg"><div class="ph">' + esc(displayName(c)) + "</div>" + (imgUrl ? '<img src="' + esc(imgUrl) + '" alt="' + esc(CS.face && back ? faces[1].name : displayName(c)) + '">' : "") + "</div>" +
+      (back ? '<button class="icon-btn flip" data-act="flip" aria-label="Show ' + (CS.face ? "front" : "back") + ' face">' + ICON.flip + "</button>" : "") + "</div>";
+    let text = "";
+    const hasFaceText = faces.length > 1 && faces.some((f) => f.oracle_text || f.type_line);
+    if (hasFaceText){
+      text = faces.map((f) => '<div class="face"><h4><span>' + esc(f.name) + "</span>" + manaHtml(f.mana_cost) + "</h4>" + '<div class="cs-type">' + esc(f.type_line) + "</div>" +
+        '<div class="otext">' + textHtml(f.oracle_text) + "</div>" + (f.pt ? '<span class="cs-pt">' + esc(f.pt) + "</span>" : "") + "</div>").join("");
+    } else {
+      text = '<div class="cs-type">' + esc(c.type_line) + "</div>" + '<div class="otext">' + textHtml(c.oracle_text) + "</div>" +
+        (c.pt ? '<span class="cs-pt">' + esc(c.pt) + "</span>" : "") + (c.loyalty ? '<span class="cs-pt">Loyalty ' + esc(c.loyalty) + "</span>" : "");
+    }
+    const legal = c.legal_commander === "legal" ? '<span class="badge ok">Commander legal</span>' : '<span class="badge bad">Not legal in Commander</span>';
+    const prices = (c.finishes && c.finishes.length ? c.finishes : ["nonfoil"]).map((f) => "<div><span>" + esc(FINISH_LABEL[f] || f) + "</span><b>" + money(parseFloat(c.prices && c.prices[FINISH_PRICE[f]]) || null) + "</b></div>").join("");
+    let html = '<div class="cs">' + art + "<div>" +
+      '<h2 class="cs-name" id="sheetTitle"><span>' + esc(displayName(c)) + "</span>" + (hasFaceText ? "" : manaHtml(c.mana_cost)) + "</h2>" +
+      (c.flavor_name ? '<div class="cs-real">' + esc(c.name) + "</div>" : "") + text +
+      '<div class="cs-set"><span class="setc ' + esc(c.rarity) + '">' + esc(c.set) + "</span><span>" + esc(c.set_name) + "</span><span>#" + esc(c.cn) + "</span><span>" + esc(cap(c.rarity)) + "</span>" + (c.released ? "<span>" + esc(c.released.slice(0, 4)) + "</span>" : "") + "</div>" +
+      '<div class="cs-set">' + legal + (c.game_changer ? '<span class="badge warn">Game Changer</span>' : "") + "</div>" +
+      '<div style="margin-top:14px"><div class="prices">' + prices + "</div></div>" +
+      '<div style="display:grid;gap:12px;margin-top:16px">';
+    // deck context
+    if (CS.ctx.deck){
+      const d = deckById(CS.ctx.deck), e = CS.ctx.entry;
+      if (d && e && d.entries.indexOf(e) >= 0){
+        const secs = deckSections(d);
+        html += '<div class="box"><h3>In ' + esc(d.name) + "</h3>" +
+          '<div class="qrow"><div class="lbl">Quantity<small>' + esc(FINISH_LABEL[e.finish] || e.finish) + (e.printing_inferred ? " · printing guessed on import" : "") + "</small></div>" + stepper("dq", e.finish, e.qty, "Deck quantity") + "</div>" +
+          '<div class="qrow"><div class="lbl">Section</div><select class="inp" data-change="dsec" aria-label="Section">' + secs.map((s) => '<option value="' + esc(s) + '"' + (s === e.section ? " selected" : "") + ">" + esc(s) + "</option>").join("") + '<option value="__new">New section…</option></select></div>' +
+          '<div class="qrow"><div class="lbl">' + deckOwnLabel(c, e) + '</div><button class="btn sm danger" data-act="drm">Remove</button></div></div>';
+      }
+    }
+    // collection
+    const fs = finishesFor(c);
+    const ownedHere = fs.reduce((a, f) => a + ((state.collection[ekey(c.set, c.cn, f)] || {}).qty || 0), 0);
+    const other = ownedOracle(c) - ownedHere;
+    let binderRow = "";
+    if (ownedHere){
+      const curB = (fs.map((f) => state.collection[ekey(c.set, c.cn, f)]).find((e) => e && e.binder) || {}).binder || "";
+      binderRow = '<div class="qrow"><div class="lbl">Binder</div><select class="inp" data-change="cBinder" aria-label="Binder"><option value="">None</option>' +
+        state.binders.map((b) => '<option value="' + esc(b.id) + '"' + (b.id === curB ? " selected" : "") + ">" + esc(b.name) + "</option>").join("") + '<option value="__new">New binder…</option></select></div>';
+    }
+    html += '<div class="box"><h3>In your collection</h3>' + fs.map((f) => {
+      const e = state.collection[ekey(c.set, c.cn, f)];
+      return '<div class="qrow"><div class="lbl">' + esc(FINISH_LABEL[f] || f) + "<small>" + money(cardPrice(c, f)) + (e && e.added ? " · added " + esc(fmtDate(e.added)) : "") + "</small></div>" + stepper("cq", f, e ? e.qty : 0, FINISH_LABEL[f] + " quantity") + "</div>";
+    }).join("") + binderRow + (other > 0 ? '<div class="qrow"><div class="lbl"><small>You also own ' + plural(other, "copy", "copies") + " in other printings.</small></div></div>" : "") + "</div>";
+    // wishlist
+    let wfs = fs.filter((f) => state.wishlist[ekey(c.set, c.cn, f)]);
+    if (!wfs.length) wfs = [fs[0]];
+    html += '<div class="box"><h3>Wishlist</h3>' + wfs.map((wf) => {
+      const we = state.wishlist[ekey(c.set, c.cn, wf)];
+      return '<div class="qrow"><div class="lbl">Wanted<small>' + esc(FINISH_LABEL[wf] || wf) + "</small></div>" + stepper("wq", wf, we ? we.qty : 0, "Wishlist quantity") + "</div>" +
+        (we ? '<div class="qrow"><div class="lbl"><small>Got it? Moves it into your collection.</small></div><button class="btn sm soft" data-act="acquire" data-f="' + esc(wf) + '">Mark acquired</button></div>' : "");
+    }).join("") + "</div>";
+    // actions
+    html += '<div class="acts"><button class="btn" data-act="prints">' + ICON.prints + "Other printings</button>" +
+      '<a class="btn" href="https://scryfall.com/card/' + encodeURIComponent(c.set) + "/" + encodeURIComponent(c.cn) + '" target="_blank" rel="noopener">' + ICON.ext + "Scryfall</a></div>" +
+      (state.decks.length ? '<select class="inp" data-change="addToDeck" aria-label="Add to a deck"><option value="">Add to a deck…</option>' + state.decks.map((d) => '<option value="' + esc(d.id) + '">' + esc(d.name) + "</option>").join("") + "</select>" : "");
+    html += printsHtml();
+    html += "</div></div></div>";
+    return html;
+  }
+  const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
+  function printsHtml(){
+    if (!CS.prints && !CS.printsLoading && !CS.printsErr) return "";
+    let inner;
+    if (CS.printsLoading) inner = '<div class="loading" style="padding:20px"><span class="spin"></span></div>';
+    else if (CS.printsErr) inner = '<p class="note">' + esc(CS.printsErr) + "</p>";
+    else if (!CS.prints.length) inner = '<p class="note">No other printings found.</p>';
+    else {
+      const curC = getCard(CS.k);
+      const ownedHere = finishesFor(curC).some((f) => state.collection[ekey(curC.set, curC.cn, f)]);
+      inner = '<div class="prints">' + CS.prints.map((k) => {
+        const c = getCard(k); if (!c) return "";
+        const isCur = k === CS.k, own = ownedPrint(k);
+        let btns = "";
+        if (!isCur){
+          if (CS.ctx.deck && CS.ctx.entry) btns += '<button class="btn sm" data-act="pUse" data-k="' + esc(k) + '">Use in deck</button>';
+          else if (ownedHere) btns += '<button class="btn sm" data-act="pSwitch" data-k="' + esc(k) + '">Switch</button>';
+          btns += '<button class="btn sm soft" data-act="pAdd" data-k="' + esc(k) + '" aria-label="Add this printing to collection">+ Add</button>';
+        } else btns = '<span class="badge acc">This one</span>';
+        return '<div class="prow' + (isCur ? " cur" : "") + '"><button class="thumb" data-act="pView" data-k="' + esc(k) + '" aria-label="View ' + esc(c.set_name) + ' printing">' + cimg(c, "small") + "</button>" +
+          '<div class="main"><b>' + esc(c.set_name) + '</b><span class="setc ' + esc(c.rarity) + '">' + esc(c.set) + '</span> <span class="faint">#' + esc(c.cn) + " · " + esc((c.released || "").slice(0, 4)) + "</span> · " + money(cardPrice(c, "nonfoil")) +
+          (own ? ' · <span style="color:var(--ok);font-weight:700">Owned ×' + own + "</span>" : "") + "</div>" + btns + "</div>";
+      }).join("") + "</div>";
+    }
+    return '<div class="box" id="printsBox"><h3>Printings</h3>' + inner + "</div>";
+  }
+  async function loadPrints(){
+    const c = getCard(CS.k); if (!c) return;
+    CS.printsLoading = true; CS.printsErr = ""; CS.prints = null; rerenderSheet();
+    const k0 = CS.k;
+    const grab = async (q) => {
+      const keys = []; let url = "/cards/search?q=" + encodeURIComponent(q) + "&unique=prints&order=released";
+      for (let page = 0; url && page < 4; page++){
+        const data = await sf(url);
+        (data.data || []).forEach((raw) => { const t = trimCard(raw); const k = cardKey(t); if (!state.cards[k]) tempCards.set(k, t); else storeFresh(k, t); keys.push(k); });
+        url = data.has_more ? data.next_page : null;
+      }
+      return keys;
+    };
+    try {
+      let keys = [];
+      try { keys = await grab('!"' + c.name.replace(/"/g, "") + '"'); }
+      catch(e){ if (e.status !== 404 || !c.oracle_id) throw e; }
+      if (!keys.length && c.oracle_id) keys = await grab("oracleid:" + c.oracle_id);
+      if (CS.k !== k0) return;
+      CS.prints = keys;
+    } catch(e){
+      if (CS.k !== k0) return;
+      CS.printsErr = e.offline ? "You're offline, or Scryfall didn't answer." : e.status === 404 ? "No printings found." : e.message;
+    }
+    CS.printsLoading = false;
+    rerenderSheet();
+    const box = $("printsBox"); if (box && box.scrollIntoView) box.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth" });
+  }
+
+  /* ---------- collection / wishlist mutations ---------- */
+  function setQty(store, set, cn, finish, qty, extra){
+    const k = ekey(set, cn, finish);
+    const e = state[store][k];
+    if (qty <= 0){ delete state[store][k]; }
+    else if (e){ e.qty = qty; }
+    else { state[store][k] = Object.assign({ set, cn, finish, qty, added: today() }, extra || {}); }
+    touch(); save(store);
+  }
+  function adjustColl(k, finish, d){
+    const c = ensureCard(k) || getCard(k); if (!c) return;
+    const e = state.collection[ekey(c.set, c.cn, finish)];
+    const q = (e ? e.qty : 0) + d;
+    if (q <= 0 && e){
+      withUndo("Removed " + displayName(c) + (finish !== "nonfoil" ? " (" + FINISH_LABEL[finish].toLowerCase() + ")" : ""), () => setQty("collection", c.set, c.cn, finish, 0));
+    } else if (q > 0){
+      const binder = e ? undefined : (finishesFor(c).map((f) => state.collection[ekey(c.set, c.cn, f)]).find((x) => x && x.binder) || {}).binder;
+      setQty("collection", c.set, c.cn, finish, q, binder ? { binder } : null);
+      if (!e) toast("Added " + displayName(c) + " to your collection.");
+    }
+    rerenderSheet(); refresh();
+  }
+  function adjustWish(k, finish, d){
+    const c = ensureCard(k) || getCard(k); if (!c) return;
+    const e = state.wishlist[ekey(c.set, c.cn, finish)];
+    const q = (e ? e.qty : 0) + d;
+    if (q <= 0 && e) withUndo("Removed from wishlist", () => setQty("wishlist", c.set, c.cn, finish, 0));
+    else if (q > 0){ setQty("wishlist", c.set, c.cn, finish, q); if (!e) toast("Added to your wishlist."); }
+    rerenderSheet(); refresh();
+  }
+  function acquire(set, cn, finish){
+    const k = ekey(set, cn, finish), w = state.wishlist[k]; if (!w) return;
+    const c = getCard(set + ":" + cn);
+    withUndo("Moved " + displayName(c) + " to your collection", () => {
+      const e = state.collection[k];
+      if (e) e.qty += w.qty; else state.collection[k] = { set, cn, finish, qty: w.qty, added: today() };
+      delete state.wishlist[k];
+      touch(); save("collection", "wishlist");
+    });
+    rerenderSheet(); refresh();
+  }
+  function setBinder(c, id){
+    finishesFor(c).forEach((f) => { const e = state.collection[ekey(c.set, c.cn, f)]; if (e){ if (id) e.binder = id; else delete e.binder; } });
+    save("collection"); refresh(); rerenderSheet();
+    const b = state.binders.find((x) => x.id === id);
+    toast(id && b ? "Filed in " + b.name + "." : "Removed from binder.");
+  }
+  // Move every finish of the current printing onto another printing.
+  function switchPrinting(fromK, toK){
+    const a = getCard(fromK), b = ensureCard(toK) || getCard(toK); if (!a || !b) return;
+    withUndo("Switched to " + b.set.toUpperCase() + " #" + b.cn, () => {
+      finishesFor(a).forEach((f) => {
+        const e = state.collection[ekey(a.set, a.cn, f)]; if (!e) return;
+        const nf = (b.finishes || []).indexOf(f) >= 0 ? f : ((b.finishes || [])[0] || "nonfoil");
+        const nk = ekey(b.set, b.cn, nf), ex = state.collection[nk];
+        if (ex) ex.qty += e.qty;
+        else { state.collection[nk] = Object.assign({}, e, { set: b.set, cn: b.cn, finish: nf }); delete state.collection[nk].printing_inferred; delete state.collection[nk].price_usd; }
+        delete state.collection[ekey(a.set, a.cn, f)];
+      });
+      touch(); save("collection", "cards");
+    });
+    CS.k = toK; refresh(); rerenderSheet();
+  }
+
+  /* ============================ decks: model ============================ */
+  const deckById = (id) => state.decks.find((d) => d.id === id) || null;
+  const deckCount = (d) => d.entries.reduce((a, e) => a + (e.qty || 0), 0);
+  const isCmdSection = (s) => /^commanders?$/i.test(String(s || "").trim());
+  function deckCommanders(d){
+    const out = d.entries.filter((e) => isCmdSection(e.section)).map((e) => getCard(e.set + ":" + e.cn)).filter(Boolean);
+    if (!out.length && d.commander){
+      const n = fold(d.commander);
+      const e = d.entries.find((x) => { const c = getCard(x.set + ":" + x.cn); return c && nameKeys(c).indexOf(n) >= 0; });
+      if (e) out.push(getCard(e.set + ":" + e.cn));
+    }
+    return out;
+  }
+  function deckIdentity(d){
+    const cmd = deckCommanders(d), set = new Set();
+    (cmd.length ? cmd : d.entries.map((e) => getCard(e.set + ":" + e.cn)).filter(Boolean)).forEach((c) => (c.color_identity || []).forEach((x) => set.add(x)));
+    return Array.from(set);
+  }
+  const deckValue = (d) => d.entries.reduce((a, e) => a + (entryPrice(e) || 0) * e.qty, 0);
+  function ownState(c, e){
+    if (isBasic(c)) return "basic";
+    if (ownedPrint(e.set + ":" + e.cn) > 0) return "own";
+    if (ownedOracle(c) > 0) return "alt";
+    return "miss";
+  }
+  function deckOwnLabel(c, e){
+    const s = ownState(c, e);
+    return s === "basic" ? '<span class="badge">Basic land</span>' : s === "own" ? '<span class="badge ok">Owned</span>' :
+      s === "alt" ? '<span class="badge ok">Owned · different printing</span>' : '<span class="badge bad">Missing</span>';
+  }
+  function deckTouched(d){ d.updated = today(); d.count = deckCount(d); touch(); save("decks"); }
+  function addCardToDeck(d, k, finish, section){
+    const c = ensureCard(k) || getCard(k); if (!c) return;
+    const f = finish && (c.finishes || []).indexOf(finish) >= 0 ? finish : ((c.finishes || []).indexOf("nonfoil") >= 0 ? "nonfoil" : (c.finishes || ["nonfoil"])[0]);
+    const ex = d.entries.find((e) => e.set === c.set && e.cn === c.cn && e.finish === f && (!section || e.section === section));
+    if (ex) ex.qty += 1;
+    else d.entries.push({ set: c.set, cn: c.cn, finish: f, qty: 1, section: section || TYPE_SECTION[mainType(c)] });
+    deckTouched(d);
+  }
+
+  /* ============================ decks: list screen ============================ */
+  const decksScreen = {
+    mount(){
+      const tiles = state.decks.slice().sort((a, b) => String(b.updated || "").localeCompare(String(a.updated || "")) || a.name.localeCompare(b.name)).map((d) => {
+        const cmd = deckCommanders(d)[0];
+        const art = cmd && cmd.img ? '<img src="' + esc(artCrop(cmd.img)) + '" alt="" loading="lazy" decoding="async">' : "";
+        return '<a class="dtile" href="#/deck/' + encodeURIComponent(d.id) + '"><div class="dart">' + art + pipsHtml(deckIdentity(d)) + (d.bracket ? '<span class="br">Bracket ' + esc(d.bracket) + "</span>" : "") + "</div>" +
+          '<div class="body"><div class="nm">' + esc(d.name) + "</div>" + '<div class="sub">' + esc(cap(d.format || "")) + (d.commander ? " · " + esc(d.commander) : "") + "</div>" +
+          '<div class="stats num"><span><b>' + deckCount(d) + "</b> cards</span><span><b>" + money(deckValue(d)) + "</b></span></div></div></a>";
+      }).join("");
+      $("screen").innerHTML = topbar({ title: "Decks", actions: '<button class="icon-btn tint" data-act="newDeck" aria-label="New deck">' + ICON.plus + "</button>" }) +
+        '<div class="page">' + (state.decks.length ? '<div class="decks">' + tiles + "</div>" : emptyHtml("No decks yet", "Start one from scratch or paste a list.", '<br><button class="btn pri" data-act="newDeck">New deck</button>')) + "</div>" +
+        '<button class="fab" data-act="newDeck">' + ICON.plus + "<span>New deck</span></button>";
+    },
+  };
+  const FORMATS = ["commander", "standard", "pioneer", "modern", "legacy", "vintage", "pauper", "brawl", "other"];
+  function newDeckSheet(){
+    openSheet(() => '<h2 id="sheetTitle">New deck</h2><form data-submit="newDeck">' +
+      '<label class="field"><span>Name</span><input class="inp" name="name" maxlength="120" required autocomplete="off" autofocus placeholder="e.g. Atraxa Superfriends"></label>' +
+      '<label class="field"><span>Format</span><select class="inp" name="format">' + FORMATS.map((f) => '<option value="' + f + '">' + cap(f) + "</option>").join("") + "</select></label>" +
+      '<label class="field"><span>Paste a list (optional)</span><textarea class="inp" name="list" spellcheck="false" placeholder="# Commander&#10;1 Atraxa, Praetors\' Voice (cm2) 10&#10;# Creatures&#10;1 Sol Ring"></textarea></label>' +
+      '<p class="note">One card per line: <code>qty Name (set) number</code>, optional <code>*F*</code> foil or <code>*E*</code> etched. <code># Section</code> lines start a section.</p>' +
+      '<div class="sheet-actions"><button type="button" class="btn" data-act="sheetClose">Cancel</button><button class="btn pri" type="submit">Create</button></div></form>');
+  }
+
+  /* ============================ deck text format ============================ */
+  const LINE_RE = /^\s*(\d+)\s+(.+?)(?:\s+\(([a-z0-9]{3,5})\)\s*(\S+))?(?:\s+\*(F|E)\*)?\s*$/i;
+  function parseList(text){
+    const items = []; let section = null, bad = 0;
+    String(text || "").split(/\r?\n/).forEach((raw) => {
+      let line = raw.trim();
+      if (!line) return;
+      if (/^(#|\/\/)/.test(line)){ section = line.replace(/^(#+|\/\/)\s*/, "").trim() || section; return; }
+      line = line.replace(/^(\d+)x\s/i, "$1 ");
+      const m = LINE_RE.exec(line);
+      if (!m){ if (/^[A-Za-z][\w &'\-]{0,30}:?$/.test(line)) section = line.replace(/:$/, ""); else bad++; return; }
+      items.push({ qty: parseInt(m[1], 10), name: m[2].trim(), set: m[3] ? m[3].toLowerCase() : "", cn: m[4] || "", finish: m[5] ? (m[5].toUpperCase() === "F" ? "foil" : "etched") : "nonfoil", section });
+    });
+    return { items, bad };
+  }
+  const lineOf = (qty, c, e) => qty + " " + c.name + " (" + c.set + ") " + c.cn + (e.finish === "foil" ? " *F*" : e.finish === "etched" ? " *E*" : "");
+  function deckText(d){
+    const secs = deckSections(d).sort((a, b) => (isCmdSection(b) ? 1 : 0) - (isCmdSection(a) ? 1 : 0));
+    return secs.map((s) => "# " + s + "\n" + d.entries.filter((e) => e.section === s).map((e) => { const c = getCard(e.set + ":" + e.cn); return c ? lineOf(e.qty, c, e) : e.qty + " ? (" + e.set + ") " + e.cn; }).join("\n")).join("\n\n") + "\n";
+  }
+  function localByName(name){
+    const keys = ix().byName.get(fold(name)); if (!keys || !keys.length) return null;
+    return keys.find((k) => ownedPrint(k) > 0) || keys.find((k) => ownedOracle(state.cards[k]) > 0) || keys[0];
+  }
+  // Resolve [{id?, set?, cn?, name?}] to card keys, fetching unknown printings in 75-card batches.
+  async function resolveCards(items, label){
+    const out = new Array(items.length).fill(null);
+    const I = ix(), need = [];
+    items.forEach((it, i) => {
+      if (it.id && I.byId.has(it.id)){ out[i] = I.byId.get(it.id); return; }
+      if (it.set && it.cn && state.cards[it.set + ":" + it.cn]){ out[i] = it.set + ":" + it.cn; return; }
+      if (!it.set && !it.id && it.name){ const k = localByName(it.name); if (k){ out[i] = k; return; } }
+      need.push(i);
+    });
+    if (!need.length) return out;
+    const keyOf = (o) => o.id ? "id:" + o.id : o.set ? "s:" + o.set + ":" + String(o.collector_number).toLowerCase() : "n:" + fold(o.name);
+    const pass = async (idx, identOf) => {
+      const map = new Map(), idents = [];
+      idx.forEach((i) => { const o = identOf(items[i]); if (!o) return; const kk = keyOf(o); if (!map.has(kk)){ map.set(kk, []); idents.push(o); } map.get(kk).push(i); });
+      if (!idents.length) return;
+      const pg = progress(label || "Fetching cards");
+      try {
+        const res = await fetchCollection(idents, (n, t) => pg.set(n, t));
+        res.found.forEach((raw) => {
+          const c = trimCard(raw), k = storeCard(c);
+          ["id:" + c.id, "s:" + c.set + ":" + String(c.cn).toLowerCase()].concat(nameKeys(c).map((n) => "n:" + n)).forEach((kk) => (map.get(kk) || []).forEach((i) => { if (!out[i]) out[i] = k; }));
+        });
+      } finally { pg.done(); }
+    };
+    await pass(need, (it) => it.id ? { id: it.id } : (it.set && it.cn) ? { set: it.set, collector_number: it.cn } : it.name ? { name: it.name } : null);
+    const retry = need.filter((i) => !out[i] && items[i].name && (items[i].set || items[i].id));
+    if (retry.length){
+      retry.forEach((i) => { const k = localByName(items[i].name); if (k) out[i] = k; });
+      await pass(retry.filter((i) => !out[i]), (it) => ({ name: it.name }));
+    }
+    save("cards");
+    return out;
+  }
+  async function importIntoDeck(d, text, replace){
+    const { items, bad } = parseList(text);
+    if (!items.length){ toast("No card lines found."); return false; }
+    let keys;
+    try { keys = await resolveCards(items, "Finding cards"); }
+    catch(e){ netError(e, "Couldn't look up cards."); return false; }
+    if (replace) d.entries = [];
+    let added = 0, skipped = bad;
+    items.forEach((it, i) => {
+      const k = keys[i]; const c = k && getCard(k);
+      if (!c){ skipped++; return; }
+      const f = (c.finishes || []).indexOf(it.finish) >= 0 ? it.finish : ((c.finishes || [])[0] || "nonfoil");
+      const generic = !it.section || /^(main|mainboard|deck|maindeck)$/i.test(it.section);
+      const section = generic ? TYPE_SECTION[mainType(c)] : (isCmdSection(it.section) ? "Commander" : it.section);
+      const ex = d.entries.find((e) => e.set === c.set && e.cn === c.cn && e.finish === f && e.section === section);
+      if (ex) ex.qty += it.qty; else d.entries.push({ set: c.set, cn: c.cn, finish: f, qty: it.qty, section });
+      added += it.qty;
+    });
+    if (!d.commander){ const cmd = deckCommanders(d)[0]; if (cmd) d.commander = displayName(cmd); }
+    deckTouched(d);
+    toast("Imported " + plural(added, "card") + (skipped ? ", skipped " + skipped + " line" + (skipped === 1 ? "" : "s") : "") + ".");
+    return true;
+  }
+
+  /* ============================ deck view ============================ */
+  const dv = { id: "", tab: "cards", sug: [], sugSeq: 0 };
+  const deckScreen = {
+    mount(id){
+      dv.id = id; dv.sug = [];
+      const d = deckById(id);
+      if (!d){ $("screen").innerHTML = topbar({ title: "Deck", back: "#/decks", backLabel: "Decks" }) + '<div class="page">' + emptyHtml("Deck not found", "It may have been deleted.", '<br><a class="btn" href="#/decks">All decks</a>') + "</div>"; return; }
+      $("screen").innerHTML = topbar({ title: d.name, sub: cap(d.format) + " · " + plural(deckCount(d), "card"), back: "#/decks", backLabel: "Decks", actions: '<button class="icon-btn" data-act="deckMenu" aria-label="Deck options">' + ICON.dots + "</button>" }) +
+        '<div class="page"><div id="dHead"></div>' +
+        '<div class="addbox"><form class="search" role="search" data-submit="deckAdd">' + ICON.plus + '<input id="dAdd" type="search" placeholder="Add a card by name" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" data-input="deckAdd" aria-label="Add a card to this deck" aria-controls="dSug"></form><div class="suggest" id="dSug" hidden></div></div>' +
+        '<div id="dBody"></div></div>';
+      deckScreen.update();
+    },
+    update(){
+      const d = deckById(dv.id); if (!d || !$("dBody")) return deckScreen.mount(cur.arg);
+      const t = document.querySelector("#screen .bar-title");
+      if (t) t.innerHTML = esc(d.name) + "<small>" + esc(cap(d.format) + " · " + plural(deckCount(d), "card")) + "</small>";
+      const cmd = deckCommanders(d);
+      $("dHead").innerHTML = '<div class="dhead">' + (cmd[0] && cmd[0].img ? '<div class="art"><img src="' + esc(artCrop(cmd[0].img)) + '" alt=""></div>' : "") +
+        '<div class="info"><div class="cmd">' + esc(cmd.length ? cmd.map(displayName).join(" + ") : (d.commander || "No commander")) + "</div>" +
+        (d.archetype ? '<div class="arch">' + esc(d.archetype) + "</div>" : "") +
+        '<div class="line">' + pipsHtml(deckIdentity(d)) + (d.bracket ? '<span class="badge">Bracket ' + esc(d.bracket) + "</span>" : "") + '<span class="num">' + money(deckValue(d)) + "</span></div></div></div>";
+      $("dBody").innerHTML = '<div class="toolbar"><div class="seg" role="group" aria-label="Group by"><button data-act="dGroup" data-v="section" aria-pressed="' + (prefs.deckGroup !== "type") + '">Sections</button><button data-act="dGroup" data-v="type" aria-pressed="' + (prefs.deckGroup === "type") + '">Type</button></div><span class="grow"></span>' +
+        '<div class="seg tabsw" role="group" aria-label="Show"><button data-act="dTab" data-v="cards" aria-pressed="' + (dv.tab === "cards") + '">Cards</button><button data-act="dTab" data-v="stats" aria-pressed="' + (dv.tab === "stats") + '">Stats</button></div></div>' +
+        '<div class="dlayout" data-tab="' + dv.tab + '"><div class="cards-col">' + deckListHtml(d) + '</div><div class="stats-col">' + deckStatsHtml(d) + "</div></div>";
+    },
+  };
+  function deckListHtml(d){
+    if (!d.entries.length) return emptyHtml("This deck is empty", "Add cards with the box above, or import a list from the ⋯ menu.");
+    const groups = new Map();
+    const add = (g, i) => { if (!groups.has(g)) groups.set(g, []); groups.get(g).push(i); };
+    d.entries.forEach((e, i) => {
+      const c = getCard(e.set + ":" + e.cn);
+      if (isCmdSection(e.section)) add("Commander", i);
+      else if (prefs.deckGroup === "type") add(TYPE_SECTION[c ? mainType(c) : "Other"], i);
+      else add(e.section || "Main", i);
+    });
+    let order = Array.from(groups.keys());
+    if (prefs.deckGroup === "type") order = ["Commander"].concat(TYPE_ORDER.map((t) => TYPE_SECTION[t]), ["Other"]).filter((g) => groups.has(g));
+    else order.sort((a, b) => (b === "Commander" ? 1 : 0) - (a === "Commander" ? 1 : 0));
+    return order.map((g) => {
+      const idxs = groups.get(g).slice().sort((a, b) => {
+        const ca = getCard(d.entries[a].set + ":" + d.entries[a].cn), cb = getCard(d.entries[b].set + ":" + d.entries[b].cn);
+        return ((ca && ca.cmc) || 0) - ((cb && cb.cmc) || 0) || displayName(ca).localeCompare(displayName(cb));
+      });
+      const n = idxs.reduce((a, i) => a + d.entries[i].qty, 0);
+      return '<div class="dsec"><h3>' + esc(g) + '<span class="r num">' + n + "</span></h3><div class=\"list\" style=\"margin-top:0\">" + idxs.map((i) => {
+        const e = d.entries[i], c = getCard(e.set + ":" + e.cn);
+        const os = c ? ownState(c, e) : "miss";
+        const p = entryPrice(e);
+        const title = { own: "Owned", alt: "Owned in a different printing", miss: "Missing", basic: "Basic land" }[os];
+        return '<button class="drow" data-act="deckCard" data-i="' + i + '"><span class="q">' + e.qty + '</span><span class="om ' + (os === "own" ? "" : os) + '" title="' + title + '" aria-label="' + title + '"></span>' +
+          '<span class="n">' + esc(displayName(c)) + (e.finish !== "nonfoil" ? " " + finBadge(e.finish) : "") + "</span>" + (c ? manaHtml(c.mana_cost) : "") + '<span class="p">' + money(p == null ? null : p * e.qty) + "</span></button>";
+      }).join("") + "</div></div>";
+    }).join("") +
+    '<div class="legend"><span><i class="om"></i>Owned</span><span><i class="om alt"></i>Different printing owned</span><span><i class="om miss"></i>Missing</span><span><i class="om basic"></i>Basic land</span></div>';
+  }
+  function deckStatsHtml(d){
+    const rows = d.entries.map((e) => ({ e, c: getCard(e.set + ":" + e.cn) })).filter((r) => r.c);
+    const nonland = rows.filter((r) => !isLand(r.c));
+    const curve = [0, 0, 0, 0, 0, 0, 0, 0];
+    let cmcSum = 0, nlCount = 0;
+    nonland.forEach((r) => { const v = Math.min(7, Math.floor(r.c.cmc || 0)); curve[v] += r.e.qty; cmcSum += (r.c.cmc || 0) * r.e.qty; nlCount += r.e.qty; });
+    const maxC = Math.max(1, ...curve);
+    const pips = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+    nonland.forEach((r) => { String(r.c.mana_cost || "").replace(/\{([^}]+)\}/g, (m, s) => { s.toUpperCase().split("/").forEach((x) => { if (pips[x] != null) pips[x] += r.e.qty; }); return m; }); });
+    const maxP = Math.max(1, ...Object.values(pips));
+    const types = {};
+    rows.forEach((r) => { const t = mainType(r.c); types[t] = (types[t] || 0) + r.e.qty; });
+    const maxT = Math.max(1, ...Object.values(types));
+    const missing = rows.filter((r) => ownState(r.c, r.e) === "miss");
+    const missVal = missing.reduce((a, r) => a + (entryPrice(r.e) || 0) * r.e.qty, 0);
+    const bar = (label, v, max, txt) => '<div class="bar"><span class="l">' + label + '</span><span class="t"><i style="width:' + (100 * v / max).toFixed(1) + '%"></i></span><span class="v num">' + txt + "</span></div>";
+    let html = '<div class="kpis"><div class="kpi"><span>Total value</span><b>' + money(deckValue(d)) + '</b></div><div class="kpi"><span>Cost to complete</span><b>' + money(missVal) + "</b></div>" +
+      '<div class="kpi"><span>Avg mana value</span><b>' + (nlCount ? (cmcSum / nlCount).toFixed(2) : "—") + '</b></div><div class="kpi"><span>Cards</span><b>' + deckCount(d) + "</b></div></div>";
+    html += '<div class="sect"><h2>Mana curve</h2><span class="r">non-land</span></div><div class="panel pad"><div class="curve">' + curve.map((v) => '<div><b style="bottom:calc(' + (100 * v / maxC).toFixed(1) + '% + 3px)">' + (v || "") + '</b><i style="height:' + (100 * v / maxC).toFixed(1) + '%"></i></div>').join("") +
+      '</div><div class="curve-x">' + ["0", "1", "2", "3", "4", "5", "6", "7+"].map((x) => "<span>" + x + "</span>").join("") + "</div></div>";
+    html += '<div class="sect"><h2>Colour pips</h2></div><div class="panel pad"><div class="bars">' + Object.keys(pips).filter((k) => pips[k]).map((k) => bar(pip(k) + " " + ({ W: "White", U: "Blue", B: "Black", R: "Red", G: "Green", C: "Colorless" })[k], pips[k], maxP, pips[k])).join("") + (Object.values(pips).some(Boolean) ? "" : '<p class="note">No coloured pips.</p>') + "</div></div>";
+    html += '<div class="sect"><h2>Types</h2></div><div class="panel pad"><div class="bars">' + TYPE_ORDER.concat(["Other"]).filter((t) => types[t]).map((t) => bar(esc(TYPE_SECTION[t]), types[t], maxT, types[t])).join("") + "</div></div>";
+    if (d.format === "commander") html += '<div class="sect"><h2>Commander checks</h2></div><div class="panel pad">' + commanderChecks(d, rows) + "</div>";
+    html += '<div class="sect"><h2>Missing</h2><span class="r num">' + plural(missing.reduce((a, r) => a + r.e.qty, 0), "card") + " · " + money(missVal) + "</span></div>" +
+      '<div class="panel">' + (missing.length ? missing.sort((a, b) => (entryPrice(b.e) || 0) - (entryPrice(a.e) || 0)).map((r) => '<button class="row" data-act="deckCard" data-i="' + d.entries.indexOf(r.e) + '"><div class="main"><div class="t">' + esc(displayName(r.c)) + '</div><div class="s">' + esc(r.c.set.toUpperCase()) + " #" + esc(r.c.cn) + (r.e.qty > 1 ? " · ×" + r.e.qty : "") + '</div></div><span class="end num">' + money(entryPrice(r.e) == null ? null : entryPrice(r.e) * r.e.qty) + "</span></button>").join("") : '<div class="empty" style="padding:20px">You own everything in this deck.</div>') + "</div>";
+    return html;
+  }
+  function commanderChecks(d, rows){
+    const out = [];
+    const chk = (ok, title, detail, list) => out.push('<div class="check ' + (ok ? "pass" : "warn") + '"><span class="ic" aria-hidden="true">' + (ok ? "✓" : "!") + '</span><div><div>' + esc(title) + "</div>" +
+      (detail ? '<div class="d">' + esc(detail) + "</div>" : "") + (list && list.length ? '<details class="more"><summary>Show ' + list.length + "</summary><div class=\"d\">" + list.map(esc).join("<br>") + "</div></details>" : "") + "</div></div>");
+    const n = deckCount(d);
+    chk(n === 100, n === 100 ? "Exactly 100 cards" : n + " cards (needs exactly 100)", n === 100 ? "" : (n < 100 ? (100 - n) + " short." : (n - 100) + " over."));
+    const counts = new Map();
+    rows.forEach((r) => { if (isBasic(r.c) || anyNumber(r.c)) return; const k = r.c.oracle_id || r.c.name; const o = counts.get(k) || { n: 0, name: displayName(r.c) }; o.n += r.e.qty; counts.set(k, o); });
+    const dupes = Array.from(counts.values()).filter((o) => o.n > 1).map((o) => o.n + "× " + o.name);
+    chk(!dupes.length, dupes.length ? "Duplicates found" : "Singleton", dupes.length ? "Only basic lands and “any number” cards may repeat." : "", dupes);
+    const cmd = deckCommanders(d);
+    if (!cmd.length) chk(false, "No commander", "Put your commander in a section named “Commander”.");
+    else {
+      const id = new Set(); cmd.forEach((c) => (c.color_identity || []).forEach((x) => id.add(x)));
+      const off = rows.filter((r) => (r.c.color_identity || []).some((x) => !id.has(x))).map((r) => displayName(r.c) + " (" + (r.c.color_identity || []).join("") + ")");
+      chk(!off.length, off.length ? "Outside colour identity" : "Colour identity OK", off.length ? "Commander identity: " + (Array.from(id).join("") || "colorless") + "." : "", off);
+    }
+    const illegal = rows.filter((r) => r.c.legal_commander !== "legal").map((r) => displayName(r.c) + " — " + String(r.c.legal_commander || "unknown").replace("_", " "));
+    chk(!illegal.length, illegal.length ? "Not legal in Commander" : "All cards legal", "", illegal);
+    return out.join("");
+  }
+  function deckMenu(){
+    const d = deckById(dv.id); if (!d) return;
+    optionSheet(d.name, [
+      { label: "Rename", icon: ICON.edit, run: async () => { const v = await promptSheet({ title: "Rename deck", value: d.name, ok: "Rename" }); if (v && v.trim()){ d.name = v.trim(); deckTouched(d); refresh(); } } },
+      { label: "Edit details", icon: ICON.edit, run: () => deckDetailsSheet(d) },
+      { label: "Import list", icon: ICON.imp, run: () => importListSheet(d) },
+      { label: "Export list", icon: ICON.share, run: () => shareFile(slug(d.name) + ".txt", deckText(d), "text/plain").then((r) => { if (r === "saved") toast("Saved " + slug(d.name) + ".txt"); }) },
+      { label: "Copy list", icon: ICON.copy, run: () => copyText(deckText(d)) },
+      { label: "Duplicate", icon: ICON.copy, run: () => { const nd = clone(d); nd.id = slug(d.name) + "-" + uid().slice(-5); nd.name = d.name + " (copy)"; nd.created = nd.updated = today(); state.decks.push(nd); save("decks"); location.hash = "#/deck/" + encodeURIComponent(nd.id); toast("Duplicated."); } },
+      { label: "Delete deck", icon: ICON.trash, danger: true, run: async () => {
+        if (!(await confirmSheet({ title: "Delete " + d.name + "?", message: "This removes the deck from this device. Cards in your collection aren't affected.", ok: "Delete", danger: true }))) return;
+        state.decks = state.decks.filter((x) => x !== d); save("decks"); location.hash = "#/decks"; toast("Deck deleted.");
+      } },
+    ]);
+  }
+  function deckDetailsSheet(d){
+    openSheet(() => '<h2 id="sheetTitle">Deck details</h2><form data-submit="deckDetails">' +
+      '<label class="field"><span>Format</span><select class="inp" name="format">' + FORMATS.map((f) => '<option value="' + f + '"' + (d.format === f ? " selected" : "") + ">" + cap(f) + "</option>").join("") + "</select></label>" +
+      '<label class="field"><span>Archetype</span><input class="inp" name="archetype" maxlength="120" value="' + esc(d.archetype || "") + '"></label>' +
+      '<label class="field"><span>Bracket</span><select class="inp" name="bracket"><option value="">—</option>' + [1, 2, 3, 4, 5].map((b) => '<option value="' + b + '"' + (String(d.bracket) === String(b) ? " selected" : "") + ">" + b + "</option>").join("") + "</select></label>" +
+      '<div class="sheet-actions"><button type="button" class="btn" data-act="sheetClose">Cancel</button><button class="btn pri" type="submit">Save</button></div></form>');
+  }
+  function importListSheet(d){
+    openSheet(() => '<h2 id="sheetTitle">Import list</h2><p class="lead">Into ' + esc(d.name) + '.</p><form data-submit="importList">' +
+      '<label class="field"><span>List</span><textarea class="inp" name="list" spellcheck="false" autofocus placeholder="1 Sol Ring (cmm) 410"></textarea></label>' +
+      '<label class="field"><span>Mode</span><select class="inp" name="mode"><option value="append">Add to the deck</option><option value="replace">Replace the deck’s cards</option></select></label>' +
+      '<div class="sheet-actions"><button type="button" class="btn" data-act="sheetClose">Cancel</button><button class="btn pri" type="submit">Import</button></div></form>');
+  }
+  const deckSuggest = debounce(async (q) => {
+    const seq = ++dv.sugSeq;
+    q = q.trim();
+    if (q.length < 2){ dv.sug = []; drawSuggest(); return; }
+    const f = fold(q), local = [];
+    const seen = new Set();
+    Object.values(state.cards).forEach((c) => { const n = displayName(c); if (fold(n).indexOf(f) >= 0 && !seen.has(n)){ seen.add(n); local.push({ name: c.name, label: n, own: ownedOracle(c) }); } });
+    local.sort((a, b) => (b.own ? 1 : 0) - (a.own ? 1 : 0) || a.label.localeCompare(b.label));
+    dv.sug = local.slice(0, 6); drawSuggest();
+    try {
+      const data = await sf("/cards/autocomplete?q=" + encodeURIComponent(q));
+      if (seq !== dv.sugSeq) return;
+      (data.data || []).forEach((n) => { if (!seen.has(n) && dv.sug.length < 12){ seen.add(n); dv.sug.push({ name: n, label: n, own: 0 }); } });
+      drawSuggest();
+    } catch(e){ /* local suggestions still work offline */ }
+  }, 400);
+  function drawSuggest(){
+    const box = $("dSug"); if (!box) return;
+    if (!dv.sug.length){ box.hidden = true; box.innerHTML = ""; return; }
+    box.innerHTML = dv.sug.map((s, i) => '<button type="button" data-act="dAddPick" data-i="' + i + '"><span>' + esc(s.label) + "</span>" + (s.own ? '<span class="own">Owned</span>' : "") + "</button>").join("");
+    box.hidden = false;
+  }
+  async function deckAddByName(name){
+    const d = deckById(dv.id); if (!d || !name) return;
+    let k = localByName(name);
+    if (!k){
+      try { const r = await resolveCards([{ name }], "Finding card"); k = r[0]; }
+      catch(e){ netError(e, "Couldn't find that card."); return; }
+    }
+    if (!k){ toast("No card named “" + name + "”."); return; }
+    const c = getCard(k);
+    addCardToDeck(d, k, null, null);
+    dv.sug = []; drawSuggest();
+    const inp = $("dAdd"); if (inp){ inp.value = ""; }
+    toast("Added " + displayName(c) + ".");
+    refresh();
+  }
+
+  /* ============================ lists: binders + wishlist ============================ */
+  function binderStats(id){
+    let n = 0, v = 0;
+    Object.values(state.collection).forEach((e) => { if (e.binder === id){ n += e.qty; v += (entryPrice(e) || 0) * e.qty; } });
+    return { n, v };
+  }
+  const listsScreen = {
+    mount(){
+      const binders = state.binders.map((b) => { const s = binderStats(b.id);
+        return '<div class="row" style="padding-right:4px"><a class="main" href="#/binder/' + encodeURIComponent(b.id) + '" style="color:inherit;text-decoration:none;min-height:44px;display:flex;flex-direction:column;justify-content:center"><div class="t">' + esc(b.name) + '</div><div class="s num">' + plural(s.n, "card") + " · " + money(s.v) + "</div></a>" +
+          '<button class="icon-btn" data-act="binderMenu" data-id="' + esc(b.id) + '" aria-label="Options for ' + esc(b.name) + '">' + ICON.dots + "</button></div>"; }).join("");
+      let wn = 0, wv = 0; Object.values(state.wishlist).forEach((e) => { wn += e.qty; wv += (entryPrice(e) || 0) * e.qty; });
+      const loose = binderStats(undefined);
+      $("screen").innerHTML = topbar({ title: "Lists", actions: '<button class="icon-btn tint" data-act="newBinder" aria-label="New binder">' + ICON.plus + "</button>" }) +
+        '<div class="page narrow">' +
+        '<div class="sect"><h2>Wishlist</h2></div><div class="panel"><a class="row" href="#/wishlist">' + ICON.star + '<div class="main"><div class="t">Wishlist</div><div class="s num">' + plural(wn, "card") + " wanted · " + money(wv) + "</div></div>" + ICON.chev + "</a></div>" +
+        '<div class="sect"><h2>Binders</h2><span class="r"><button class="btn sm soft" data-act="newBinder">' + ICON.plus + "New binder</button></span></div>" +
+        (state.binders.length ? '<div class="panel">' + binders + "</div>" + '<p class="note" style="margin-top:8px">' + plural(loose.n, "card") + " aren’t in a binder.</p>" : '<div class="panel">' + emptyHtml("No binders yet", "Binders group cards from your collection, like trade binders or a box of staples.", '<br><button class="btn pri" data-act="newBinder">New binder</button>') + "</div>") +
+        "</div>";
+    },
+  };
+  async function newBinder(){
+    const v = await promptSheet({ title: "New binder", placeholder: "e.g. Trade binder", ok: "Create" });
+    if (!v || !v.trim()) return null;
+    const b = { id: uid("b"), name: v.trim() };
+    state.binders.push(b); save("binders"); refresh();
+    toast("Created " + b.name + ".");
+    return b;
+  }
+  function binderMenu(id){
+    const b = state.binders.find((x) => x.id === id); if (!b) return;
+    optionSheet(b.name, [
+      { label: "Open", icon: ICON.binder, run: () => { location.hash = "#/binder/" + encodeURIComponent(b.id); } },
+      { label: "Rename", icon: ICON.edit, run: async () => { const v = await promptSheet({ title: "Rename binder", value: b.name, ok: "Rename" }); if (v && v.trim()){ b.name = v.trim(); save("binders"); refresh(); } } },
+      { label: "Delete binder", icon: ICON.trash, danger: true, run: async () => {
+        const s = binderStats(b.id);
+        if (!(await confirmSheet({ title: "Delete " + b.name + "?", message: s.n ? "Its " + plural(s.n, "card") + " stay in your collection, just not in a binder." : "It's empty.", ok: "Delete", danger: true }))) return;
+        Object.values(state.collection).forEach((e) => { if (e.binder === b.id) delete e.binder; });
+        state.binders = state.binders.filter((x) => x !== b); save("binders", "collection"); refresh(); toast("Binder deleted.");
+      } },
+    ]);
+  }
+  const wishScreen = {
+    mount(){
+      $("screen").innerHTML = topbar({ title: "Wishlist", back: "#/lists", backLabel: "Lists" }) + '<div class="page"><div class="summary num" id="wSum"></div><div id="wRes"></div></div>';
+      wishScreen.update();
+    },
+    update(){
+      const res = $("wRes"); if (!res) return;
+      const rows = collRows(state.wishlist, {}).map((r) => Object.assign(r, { ctx: "wish" }));
+      const n = rows.reduce((a, r) => a + r.e.qty, 0), v = rows.reduce((a, r) => a + (r.p || 0) * r.e.qty, 0);
+      $("wSum").innerHTML = "<span><b>" + n + "</b> wanted</span><span><b>" + money(v) + "</b> to buy</span>";
+      res.innerHTML = rows.length ? '<div class="list">' + rows.map(rowHtml).join("") + "</div>" + '<p class="note" style="margin-top:10px">Open a card to change how many you want or mark it acquired.</p>'
+        : emptyHtml("Your wishlist is empty", "Open any card from Search and add it to your wishlist.", '<br><a class="btn pri" href="#/search">Search cards</a>');
+    },
+  };
+
+  /* ============================ more: stats + data ============================ */
+  const moreScreen = {
+    mount(){
+      const rows = collRows(state.collection, {});
+      const total = rows.reduce((a, r) => a + (r.p || 0) * r.e.qty, 0), cards = rows.reduce((a, r) => a + r.e.qty, 0);
+      const bar = (label, v, max, txt, sub) => '<div class="bar"><span class="l">' + label + '</span><span class="t"><i style="width:' + (max ? (100 * v / max).toFixed(1) : 0) + '%"></i></span><span class="v num">' + txt + (sub ? "<small>" + sub + "</small>" : "") + "</span></div>";
+      const group = (keyFn) => { const m = new Map(); rows.forEach((r) => { const k = keyFn(r); const o = m.get(k) || { v: 0, n: 0 }; o.v += (r.p || 0) * r.e.qty; o.n += r.e.qty; m.set(k, o); }); return m; };
+      const tiers = group((r) => tierOf(r.p));
+      const tMax = Math.max(0, ...Array.from(tiers.values()).map((o) => o.v));
+      const colors = group((r) => { const c = r.c.colors || []; return c.length === 0 ? "C" : c.length > 1 ? "M" : c[0]; });
+      const cMax = Math.max(0, ...Array.from(colors.values()).map((o) => o.v));
+      const rar = group((r) => r.c.rarity === "bonus" ? "special" : r.c.rarity);
+      const rMax = Math.max(0, ...Array.from(rar.values()).map((o) => o.v));
+      const sets = group((r) => r.c.set);
+      const topSets = Array.from(sets.entries()).sort((a, b) => b[1].v - a[1].v).slice(0, 10);
+      const sMax = topSets.length ? topSets[0][1].v : 0;
+      const setName = (s) => { const r = rows.find((x) => x.c.set === s); return r ? r.c.set_name : s.toUpperCase(); };
+      const top = rows.filter((r) => r.p != null).sort((a, b) => b.p - a.p).slice(0, 10);
+      const panel = (title, body, r) => '<div><div class="sect"><h2>' + esc(title) + "</h2>" + (r ? '<span class="r">' + r + "</span>" : "") + '</div><div class="panel pad"><div class="bars">' + (body || '<p class="note">Nothing yet.</p>') + "</div></div></div>";
+      const pricedAt = state.meta.pricedAt;
+      const themeSeg = '<div class="seg" role="group" aria-label="Theme" style="width:100%">' + [["system", "System"], ["light", "Light"], ["dark", "Dark"]].map((t) => '<button data-act="setTheme" data-v="' + t[0] + '" aria-pressed="' + (prefs.theme === t[0]) + '">' + t[1] + "</button>").join("") + "</div>";
+      const act = (a, icon, t, s) => '<button class="row" data-act="' + a + '">' + icon + '<div class="main"><div class="t">' + esc(t) + '</div><div class="s">' + esc(s) + "</div></div></button>";
+      $("screen").innerHTML = topbar({ title: "More" }) + '<div class="page">' +
+        '<div class="kpis" style="margin-top:6px"><div class="kpi"><span>Collection value</span><b>' + money(total) + '</b></div><div class="kpi"><span>Cards</span><b>' + cards.toLocaleString() + '</b></div><div class="kpi"><span>Printings</span><b>' + rows.length.toLocaleString() + '</b></div><div class="kpi"><span>Prices as of</span><b style="font-size:17px">' + esc(fmtDate(pricedAt)) + "</b></div></div>" +
+        '<div class="grid2">' +
+        panel("By price tier", tierLabels().map((t) => { const o = tiers.get(t[0]) || { v: 0, n: 0 }; return bar(esc(t[1]) + ' <span class="faint">' + esc(t[2]) + "</span>", o.v, tMax, money(o.v), o.n + " cards"); }).join("")) +
+        panel("By colour", [["W", "White"], ["U", "Blue"], ["B", "Black"], ["R", "Red"], ["G", "Green"], ["M", "Multicolor"], ["C", "Colorless"]].filter((c) => colors.has(c[0])).map((c) => { const o = colors.get(c[0]); return bar((c[0] === "M" ? '<span class="ms" style="background:linear-gradient(135deg,var(--m-w),var(--m-u),var(--m-b),var(--m-r),var(--m-g))"></span>' : pip(c[0])) + " " + c[1], o.v, cMax, money(o.v), o.n + ""); }).join("")) +
+        panel("By rarity", RARITY_OPTS.filter((r) => rar.has(r[0])).map((r) => { const o = rar.get(r[0]); return bar('<span class="setc ' + r[0] + '">' + r[1] + "</span>", o.v, rMax, money(o.v), o.n + ""); }).join("")) +
+        panel("Top sets by value", topSets.map((s) => bar(esc(setName(s[0])), s[1].v, sMax, money(s[1].v), s[1].n + "")).join("")) +
+        "</div>" +
+        '<div class="sect"><h2>Most valuable cards</h2></div><div class="list" style="margin-top:0">' + (top.length ? top.map(rowHtml).join("") : '<div class="empty">No priced cards yet.</div>') + "</div>" +
+        '<div class="grid2" style="margin-top:6px"><div>' +
+        '<div class="sect"><h2>Import</h2></div><div class="panel">' +
+        act("impCSV", ICON.imp, "Import CSV", "ManaBox or Moxfield export, detected automatically") +
+        act("impText", ICON.imp, "Import text list", "qty Name (set) number, one per line") +
+        act("restore", ICON.imp, "Restore backup", "Replace everything with a Binder JSON backup") + "</div>" +
+        '<div class="sect"><h2>Export</h2></div><div class="panel">' +
+        act("expManabox", ICON.share, "ManaBox CSV", "Collection, with binders") +
+        act("expMoxfield", ICON.share, "Moxfield CSV", "Collection, Moxfield import format") +
+        act("expText", ICON.share, "Text list", "Collection as qty Name (set) number") +
+        act("backup", ICON.share, "Back up everything", "Collection, wishlist, decks, binders and card data as JSON") + "</div></div><div>" +
+        '<div class="sect"><h2>Prices &amp; data</h2></div><div class="panel">' +
+        act("refreshPrices", ICON.refresh, "Refresh prices", "Prices as of " + fmtDate(pricedAt) + " · fetched from Scryfall") +
+        act("reloadSeed", ICON.refresh, "Reload published collection", "Replace this device’s data with the published list" + (state.meta.seedVersion ? " (" + state.meta.seedVersion + ")" : "")) + "</div>" +
+        '<div class="sect"><h2>Appearance</h2></div><div class="panel pad">' + themeSeg + "</div></div></div>" +
+        '<p class="footer">Card data and images from Scryfall. Binder is unofficial Fan Content, not approved or endorsed by Wizards of the Coast.<br>Binder v' + VERSION + "</p>" +
+        "</div>";
+    },
+  };
+
+  /* ---------- files: share sheet or download ---------- */
+  function saveFile(name, text, mime){
+    const url = URL.createObjectURL(new Blob([text], { type: mime }));
+    const a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+  // Opens the phone's share sheet (Save to Files, AirDrop…); falls back to a plain download.
+  async function shareFile(name, text, mime){
+    try {
+      const file = new File([text], name, { type: mime });
+      if (navigator.canShare && navigator.canShare({ files: [file] }) && matchMedia("(pointer:coarse)").matches){
+        await navigator.share({ files: [file], title: name });
+        return "shared";
+      }
+    } catch(e){
+      if (e && e.name === "AbortError") return "cancelled";
+    }
+    saveFile(name, text, mime);
+    return "saved";
+  }
+  async function copyText(text){
+    try { await navigator.clipboard.writeText(text); toast("Copied."); }
+    catch(e){ toast("Couldn't copy. Use Export instead."); }
+  }
+  function pickFile(accept){
+    return new Promise((resolve) => {
+      const inp = $("filePick");
+      inp.value = ""; inp.accept = accept || "";
+      inp.onchange = () => {
+        const f = inp.files && inp.files[0]; if (!f) return resolve(null);
+        const r = new FileReader();
+        r.onload = () => resolve({ name: f.name, text: String(r.result || "") });
+        r.onerror = () => { toast("Couldn't read that file."); resolve(null); };
+        r.readAsText(f);
+      };
+      inp.click();
+    });
+  }
+  const stamp = () => today();
+
+  /* ---------- CSV ---------- */
+  function parseCSV(text){
+    text = String(text || "").replace(/^﻿/, "");
+    const rows = []; let row = [], field = "", q = false;
+    for (let i = 0; i < text.length; i++){
+      const ch = text[i];
+      if (q){
+        if (ch === '"'){ if (text[i + 1] === '"'){ field += '"'; i++; } else q = false; }
+        else field += ch;
+      } else if (ch === '"' && field === "") q = true;
+      else if (ch === ","){ row.push(field); field = ""; }
+      else if (ch === "\n" || ch === "\r"){ if (ch === "\r" && text[i + 1] === "\n") i++; row.push(field); field = ""; if (row.length > 1 || row[0] !== "") rows.push(row); row = []; }
+      else field += ch;
+    }
+    if (field !== "" || row.length){ row.push(field); if (row.length > 1 || row[0] !== "") rows.push(row); }
+    return rows;
+  }
+  const csvCell = (v) => { const s = v == null ? "" : String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const csvLine = (arr) => arr.map(csvCell).join(",");
+  function csvItems(rows){
+    if (rows.length < 1) return null;
+    const head = rows[0].map((x) => x.trim().toLowerCase());
+    const col = (...names) => { for (const n of names){ const i = head.indexOf(n); if (i >= 0) return i; } return -1; };
+    let format = null;
+    if (col("set code") >= 0 && col("collector number") >= 0) format = "ManaBox";
+    else if (col("count") >= 0 && col("edition") >= 0) format = "Moxfield";
+    else if (col("name") >= 0 && col("quantity", "count", "qty") >= 0) format = "CSV";
+    if (!format) return null;
+    const ci = { name: col("name", "card name"), set: col("set code", "edition", "set"), cn: col("collector number", "number", "cn"), foil: col("foil", "finish", "printing"),
+      qty: col("quantity", "count", "qty"), id: col("scryfall id", "scryfall_id"), price: col("purchase price"), binder: col("binder name"), btype: col("binder type") };
+    const get = (r, k) => ci[k] >= 0 ? String(r[ci[k]] == null ? "" : r[ci[k]]).trim() : "";
+    const items = []; let bad = 0;
+    rows.slice(1).forEach((r) => {
+      const qty = parseInt(get(r, "qty") || "1", 10);
+      const name = get(r, "name"), id = get(r, "id"), set = get(r, "set").toLowerCase(), cn = get(r, "cn");
+      if (!(qty > 0) || (!name && !id && !(set && cn))){ bad++; return; }
+      const fv = get(r, "foil").toLowerCase();
+      const finish = /etch/.test(fv) ? "etched" : (fv === "foil" || fv === "true" || fv === "yes") ? "foil" : "nonfoil";
+      const price = parseFloat(get(r, "price"));
+      const btype = get(r, "btype").toLowerCase();
+      items.push({ qty, name, id: /^[0-9a-f-]{36}$/i.test(id) ? id.toLowerCase() : "", set, cn, finish, price: isFinite(price) && price > 0 ? price : null, binder: (btype === "deck" || btype === "list") ? "" : get(r, "binder") });
+    });
+    return { format, items, bad };
+  }
+  async function importCollectionItems(items, bad, replace, label){
+    let keys;
+    try { keys = await resolveCards(items, label || "Importing"); }
+    catch(e){ netError(e, "Import stopped."); return; }
+    if (replace){ state.collection = {}; }
+    let added = 0, skipped = bad || 0;
+    const binderByName = new Map(state.binders.map((b) => [fold(b.name), b]));
+    items.forEach((it, i) => {
+      const c = keys[i] && getCard(keys[i]);
+      if (!c){ skipped++; return; }
+      const f = (c.finishes || []).indexOf(it.finish) >= 0 ? it.finish : ((c.finishes || [])[0] || it.finish);
+      const k = ekey(c.set, c.cn, f);
+      const e = state.collection[k];
+      if (e) e.qty += it.qty;
+      else {
+        state.collection[k] = { set: c.set, cn: c.cn, finish: f, qty: it.qty, added: today() };
+        if (it.price != null) state.collection[k].price_usd = it.price;
+      }
+      if (it.binder){
+        let b = binderByName.get(fold(it.binder));
+        if (!b){ b = { id: uid("b"), name: it.binder }; state.binders.push(b); binderByName.set(fold(it.binder), b); }
+        state.collection[k].binder = b.id;
+      }
+      added += it.qty;
+    });
+    touch(); save("collection", "binders", "cards"); refresh();
+    toast("Imported: " + plural(added, "card") + " added" + (skipped ? ", " + skipped + " skipped" : "") + ".", null, 5000);
+  }
+  async function importCSV(){
+    const f = await pickFile(".csv,text/csv,text/plain"); if (!f) return;
+    const parsed = csvItems(parseCSV(f.text));
+    if (!parsed || !parsed.items.length){ toast("That doesn't look like a ManaBox or Moxfield CSV."); return; }
+    const n = parsed.items.reduce((a, it) => a + it.qty, 0);
+    CSVJOB.parsed = parsed;
+    openSheet(() => '<h2 id="sheetTitle">Import ' + esc(parsed.format) + " CSV</h2>" +
+      '<p class="lead">' + esc(f.name) + " · " + plural(parsed.items.length, "row") + " · " + plural(n, "card") + (parsed.bad ? " · " + parsed.bad + " unreadable rows" : "") + ". Unknown printings are looked up on Scryfall.</p>" +
+      '<div class="sheet-actions"><button class="btn" data-act="csvGo" data-v="replace">Replace collection</button><button class="btn pri" data-act="csvGo" data-v="add" autofocus>Add to collection</button></div>');
+  }
+  const CSVJOB = { parsed: null };
+  function exportManabox(){
+    const withB = state.binders.length > 0;
+    const head = (withB ? ["Binder Name", "Binder Type"] : []).concat(["Name", "Set code", "Set name", "Collector number", "Foil", "Rarity", "Quantity", "ManaBox ID", "Scryfall ID", "Purchase price", "Misprint", "Altered", "Condition", "Language", "Purchase price currency"]);
+    const lines = [csvLine(head)];
+    collRows(state.collection, {}).forEach((r) => {
+      const b = r.e.binder ? state.binders.find((x) => x.id === r.e.binder) : null;
+      lines.push(csvLine((withB ? [b ? b.name : "", b ? "binder" : ""] : []).concat([r.c.name, r.c.set.toUpperCase(), r.c.set_name, r.c.cn, r.e.finish === "nonfoil" ? "normal" : r.e.finish, r.c.rarity, r.e.qty, "", r.c.id, r.e.price_usd != null ? r.e.price_usd : "", "false", "false", "near_mint", "en", "USD"])));
+    });
+    shareFile("binder-manabox-" + stamp() + ".csv", lines.join("\n") + "\n", "text/csv").then((x) => { if (x === "saved") toast("Saved ManaBox CSV."); });
+  }
+  function exportMoxfield(){
+    const lines = [csvLine(["Count", "Tradelist Count", "Name", "Edition", "Condition", "Language", "Foil", "Tags", "Last Modified", "Collector Number", "Alter", "Proxy", "Purchase Price"])];
+    collRows(state.collection, {}).forEach((r) => {
+      lines.push(csvLine([r.e.qty, 0, r.c.name, r.c.set, "Near Mint", "English", r.e.finish === "nonfoil" ? "" : r.e.finish, "", r.e.added ? r.e.added + " 00:00:00.000000" : "", r.c.cn, "False", "False", r.e.price_usd != null ? r.e.price_usd : ""]));
+    });
+    shareFile("binder-moxfield-" + stamp() + ".csv", lines.join("\n") + "\n", "text/csv").then((x) => { if (x === "saved") toast("Saved Moxfield CSV."); });
+  }
+  function exportText(){
+    const txt = collRows(state.collection, {}).map((r) => lineOf(r.e.qty, r.c, r.e)).join("\n") + "\n";
+    shareFile("binder-collection-" + stamp() + ".txt", txt, "text/plain").then((x) => { if (x === "saved") toast("Saved text list."); });
+  }
+  function importTextSheet(){
+    openSheet(() => '<h2 id="sheetTitle">Import text list</h2><p class="lead">Adds these cards to your collection. Name-only lines use a printing you already own when possible.</p><form data-submit="importText">' +
+      '<label class="field"><span>List</span><textarea class="inp" name="list" spellcheck="false" autofocus placeholder="4 Lightning Bolt (2x2) 117&#10;1 Sol Ring *F*"></textarea></label>' +
+      '<div class="sheet-actions"><button type="button" class="btn" data-act="sheetClose">Cancel</button><button class="btn pri" type="submit">Import</button></div></form>');
+  }
+  function backupAll(){
+    const data = { app: "mtg", version: 1, exportedAt: new Date().toISOString(), collection: state.collection, wishlist: state.wishlist, decks: state.decks, binders: state.binders, cards: state.cards };
+    shareFile("binder-backup-" + stamp() + ".json", JSON.stringify(data), "application/json").then((r) => { if (r === "saved") toast("Backup saved."); });
+  }
+  async function restoreBackup(){
+    const f = await pickFile(".json,application/json"); if (!f) return;
+    let data; try { data = JSON.parse(f.text); } catch(e){ toast("That file isn't a Binder backup."); return; }
+    if (!data || data.app !== "mtg" || typeof data.collection !== "object" || !data.collection){ toast("That file isn't a Binder backup."); return; }
+    const n = Object.keys(data.collection).length;
+    if (!(await confirmSheet({ title: "Replace everything?", message: "Restore " + plural(n, "printing") + " and " + plural((data.decks || []).length, "deck") + " from " + (data.exportedAt ? fmtDate(data.exportedAt) : "this backup") + ". What's on this device now will be replaced.", ok: "Replace", danger: true }))) return;
+    state.collection = data.collection || {}; state.wishlist = data.wishlist || {}; state.decks = Array.isArray(data.decks) ? data.decks : [];
+    state.binders = Array.isArray(data.binders) ? data.binders : []; state.cards = Object.assign({}, state.cards, data.cards || {});
+    normaliseState(); touch(); save(); refresh(); toast("Backup restored.");
+  }
+  async function refreshPrices(){
+    const keys = new Set();
+    Object.values(state.collection).concat(Object.values(state.wishlist)).forEach((e) => keys.add(e.set + ":" + e.cn));
+    state.decks.forEach((d) => d.entries.forEach((e) => keys.add(e.set + ":" + e.cn)));
+    const idents = Array.from(keys).map((k) => { const c = state.cards[k]; const [set, cn] = [k.slice(0, k.indexOf(":")), k.slice(k.indexOf(":") + 1)]; return c && c.id ? { id: c.id } : { set, collector_number: cn }; });
+    if (!idents.length){ toast("Nothing to price yet."); return; }
+    const pg = progress("Refreshing prices");
+    try {
+      const res = await fetchCollection(idents, (n, t) => pg.set(n, t));
+      res.found.forEach((raw) => storeCard(trimCard(raw)));
+      state.meta.pricedAt = today();
+      touch(); save("cards", "meta"); pg.done(); refresh();
+      toast("Prices updated for " + plural(res.found.length, "printing") + (res.notFound.length ? " (" + res.notFound.length + " not found)" : "") + ".");
+    } catch(e){ pg.done(); netError(e, "Price refresh stopped."); }
+  }
+  async function fetchSeed(){
+    const r = await fetch("data/seed.json", { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const seed = await r.json();
+    if (!seed || seed.app !== "mtg" || !seed.collection) throw new Error("Not a Binder seed");
+    return seed;
+  }
+  function loadSeed(seed){
+    state.collection = seed.collection || {}; state.wishlist = seed.wishlist || {};
+    state.decks = Array.isArray(seed.decks) ? seed.decks : []; state.binders = Array.isArray(seed.binders) ? seed.binders : [];
+    state.cards = seed.cards || {};
+    state.meta = { seedVersion: seed.seedVersion || "", pricedAt: seed.pricedAt || seed.seedVersion || "", tiers: (seed.config && seed.config.tiers) || [2, 10, 40], loadedAt: new Date().toISOString() };
+    normaliseState(); touch(); save();
+  }
+  async function reloadSeed(){
+    if (!(await confirmSheet({ title: "Reload published collection?", message: "This replaces the collection, wishlist, decks and binders on this device with the published list. Make a backup first if you've made changes here.", ok: "Replace", danger: true }))) return;
+    try { const seed = await fetchSeed(); loadSeed(seed); tempCards.clear(); refresh(); toast("Loaded published collection (" + (seed.seedVersion || "latest") + ")."); }
+    catch(e){ toast("Couldn't load the published collection. Are you online?"); }
+  }
+  function normaliseState(){
+    if (!state.collection || typeof state.collection !== "object") state.collection = {};
+    if (!state.wishlist || typeof state.wishlist !== "object") state.wishlist = {};
+    if (!Array.isArray(state.decks)) state.decks = [];
+    if (!Array.isArray(state.binders)) state.binders = [];
+    if (!state.cards || typeof state.cards !== "object") state.cards = {};
+    if (!state.meta || typeof state.meta !== "object") state.meta = {};
+    if (!Array.isArray(state.meta.tiers) || state.meta.tiers.length !== 3) state.meta.tiers = [2, 10, 40];
+    state.decks.forEach((d) => { if (!Array.isArray(d.entries)) d.entries = []; if (!d.format) d.format = "commander"; d.entries.forEach((e) => { if (!e.section) e.section = "Main"; if (!e.finish) e.finish = "nonfoil"; }); });
+  }
+
+  /* ============================ routes table ============================ */
+  const routes = {
+    collection: collScreen,
+    binder: collScreen,
+    search: searchScreen,
+    decks: decksScreen,
+    deck: deckScreen,
+    lists: listsScreen,
+    wishlist: wishScreen,
+    more: moreScreen,
+  };
+
+  /* ============================ event wiring ============================ */
+  // Every interactive element names its handler with data-act / data-change / data-input / data-submit.
+  const curDeckEntry = () => { const d = CS.ctx.deck && deckById(CS.ctx.deck); return d && CS.ctx.entry && d.entries.indexOf(CS.ctx.entry) >= 0 ? { d, e: CS.ctx.entry } : null; };
+  const ACT = {
+    sheetClose: () => closeSheet(),
+    cfNo: () => closeSheet(),
+    cfYes: () => { if (CONFIRM.resolve) CONFIRM.resolve(true); },
+    opt: (el) => { const it = OPTS.items[+el.dataset.i]; if (it) closeSheet(() => it.run()); },
+    // collection
+    toggleView: () => { prefs.view = prefs.view === "grid" ? "list" : "grid"; savePrefs(); coll.shownFn = null; collScreen.mount(coll.binder); },
+    sortSheet: () => openSheet(sortSheetHtml),
+    filterSheet: () => openSheet(filterSheetHtml),
+    clearQ: () => { coll.q = ""; const i = $("cQ"); if (i){ i.value = ""; i.focus(); } coll.shownFn = null; collScreen.update(); },
+    unfilter: (el) => { const g = el.dataset.g, v = el.dataset.v; if (g === "binder") coll.f.binder = ""; else coll.f[g] = coll.f[g].filter((x) => x !== v); coll.shownFn = null; collScreen.update(); },
+    clearFilters: () => { coll.f = { colors: [], types: [], rarity: [], sets: [], tiers: [], finish: [], binder: "" }; coll.shownFn = null; collScreen.update(); rerenderSheet(); },
+    clearAll: () => { coll.q = ""; const i = $("cQ"); if (i) i.value = ""; ACT.clearFilters(); },
+    fToggle: (el) => { const g = el.dataset.g, v = el.dataset.v, a = coll.f[g]; const i = a.indexOf(v); if (i >= 0) a.splice(i, 1); else a.push(v); coll.shownFn = null; collScreen.update(); rerenderSheet(); },
+    setSort: (el) => { prefs.sort = el.dataset.v; if (el.dataset.v === "price" || el.dataset.v === "added") prefs.dir = "desc"; else prefs.dir = "asc"; savePrefs(); coll.shownFn = null; refresh(); rerenderSheet(); },
+    setDir: (el) => { prefs.dir = el.dataset.v; savePrefs(); coll.shownFn = null; refresh(); rerenderSheet(); },
+    card: (el) => openCard(el.dataset.k, el.dataset.ctx === "wish" ? { wish: true } : {}),
+    // search
+    exSearch: (el) => { srch.q = el.dataset.v; const i = $("sQ"); if (i) i.value = srch.q; runSearch(srch.q); },
+    retrySearch: () => runSearch(srch.q),
+    moreSearch: () => { if (srch.next && !srch.loading) runSearch(srch.q, true); },
+    clearS: () => { srch.q = ""; const i = $("sQ"); if (i){ i.value = ""; i.focus(); } runSearch(""); },
+    // card sheet
+    flip: () => { CS.face = CS.face ? 0 : 1; rerenderSheet(); },
+    cq: (el) => adjustColl(CS.k, el.dataset.f, +el.dataset.d),
+    wq: (el) => adjustWish(CS.k, el.dataset.f, +el.dataset.d),
+    acquire: (el) => { const c = getCard(CS.k); if (c) acquire(c.set, c.cn, el.dataset.f); },
+    prints: () => loadPrints(),
+    pSwitch: (el) => switchPrinting(CS.k, el.dataset.k),
+    pAdd: (el) => { const c = getCard(el.dataset.k); if (!c) return; const f = (c.finishes || []).indexOf("nonfoil") >= 0 ? "nonfoil" : ((c.finishes || [])[0] || "nonfoil"); const back = CS.k; CS.k = el.dataset.k; adjustColl(el.dataset.k, f, 1); CS.k = back; rerenderSheet(); },
+    pUse: (el) => {
+      const x = curDeckEntry(), c = ensureCard(el.dataset.k) || getCard(el.dataset.k); if (!x || !c) return;
+      x.e.set = c.set; x.e.cn = c.cn; delete x.e.printing_inferred;
+      if ((c.finishes || []).indexOf(x.e.finish) < 0) x.e.finish = (c.finishes || [])[0] || "nonfoil";
+      deckTouched(x.d); CS.k = el.dataset.k; rerenderSheet(); refresh(); toast("Deck now uses " + c.set.toUpperCase() + " #" + c.cn + ".");
+    },
+    pView: (el) => { const ctx = CS.ctx; openCard(el.dataset.k, ctx.deck ? {} : ctx); },
+    dq: (el) => {
+      const x = curDeckEntry(); if (!x) return;
+      const q = x.e.qty + (+el.dataset.d);
+      if (q <= 0){ ACT.drm(); return; }
+      x.e.qty = q; deckTouched(x.d); rerenderSheet(); refresh();
+    },
+    drm: () => {
+      const x = curDeckEntry(); if (!x) return;
+      const c = getCard(x.e.set + ":" + x.e.cn);
+      closeSheet(() => withUndo("Removed " + displayName(c) + " from the deck", () => { x.d.entries.splice(x.d.entries.indexOf(x.e), 1); deckTouched(x.d); refresh(); }));
+    },
+    // decks
+    newDeck: () => newDeckSheet(),
+    deckMenu: () => deckMenu(),
+    deckCard: (el) => { const d = deckById(dv.id); const e = d && d.entries[+el.dataset.i]; if (e) openCard(e.set + ":" + e.cn, { deck: d.id, entry: e }); },
+    dGroup: (el) => { prefs.deckGroup = el.dataset.v; savePrefs(); deckScreen.update(); },
+    dTab: (el) => { dv.tab = el.dataset.v; deckScreen.update(); },
+    dAddPick: (el) => { const s = dv.sug[+el.dataset.i]; if (s) deckAddByName(s.name); },
+    // lists
+    newBinder: () => newBinder(),
+    binderMenu: (el) => binderMenu(el.dataset.id),
+    // more
+    impCSV: () => importCSV(),
+    csvGo: async (el) => {
+      const p = CSVJOB.parsed; if (!p) return;
+      if (el.dataset.v === "replace"){
+        if (!(await confirmSheet({ title: "Replace your collection?", message: "Every card in your collection will be replaced by this file's " + plural(p.items.length, "row") + ". Decks and the wishlist stay.", ok: "Replace", danger: true }))) return;
+        importCollectionItems(p.items, p.bad, true, "Importing");
+      } else closeSheet(() => importCollectionItems(p.items, p.bad, false, "Importing"));
+      CSVJOB.parsed = null;
+    },
+    expManabox: () => exportManabox(),
+    expMoxfield: () => exportMoxfield(),
+    impText: () => importTextSheet(),
+    expText: () => exportText(),
+    backup: () => backupAll(),
+    restore: () => restoreBackup(),
+    refreshPrices: () => refreshPrices(),
+    reloadSeed: () => reloadSeed(),
+    setTheme: (el) => { prefs.theme = el.dataset.v; savePrefs(); applyLook(); document.querySelectorAll('[data-act="setTheme"]').forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === prefs.theme))); },
+  };
+  const CHG = {
+    fBinder: (el) => { coll.f.binder = el.value; coll.shownFn = null; collScreen.update(); },
+    cBinder: async (el) => {
+      const c = getCard(CS.k); if (!c) return;
+      if (el.value === "__new"){
+        const keep = CS.k, ctx = CS.ctx;
+        const b = await newBinder();
+        if (b){ const cc = getCard(keep); setBinder(cc, b.id); }
+        openCard(keep, ctx);
+        return;
+      }
+      setBinder(c, el.value);
+    },
+    dsec: async (el) => {
+      const x = curDeckEntry(); if (!x) return;
+      let v = el.value;
+      if (v === "__new"){
+        const keep = CS.k, ctx = CS.ctx;
+        v = await promptSheet({ title: "New section", placeholder: "e.g. Ramp", ok: "Move" });
+        if (v && v.trim()){ x.e.section = v.trim(); deckTouched(x.d); refresh(); }
+        openCard(keep, ctx);
+        return;
+      }
+      x.e.section = v; deckTouched(x.d); refresh(); toast("Moved to " + v + ".");
+    },
+    addToDeck: (el) => {
+      const d = deckById(el.value); el.value = ""; if (!d) return;
+      const k = CS.k, c = getCard(k);
+      const owned = finishesFor(c).find((f) => state.collection[ekey(c.set, c.cn, f)]);
+      addCardToDeck(d, k, owned || null);
+      toast("Added " + displayName(c) + " to " + d.name + ".", { label: "Open", run: () => closeSheet(() => { location.hash = "#/deck/" + encodeURIComponent(d.id); }) });
+      rerenderSheet(); refresh();
+    },
+  };
+  const INP = {
+    collQ: debounce((el) => { coll.q = el.value; coll.shownFn = null; collScreen.update(); }, 90),
+    searchQ: (el) => { srch.q = el.value; const clr = document.querySelector("#screen .clr"); if (clr) clr.hidden = !srch.q; debouncedSearch(srch.q); },
+    deckAdd: (el) => deckSuggest(el.value),
+  };
+  const SUB = {
+    noop: () => { const i = document.activeElement; if (i && i.blur) i.blur(); },
+    search: () => { const i = $("sQ"); srch.q = i ? i.value : srch.q; runSearch(srch.q); if (i) i.blur(); },
+    prompt: () => { if (PROMPT.resolve) PROMPT.resolve($("promptIn").value); },
+    deckAdd: () => { if (dv.sug[0]) deckAddByName(dv.sug[0].name); else { const v = $("dAdd").value.trim(); if (v) deckAddByName(v); } },
+    newDeck: (f) => {
+      const name = f.elements.name.value.trim(); if (!name) return;
+      const d = { id: slug(name) + "-" + uid().slice(-5), name, format: f.elements.format.value, commander: "", archetype: "", bracket: null, created: today(), updated: today(), count: 0, entries: [] };
+      const list = f.elements.list.value;
+      state.decks.push(d); save("decks");
+      closeSheet(async () => {
+        location.hash = "#/deck/" + encodeURIComponent(d.id);
+        if (list.trim()) await importIntoDeck(d, list, false);
+        refresh();
+      });
+    },
+    deckDetails: (f) => {
+      const d = deckById(dv.id); if (!d) return;
+      d.format = f.elements.format.value; d.archetype = f.elements.archetype.value.trim(); d.bracket = f.elements.bracket.value ? +f.elements.bracket.value : null;
+      deckTouched(d); closeSheet(); refresh();
+    },
+    importList: (f) => {
+      const d = deckById(dv.id); if (!d) return;
+      const list = f.elements.list.value, replace = f.elements.mode.value === "replace";
+      if (!list.trim()){ toast("Paste a list first."); return; }
+      const go = () => importIntoDeck(d, list, replace).then(() => refresh());
+      if (replace){
+        confirmSheet({ title: "Replace " + d.name + "’s cards?", message: "The deck's current " + plural(deckCount(d), "card") + " will be replaced.", ok: "Replace", danger: true }).then((ok) => { if (ok) go(); });
+      } else closeSheet(go);
+    },
+    importText: (f) => {
+      const { items, bad } = parseList(f.elements.list.value);
+      if (!items.length){ toast("No card lines found."); return; }
+      closeSheet(() => importCollectionItems(items, bad, false, "Importing"));
+    },
+  };
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest("[data-act]"); if (!el) return;
+    const fn = ACT[el.dataset.act]; if (!fn) return;
+    if (el.tagName === "BUTTON" || el.tagName === "A") e.preventDefault();
+    try { const r = fn(el, e); if (r && r.catch) r.catch((err) => netError(err)); } catch(err){ console.error(err); toast("Something went wrong."); }
+  });
+  document.addEventListener("change", (e) => {
+    const el = e.target.closest("[data-change]"); if (!el) return;
+    const fn = CHG[el.dataset.change]; if (fn){ const r = fn(el, e); if (r && r.catch) r.catch((err) => netError(err)); }
+  });
+  document.addEventListener("input", (e) => {
+    const el = e.target.closest("[data-input]"); if (!el) return;
+    const fn = INP[el.dataset.input]; if (fn) fn(el, e);
+  });
+  document.addEventListener("submit", (e) => {
+    const f = e.target.closest("[data-submit]"); if (!f) return;
+    e.preventDefault();
+    const fn = SUB[f.dataset.submit]; if (fn) fn(f, e);
+  });
+  // Close the deck suggestion list when focus leaves it.
+  document.addEventListener("focusin", (e) => { const box = $("dSug"); if (box && !box.hidden && !e.target.closest(".addbox")) box.hidden = true; });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape"){ const box = $("dSug"); if (box && !box.hidden){ box.hidden = true; } } });
+
+  /* ============================ boot ============================ */
+  let booted = false;
+  async function boot(){
+    const ok = await idb.open();
+    const got = ok ? await idb.getAll(KEYS) : {};
+    if (got.collection === undefined){
+      try { loadSeed(await fetchSeed()); await flush(); }
+      catch(e){ normaliseState(); toast("Couldn't load the starter collection. You can start from scratch or import a CSV."); }
+    } else {
+      KEYS.forEach((k) => { if (got[k] !== undefined) state[k] = got[k]; });
+      normaliseState();
+    }
+    if (!ok) toast("This browser can't store data here, so changes won't be kept.");
+    touch();
+    booted = true;
+    if (!location.hash || !routes[parseHash().name]) history.replaceState(null, "", "#/collection");
+    render();
+    if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+  window.mtgApp = { state, save, routes, flush, version: VERSION };
+  boot();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Binder app icon: full-bleed orange field (maskable), a fanned pair of cards inside the
+       central 80% safe zone. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF8A3D"/>
+      <stop offset="1" stop-color="#E0631C"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <g transform="translate(256 262)">
+    <g transform="rotate(-12)">
+      <rect x="-96" y="-134" width="192" height="268" rx="16" fill="#1C1D21" opacity=".35" transform="translate(-28 6)"/>
+      <rect x="-124" y="-128" width="192" height="268" rx="16" fill="#FCEADC"/>
+      <rect x="-108" y="-112" width="160" height="104" rx="6" fill="#F4A88C"/>
+      <rect x="-108" y="6" width="160" height="12" rx="6" fill="#E0631C" opacity=".55"/>
+      <rect x="-108" y="30" width="120" height="12" rx="6" fill="#E0631C" opacity=".4"/>
+    </g>
+    <g transform="rotate(8)">
+      <rect x="-60" y="-140" width="192" height="268" rx="16" fill="#FFFFFF"/>
+      <rect x="-44" y="-124" width="160" height="104" rx="6" fill="#1C1D21"/>
+      <circle cx="36" cy="-72" r="30" fill="#FF8A3D"/>
+      <rect x="-44" y="-6" width="160" height="12" rx="6" fill="#1C1D21" opacity=".75"/>
+      <rect x="-44" y="18" width="128" height="12" rx="6" fill="#1C1D21" opacity=".45"/>
+      <rect x="-44" y="42" width="96" height="12" rx="6" fill="#1C1D21" opacity=".3"/>
+      <rect x="66" y="84" width="50" height="28" rx="8" fill="#E0631C"/>
+    </g>
+  </g>
+</svg>
