@@ -359,6 +359,7 @@
   .step output{min-width:28px;text-align:center;font-weight:750;font-variant-numeric:tabular-nums}
   .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .acts .btn{justify-content:flex-start;font-size:14.5px}
+  .acts .btn.wide{grid-column:1/-1}
   .prints{display:grid;gap:0}
   .prow{display:flex;align-items:center;gap:10px;min-height:60px;padding:6px 0;border-top:.5px solid var(--line)}
   .prow:first-child{border-top:0}
@@ -1301,7 +1302,8 @@
     }).join("") + "</div>";
     // actions
     html += '<div class="acts"><button class="btn" data-act="prints">' + ICON.prints + "Other printings</button>" +
-      '<a class="btn" href="https://scryfall.com/card/' + encodeURIComponent(c.set) + "/" + encodeURIComponent(c.cn) + '" target="_blank" rel="noopener">' + ICON.ext + "Scryfall</a></div>" +
+      '<a class="btn" href="https://scryfall.com/card/' + encodeURIComponent(c.set) + "/" + encodeURIComponent(c.cn) + '" target="_blank" rel="noopener">' + ICON.ext + "Scryfall</a>" +
+      '<a class="btn wide" href="https://www.cardkingdom.com/catalog/search?search=header&amp;filter%5Bname%5D=' + encodeURIComponent((c.faces && c.faces.length ? c.faces[0].name : c.name)) + '" target="_blank" rel="noopener">' + ICON.ext + "Card Kingdom</a></div>" +
       (state.decks.length ? '<select class="inp" data-change="addToDeck" aria-label="Add to a deck"><option value="">Add to a deck…</option>' + state.decks.map((d) => '<option value="' + esc(d.id) + '">' + esc(d.name) + "</option>").join("") + "</select>" : "");
     html += printsHtml();
     html += "</div></div></div>";
