@@ -1892,6 +1892,7 @@
         '<div class="sect"><h2>Prices &amp; data</h2></div><div class="panel">' +
         act("refreshPrices", ICON.refresh, "Refresh prices", "Prices as of " + fmtDate(pricedAt) + " · fetched from Scryfall") +
         act("checkUpdate", ICON.refresh, "Check for app update", "Get the newest version of the app now") +
+        act("syncDecks", ICON.refresh, "Update published decks", "Bring in new or changed decks, keep everything else") +
         act("reloadSeed", ICON.refresh, "Reload published collection", "Replace this device’s data with the published list" + (state.meta.seedVersion ? " (" + state.meta.seedVersion + ")" : "")) + "</div>" +
         '<div class="sect"><h2>Appearance</h2></div><div class="panel pad">' + themeSeg + "</div></div></div>" +
         '<p class="footer">Card data and images from Scryfall. Binder is unofficial Fan Content, not approved or endorsed by Wizards of the Coast.<br>Binder v' + VERSION + "</p>" +
@@ -2131,8 +2132,40 @@
     state.collection = seed.collection || {}; state.wishlist = seed.wishlist || {};
     state.decks = Array.isArray(seed.decks) ? seed.decks : []; state.binders = Array.isArray(seed.binders) ? seed.binders : [];
     state.cards = seed.cards || {};
-    state.meta = { seedVersion: seed.seedVersion || "", pricedAt: seed.pricedAt || seed.seedVersion || "", tiers: (seed.config && seed.config.tiers) || [2, 10, 40], loadedAt: new Date().toISOString() };
+    state.meta = { seedVersion: seed.seedVersion || "", pricedAt: seed.pricedAt || seed.seedVersion || "", tiers: (seed.config && seed.config.tiers) || [2, 10, 40], loadedAt: new Date().toISOString(),
+      deckSeed: seed.seedVersion || "", pubDecks: state.decks.map((d) => d.id) };
     normaliseState(); touch(); save();
+  }
+  // Published decks follow the published list on their own: on launch and when the app comes back
+  // (at most hourly), new or changed published decks come in and retired ones go, without touching
+  // the collection, wishlist or decks you made here. A published deck you've edited here since its
+  // published date is left alone.
+  async function syncPublishedDecks(force){
+    const LS = "mtg-seed-checked";
+    if (!force){ let t = 0; try { t = +localStorage.getItem(LS) || 0; } catch(e){} if (Date.now() - t < 3600e3) return; }
+    let seed; try { seed = await fetchSeed(); } catch(e){ if (force) toast("Couldn't reach the published list. Are you online?"); return; }
+    try { localStorage.setItem(LS, String(Date.now())); } catch(e){}
+    const meta = state.meta || (state.meta = {});
+    if (!force && seed.seedVersion && seed.seedVersion === meta.deckSeed) return;
+    const pub = Array.isArray(seed.decks) ? seed.decks : [], pubIds = new Set(pub.map((d) => d.id));
+    // Devices set up before this existed don't know which decks were published; those carry a bracket and archetype.
+    const prev = new Set(meta.pubDecks || state.decks.filter((d) => d.bracket != null && d.archetype).map((d) => d.id));
+    const changed = [], removed = [];
+    state.decks = state.decks.filter((d) => { if (prev.has(d.id) && !pubIds.has(d.id)){ removed.push(d.name); return false; } return true; });
+    pub.forEach((sd) => {
+      const i = state.decks.findIndex((d) => d.id === sd.id);
+      if (i < 0){ state.decks.push(sd); changed.push(sd.name); return; }
+      const ld = state.decks[i];
+      if ((ld.updated || "") > (sd.updated || "") && prev.has(ld.id)) return;
+      if (JSON.stringify(ld.entries) !== JSON.stringify(sd.entries) || ld.name !== sd.name){ state.decks[i] = sd; changed.push(sd.name); }
+    });
+    Object.keys(seed.cards || {}).forEach((k) => { if (!state.cards[k]) state.cards[k] = seed.cards[k]; });
+    meta.pubDecks = Array.from(pubIds); meta.deckSeed = seed.seedVersion || "";
+    normaliseState(); touch(); save();
+    if (changed.length || removed.length){
+      refresh();
+      toast(changed.length ? "Updated " + (changed.length === 1 ? changed[0] : plural(changed.length, "published deck")) + "." : "Removed " + plural(removed.length, "retired deck") + ".");
+    } else if (force) toast("Your published decks are up to date.");
   }
   async function reloadSeed(){
     if (!(await confirmSheet({ title: "Reload published collection?", message: "This replaces the collection, wishlist, decks and binders on this device with the published list. Make a backup first if you've made changes here.", ok: "Replace", danger: true }))) return;
@@ -2491,6 +2524,7 @@
     refreshPrices: () => refreshPrices(),
     reloadSeed: () => reloadSeed(),
     checkUpdate: () => checkUpdate(),
+    syncDecks: () => syncPublishedDecks(true),
     goScan: () => { location.hash = "#/scan"; },
     scanStart: () => startScan(),
     scanStop: () => { stopScan(); scanScreen.update(); },
@@ -2626,6 +2660,8 @@
     booted = true;
     if (!location.hash || !routes[parseHash().name]) history.replaceState(null, "", "#/collection");
     render();
+    if (got.collection !== undefined) syncPublishedDecks(false);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") syncPublishedDecks(false); });
     if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
       // A new version takes over as soon as it's installed; reload once so it shows now, not next launch.
       const hadCtl = !!navigator.serviceWorker.controller; let reloading = false;
