@@ -5,7 +5,7 @@
    Fetches skip the browser's HTTP cache (GitHub Pages lets it keep files for
    10 minutes), so an update is picked up on the next launch, not 10 minutes later. */
 const PREFIX = "mtg-";
-const VERSION = PREFIX + "v1.0.0";
+const VERSION = PREFIX + "v1.0.1";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png", "./data/seed.json"];
 
 self.addEventListener("install", (event) => {
