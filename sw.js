@@ -5,7 +5,7 @@
    Fetches skip the browser's HTTP cache (GitHub Pages lets it keep files for
    10 minutes), so an update is picked up on the next launch, not 10 minutes later. */
 const PREFIX = "mtg-";
-const VERSION = PREFIX + "v1.0.7";
+const VERSION = PREFIX + "v1.0.8";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png", "./data/seed.json"];
 
 self.addEventListener("install", (event) => {
@@ -37,6 +37,11 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  // The published collection is always fetched fresh, so "Reload published collection" gets the latest; the cache is only the offline fallback.
+  if (url.pathname.endsWith("/data/seed.json")) {
+    event.respondWith(refresh(request).catch(() => caches.open(VERSION).then((c) => c.match(request, { ignoreSearch: true }))));
+    return;
+  }
   if (request.mode === "navigate") {
     event.respondWith(caches.open(VERSION).then((c) => c.match("./index.html")).then((cached) => {
       const network = refresh(request, "./index.html").catch(() => cached);
