@@ -2054,7 +2054,36 @@
     if (!r.ok) throw new Error("HTTP " + r.status);
     const seed = await r.json();
     if (!seed || seed.app !== "mtg" || !seed.collection) throw new Error("Not a Binder seed");
+    await resolveNamedEntries(seed);
     return seed;
+  }
+  // Deck entries published by name only (no set and number yet) get their card data from Scryfall
+  // on load. If that can't be reached, those entries are left out until the next reload.
+  async function resolveNamedEntries(seed){
+    seed.cards = seed.cards || {};
+    const decks = Array.isArray(seed.decks) ? seed.decks : [];
+    const want = new Set();
+    decks.forEach((d) => (d.entries || []).forEach((e) => { if (!(e.set && e.cn) && e.name) want.add(e.name); }));
+    if (!want.size) return;
+    const byName = new Map();
+    try {
+      const res = await fetchCollection(Array.from(want).map((name) => ({ name })));
+      res.found.forEach((raw) => {
+        const c = trimCard(raw), k = cardKey(c);
+        if (!seed.cards[k]) seed.cards[k] = c;
+        byName.set(fold(raw.name), k);
+        if (raw.card_faces && raw.card_faces[0]) byName.set(fold(raw.card_faces[0].name), k);
+      });
+    } catch(e){}
+    decks.forEach((d) => {
+      d.entries = (d.entries || []).filter((e) => {
+        if (e.set && e.cn) return true;
+        const k = byName.get(fold(e.name));
+        if (!k) return false;
+        e.set = k.slice(0, k.indexOf(":")); e.cn = k.slice(k.indexOf(":") + 1); delete e.name;
+        return true;
+      });
+    });
   }
   function loadSeed(seed){
     state.collection = seed.collection || {}; state.wishlist = seed.wishlist || {};
