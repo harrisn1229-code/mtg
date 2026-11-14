@@ -2272,7 +2272,15 @@
     booted = true;
     if (!location.hash || !routes[parseHash().name]) history.replaceState(null, "", "#/collection");
     render();
-    if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(() => {});
+    if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
+      // A new version takes over as soon as it's installed; reload once so it shows now, not next launch.
+      const hadCtl = !!navigator.serviceWorker.controller; let reloading = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => { if (!hadCtl || reloading) return; reloading = true; location.reload(); });
+      navigator.serviceWorker.register("sw.js").then((reg) => {
+        // A home-screen app resumed from the background never "launches", so check for updates whenever it comes back.
+        document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reg.update().catch(() => {}); });
+      }).catch(() => {});
+    }
   }
   window.mtgApp = { state, save, routes, flush, version: VERSION };
   boot();
