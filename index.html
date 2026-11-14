@@ -397,6 +397,10 @@
   .drow{display:flex;align-items:center;gap:10px;width:100%;min-height:58px;padding:5px 12px 5px 8px;text-align:left;border-top:.5px solid var(--line)}
   .drow:first-child{border-top:0}
   .drow .thumb{flex:none;width:36px}
+  .dgrid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px 12px;padding:4px 2px 0}
+  @media (min-width:600px){.dgrid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}}
+  .dgrid .tile .meta .nm{flex:1;min-width:0;margin-top:0;font-size:13px}
+  .dgrid .tile .meta .om{flex:none}
   .drow .thumb .ph{display:none}
   .drow:active{background:var(--surface-2)}
   .drow .q{flex:none;width:22px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted)}
@@ -522,7 +526,7 @@
   };
 
   /* ============================ prefs (localStorage) ============================ */
-  const prefs = Object.assign({ theme: "system", view: "grid", sort: "name", dir: "asc", deckGroup: "section", wishView: "list" }, readPrefs());
+  const prefs = Object.assign({ theme: "system", view: "grid", sort: "name", dir: "asc", deckGroup: "section", deckView: "grid", wishView: "list" }, readPrefs());
   function readPrefs(){ try { return JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") || {}; } catch(e){ return {}; } }
   function savePrefs(){ try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch(e){} }
   function applyLook(){ window.mtgLook(prefs); }
@@ -1599,7 +1603,9 @@
         '<div class="info"><div class="cmd">' + esc(cmd.length ? cmd.map(displayName).join(" + ") : (d.commander || "No commander")) + "</div>" +
         (d.archetype ? '<div class="arch">' + esc(d.archetype) + "</div>" : "") +
         '<div class="line">' + pipsHtml(deckIdentity(d)) + (d.bracket ? '<span class="badge">Bracket ' + esc(d.bracket) + "</span>" : "") + '<span class="num">' + money(deckValue(d)) + "</span></div></div></div>";
-      $("dBody").innerHTML = '<div class="toolbar"><div class="seg" role="group" aria-label="Group by"><button data-act="dGroup" data-v="section" aria-pressed="' + (prefs.deckGroup !== "type") + '">Sections</button><button data-act="dGroup" data-v="type" aria-pressed="' + (prefs.deckGroup === "type") + '">Type</button></div><span class="grow"></span>' +
+      $("dBody").innerHTML = '<div class="toolbar"><div class="seg" role="group" aria-label="Group by"><button data-act="dGroup" data-v="section" aria-pressed="' + (prefs.deckGroup !== "type") + '">Sections</button><button data-act="dGroup" data-v="type" aria-pressed="' + (prefs.deckGroup === "type") + '">Type</button></div>' +
+        '<button class="icon-btn" data-act="dView" aria-label="' + (prefs.deckView === "grid" ? "Show as list" : "Show as cards") + '">' + (prefs.deckView === "grid" ? ICON.list : ICON.grid) + "</button>" +
+        '<span class="grow"></span>' +
         '<div class="seg tabsw" role="group" aria-label="Show"><button data-act="dTab" data-v="cards" aria-pressed="' + (dv.tab === "cards") + '">Cards</button><button data-act="dTab" data-v="stats" aria-pressed="' + (dv.tab === "stats") + '">Stats</button></div></div>' +
         '<div class="dlayout" data-tab="' + dv.tab + '"><div class="cards-col">' + deckListHtml(d) + '</div><div class="stats-col">' + deckStatsHtml(d) + "</div></div>";
     },
@@ -1623,6 +1629,15 @@
         return ((ca && ca.cmc) || 0) - ((cb && cb.cmc) || 0) || displayName(ca).localeCompare(displayName(cb));
       });
       const n = idxs.reduce((a, i) => a + d.entries[i].qty, 0);
+      if (prefs.deckView === "grid") return '<div class="dsec"><h3>' + esc(g) + '<span class="r num">' + n + '</span></h3><div class="grid dgrid">' + idxs.map((i) => {
+        const e = d.entries[i], c = getCard(e.set + ":" + e.cn);
+        const os = c ? ownState(c, e) : "miss";
+        const p = entryPrice(e);
+        const title = { own: "Owned", alt: "Owned in a different printing", miss: "Missing", basic: "Basic land" }[os];
+        const badges = (e.qty > 1 ? '<span class="qty">×' + e.qty + "</span>" : "") + finBadge(e.finish);
+        return '<button class="tile" data-act="deckCard" data-i="' + i + '" aria-label="' + esc(displayName(c) + ", " + title) + '">' + cimg(c, "normal", badges) +
+          '<div class="meta"><span class="om ' + (os === "own" ? "" : os) + '" title="' + title + '"></span><span class="nm">' + esc(displayName(c)) + '</span><span class="p">' + money(p == null ? null : p * e.qty) + "</span></div></button>";
+      }).join("") + "</div></div>";
       return '<div class="dsec"><h3>' + esc(g) + '<span class="r num">' + n + "</span></h3><div class=\"list\" style=\"margin-top:0\">" + idxs.map((i) => {
         const e = d.entries[i], c = getCard(e.set + ":" + e.cn);
         const os = c ? ownState(c, e) : "miss";
@@ -2132,6 +2147,7 @@
     deckMenu: () => deckMenu(),
     deckCard: (el) => { const d = deckById(dv.id); const e = d && d.entries[+el.dataset.i]; if (e) openCard(e.set + ":" + e.cn, { deck: d.id, entry: e }); },
     dGroup: (el) => { prefs.deckGroup = el.dataset.v; savePrefs(); deckScreen.update(); },
+    dView: () => { prefs.deckView = prefs.deckView === "grid" ? "list" : "grid"; savePrefs(); deckScreen.update(); },
     dTab: (el) => { dv.tab = el.dataset.v; deckScreen.update(); },
     dAddPick: (el) => { const s = dv.sug[+el.dataset.i]; if (s) deckAddByName(s.name); },
     // lists
