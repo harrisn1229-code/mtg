@@ -394,8 +394,10 @@
   .dsec{margin-top:14px}
   .dsec h3{display:flex;align-items:baseline;gap:8px;margin:0 0 6px;font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
   .dsec h3 .r{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:600}
-  .drow{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;padding:4px 12px 4px 12px;text-align:left;border-top:.5px solid var(--line)}
+  .drow{display:flex;align-items:center;gap:10px;width:100%;min-height:58px;padding:5px 12px 5px 8px;text-align:left;border-top:.5px solid var(--line)}
   .drow:first-child{border-top:0}
+  .drow .thumb{flex:none;width:36px}
+  .drow .thumb .ph{display:none}
   .drow:active{background:var(--surface-2)}
   .drow .q{flex:none;width:22px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted)}
   .drow .n{flex:1;min-width:0;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1626,7 +1628,7 @@
         const os = c ? ownState(c, e) : "miss";
         const p = entryPrice(e);
         const title = { own: "Owned", alt: "Owned in a different printing", miss: "Missing", basic: "Basic land" }[os];
-        return '<button class="drow" data-act="deckCard" data-i="' + i + '"><span class="q">' + e.qty + '</span><span class="om ' + (os === "own" ? "" : os) + '" title="' + title + '" aria-label="' + title + '"></span>' +
+        return '<button class="drow" data-act="deckCard" data-i="' + i + '"><span class="thumb">' + cimg(c, "small") + '</span><span class="q">' + e.qty + '</span><span class="om ' + (os === "own" ? "" : os) + '" title="' + title + '" aria-label="' + title + '"></span>' +
           '<span class="n">' + esc(displayName(c)) + (e.finish !== "nonfoil" ? " " + finBadge(e.finish) : "") + "</span>" + (c ? manaHtml(c.mana_cost) : "") + '<span class="p">' + money(p == null ? null : p * e.qty) + "</span></button>";
       }).join("") + "</div></div>";
     }).join("") +
