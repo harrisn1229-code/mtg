@@ -451,6 +451,30 @@
   @keyframes spin{to{transform:rotate(360deg)}}
   .hint{font-size:13px;color:var(--muted);margin:10px 0 0}
   .hint code{font:12.5px var(--f-mono);background:var(--surface-2);padding:1px 5px;border-radius:5px;color:var(--text)}
+  .scan-cam{position:relative;aspect-ratio:3/4;max-height:68vh;margin:0 auto;border-radius:var(--r-md);overflow:hidden;background:#0b0b0d;box-shadow:var(--sh-1)}
+  .scan-cam.idle{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;aspect-ratio:3/2}
+  .scan-err{color:#f3c2b0;font-size:14px;margin:0}
+  .scan-cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .scan-frame{position:absolute;left:50%;top:44%;height:74%;aspect-ratio:63/88;transform:translate(-50%,-50%);border:2px solid rgb(255 255 255 / .85);border-radius:4.5% / 3.2%;box-shadow:0 0 0 999px rgb(0 0 0 / .38);transition:border-color .15s}
+  .scan-frame.hit{border-color:#3ED17A}
+  .scan-frame i{position:absolute;left:4%;right:4%;border:1.5px dashed rgb(255 255 255 / .5);border-radius:3px}
+  .scan-frame i.t{top:3%;height:7%;right:20%} .scan-frame i.b{bottom:1%;height:12.5%;right:48%}
+  .scan-st{position:absolute;left:10px;right:10px;top:10px;text-align:center;color:#fff;font-size:14px;font-weight:600;text-shadow:0 1px 3px rgb(0 0 0 / .7);min-height:20px}
+  .scan-st[data-tone="ok"]{color:#7CF0A8} .scan-st[data-tone="bad"]{color:#FFB199}
+  .scan-ctl{position:absolute;left:0;right:0;bottom:14px;display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+  .scan-ctl .btn{min-width:72px}
+  .shutter{width:62px;height:62px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgb(255 255 255 / .35)}
+  .shutter:active{transform:scale(.94)}
+  .scan-row{gap:10px;padding:8px 12px}
+  .scan-row .thumb{flex:none;width:40px} .scan-row .thumb .ph{display:none}
+  .scan-row .main{display:block;min-width:0;color:inherit}
+  .scan-row .s .warn{color:var(--warn)}
+  .scan-row .step button{width:34px;height:34px;font-size:19px} .scan-row .step output{min-width:18px;text-align:center}
+  .scan-row .fin-btn{padding:0 9px}
+  .scan-row .s{white-space:normal}
+  .scan-commit{position:sticky;bottom:calc(var(--tab-h) + var(--safe-b) + 10px);display:flex;gap:10px;margin-top:14px;padding:10px;border-radius:var(--r-md);background:var(--surface);box-shadow:var(--sh-1)}
+  .scan-commit .inp{flex:1;min-width:0}
+  @media (min-width:900px){.scan-commit{bottom:16px}}
 </style>
 </head>
 <body>
@@ -523,6 +547,7 @@
     check: '<svg class="i sm" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></svg>',
     binder: '<svg class="i sm" viewBox="0 0 24 24"><path d="M5 4h11.5A2.5 2.5 0 0 1 19 6.5V20H7.5A2.5 2.5 0 0 1 5 17.5z"/><path d="M5 17.5A2.5 2.5 0 0 1 7.5 15H19"/></svg>',
     refresh: '<svg class="i" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>',
+    camera: '<svg class="i" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   };
 
   /* ============================ prefs (localStorage) ============================ */
@@ -960,7 +985,7 @@
   /* ============================ router ============================ */
   // Hash routes so the browser / phone back button works: #/collection, #/search, #/decks,
   // #/deck/<id>, #/lists, #/binder/<id>, #/wishlist, #/more.
-  const TAB_OF = { collection: "collection", binder: "lists", search: "search", decks: "decks", deck: "decks", lists: "lists", wishlist: "lists", more: "more" };
+  const TAB_OF = { collection: "collection", binder: "lists", search: "search", decks: "decks", deck: "decks", lists: "lists", wishlist: "lists", more: "more", scan: "collection" };
   const cur = { name: "", arg: "" };
   function parseHash(){
     const parts = location.hash.replace(/^#\/?/, "").split("/");
@@ -973,6 +998,7 @@
   function render(){
     const r = parseHash();
     const same = r.name === cur.name && r.arg === cur.arg;
+    if (cur.name === "scan" && r.name !== "scan" && scan.on) stopScan();
     cur.name = r.name; cur.arg = r.arg;
     document.querySelectorAll("#nav a").forEach((a) => { if (a.dataset.tab === TAB_OF[r.name]) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
     routes[r.name].mount(r.arg);
@@ -1115,7 +1141,8 @@
       coll.binder = binderId || "";
       const b = coll.binder ? state.binders.find((x) => x.id === coll.binder) : null;
       if (coll.binder && !b){ $("screen").innerHTML = topbar({ title: "Binder", back: "#/lists", backLabel: "Lists" }) + '<div class="page">' + emptyHtml("Binder not found", "It may have been deleted.", '<br><a class="btn" href="#/lists">Back to Lists</a>') + "</div>"; return; }
-      const actions = '<button class="icon-btn" data-act="toggleView" aria-label="' + (prefs.view === "grid" ? "Show as list" : "Show as grid") + '">' + (prefs.view === "grid" ? ICON.list : ICON.grid) + "</button>" +
+      const actions = '<a class="icon-btn" href="#/scan" aria-label="Scan cards">' + ICON.camera + "</a>" +
+        '<button class="icon-btn" data-act="toggleView" aria-label="' + (prefs.view === "grid" ? "Show as list" : "Show as grid") + '">' + (prefs.view === "grid" ? ICON.list : ICON.grid) + "</button>" +
         '<button class="icon-btn" data-act="sortSheet" aria-label="Sort">' + ICON.sort + "</button>" +
         '<button class="icon-btn" data-act="filterSheet" aria-label="Filters" id="fBtn">' + ICON.filter + "</button>";
       const below = '<form class="search" role="search" data-submit="noop">' + ICON.search + '<input id="cQ" type="search" placeholder="Filter by name, type or text" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" data-input="collQ" value="' + esc(coll.q) + '" aria-label="Filter collection"><button type="button" class="clr" data-act="clearQ" aria-label="Clear filter"' + (coll.q ? "" : " hidden") + ">" + ICON.close + "</button></form>";
@@ -1853,6 +1880,7 @@
         '<div class="sect"><h2>Most valuable cards</h2></div><div class="list" style="margin-top:0">' + (top.length ? top.map(rowHtml).join("") : '<div class="empty">No priced cards yet.</div>') + "</div>" +
         '<div class="grid2" style="margin-top:6px"><div>' +
         '<div class="sect"><h2>Import</h2></div><div class="panel">' +
+        act("goScan", ICON.camera, "Scan cards", "Add cards with the camera") +
         act("impCSV", ICON.imp, "Import CSV", "ManaBox or Moxfield export, detected automatically") +
         act("impText", ICON.imp, "Import text list", "qty Name (set) number, one per line") +
         act("restore", ICON.imp, "Restore backup", "Replace everything with a Binder JSON backup") + "</div>" +
@@ -2122,6 +2150,253 @@
     state.decks.forEach((d) => { if (!Array.isArray(d.entries)) d.entries = []; if (!d.format) d.format = "commander"; d.entries.forEach((e) => { if (!e.section) e.section = "Main"; if (!e.finish) e.finish = "nonfoil"; }); });
   }
 
+  /* ============================ scanner ============================ */
+  // #/scan — point the camera at a card. Tesseract.js (loaded on first use) reads the title line
+  // and the set code + collector number printed bottom-left; Scryfall turns that into a printing.
+  // Each hit lands in a review queue (kept on this device) that you check, then add in one go.
+  const SCAN_KEY = "mtg-scan-queue";
+  const TESS_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+  const scan = { on: false, stream: null, worker: null, workerP: null, loop: 0, busy: false, status: "", tone: "",
+    lastName: "", lastAt: 0, candidate: "", queue: [], audio: null, err: "" };
+  try { scan.queue = JSON.parse(localStorage.getItem(SCAN_KEY) || "[]") || []; } catch(e){ scan.queue = []; }
+  const saveQueue = () => { try { localStorage.setItem(SCAN_KEY, JSON.stringify(scan.queue)); } catch(e){} };
+  const scanCount = () => scan.queue.reduce((a, q) => a + q.qty, 0);
+  const normName = (s) => fold(s).replace(/[^a-z]/g, "");
+  function similar(a, b){
+    a = normName(a); b = normName(b);
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    const m = a.length, n = b.length; let prev = Array.from({ length: n + 1 }, (_, j) => j);
+    for (let i = 1; i <= m; i++){
+      const row = [i];
+      for (let j = 1; j <= n; j++) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = row;
+    }
+    return 1 - prev[n] / Math.max(m, n);
+  }
+  function loadTesseract(){
+    if (scan.workerP) return scan.workerP;
+    scan.workerP = new Promise((resolve, reject) => {
+      if (window.Tesseract) return resolve();
+      const s = document.createElement("script");
+      s.src = TESS_URL; s.async = true; s.onload = resolve; s.onerror = () => reject(new Error("Couldn't load the card reader. Are you online?"));
+      document.head.appendChild(s);
+    }).then(() => window.Tesseract.createWorker("eng")).then((w) => (scan.worker = w)).catch((e) => { scan.workerP = null; throw e; });
+    return scan.workerP;
+  }
+  function beep(){
+    try {
+      const ac = scan.audio; if (!ac) return;
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.frequency.value = 880; g.gain.setValueAtTime(0.0001, ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.18, ac.currentTime + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.14);
+      o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + 0.15);
+    } catch(e){}
+    try { if (navigator.vibrate) navigator.vibrate(35); } catch(e){}
+  }
+  function setScanStatus(msg, tone){
+    scan.status = msg; scan.tone = tone || "";
+    const el = $("scSt"); if (el){ el.textContent = msg; el.dataset.tone = scan.tone; }
+  }
+  async function startScan(){
+    if (scan.on) return;
+    scan.err = "";
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ scan.err = "This browser can't use the camera. Type card names below instead."; scanScreen.update(); return; }
+    try { if (!scan.audio) scan.audio = new (window.AudioContext || window.webkitAudioContext)(); scan.audio.resume(); } catch(e){}
+    try {
+      scan.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+    } catch(e){
+      scan.err = e && e.name === "NotAllowedError" ? "Camera access was blocked. Allow it for this site in your browser settings, then try again." : "Couldn't start the camera.";
+      scanScreen.update(); return;
+    }
+    scan.on = true; scan.lastName = ""; scan.candidate = "";
+    scanScreen.update();
+    const v = $("scV"); if (v){ v.srcObject = scan.stream; try { await v.play(); } catch(e){} }
+    setScanStatus("Loading the card reader…");
+    try { await loadTesseract(); } catch(e){ setScanStatus(e.message, "bad"); return; }
+    if (!scan.on) return;
+    setScanStatus("Hold a card inside the frame");
+    const id = ++scan.loop;
+    (async () => { while (scan.on && scan.loop === id){ await scanTick(false); await sleep(300); } })();
+  }
+  function stopScan(){
+    scan.on = false; scan.loop++;
+    if (scan.stream){ scan.stream.getTracks().forEach((t) => t.stop()); scan.stream = null; }
+    const v = $("scV"); if (v) v.srcObject = null;
+  }
+  // The guide frame's rectangle in video pixels (the video is shown with object-fit: cover).
+  function frameRect(v){
+    const box = v.getBoundingClientRect(), fr = $("scFrame").getBoundingClientRect();
+    const vw = v.videoWidth, vh = v.videoHeight; if (!vw || !vh) return null;
+    const s = Math.max(box.width / vw, box.height / vh);
+    const ox = (box.width - vw * s) / 2, oy = (box.height - vh * s) / 2;
+    return { x: (fr.left - box.left - ox) / s, y: (fr.top - box.top - oy) / s, w: fr.width / s, h: fr.height / s };
+  }
+  // Crop part of the card, upscale, greyscale, flip light-on-dark text to dark-on-light, stretch contrast.
+  function cropRegion(v, r, rx, ry, rw, rh){
+    const sx = r.x + r.w * rx, sy = r.y + r.h * ry, sw = r.w * rw, sh = r.h * rh;
+    const scale = Math.max(1, Math.min(3, 900 / sw));
+    const c = document.createElement("canvas"); c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
+    const g = c.getContext("2d", { willReadFrequently: true });
+    g.drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    const img = g.getImageData(0, 0, c.width, c.height), d = img.data;
+    let sum = 0, lo = 255, hi = 0;
+    for (let i = 0; i < d.length; i += 4){ const y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; d[i] = y; sum += y; if (y < lo) lo = y; if (y > hi) hi = y; }
+    const inv = sum / (d.length / 4) < 120, span = Math.max(1, hi - lo);
+    for (let i = 0; i < d.length; i += 4){ let y = (d[i] - lo) * 255 / span; if (inv) y = 255 - y; d[i] = d[i + 1] = d[i + 2] = y; }
+    g.putImageData(img, 0, 0);
+    return c;
+  }
+  async function ocr(canvas, psm, whitelist){
+    await scan.worker.setParameters({ tessedit_pageseg_mode: String(psm), tessedit_char_whitelist: whitelist || "" });
+    const r = await scan.worker.recognize(canvas);
+    return (r && r.data && r.data.text) || "";
+  }
+  function cleanTitle(t){
+    const line = (t.split("\n").map((x) => x.trim()).filter(Boolean).sort((a, b) => b.length - a.length)[0] || "");
+    return line.replace(/[^A-Za-z0-9 ,'\-]/g, " ").replace(/\s+/g, " ").replace(/^[^A-Za-z]+/, "").trim();
+  }
+  // Bottom-left info: "0123/281 R" or "0123 R" above "MKM • EN".
+  function parseInfo(t){
+    const up = t.toUpperCase().replace(/[|]/g, "/");
+    let cn = "", set = "";
+    const m1 = up.match(/\b0*(\d{1,4})\s*\/\s*\d{1,4}\b/) || up.match(/(?:^|\s)0*(\d{1,4})\s+[CURMSLTP]\b/m);
+    if (m1) cn = m1[1];
+    const m2 = up.match(/\b([A-Z0-9]{3,5})\s*[•·*.\-]?\s*EN\b/);
+    if (m2 && /[A-Z]/.test(m2[1])) set = m2[1].toLowerCase();
+    return { set, cn };
+  }
+  async function lookup(name, info){
+    if (info.set && info.cn){
+      try {
+        const c = await sf("/cards/" + encodeURIComponent(info.set) + "/" + encodeURIComponent(info.cn));
+        if (c && (!name || similar(name, c.name) > 0.55 || (c.card_faces && similar(name, c.card_faces[0].name) > 0.55) || similar(name, c.flavor_name || "") > 0.55)) return c;
+      } catch(e){ if (e.offline) throw e; }
+    }
+    if (!name || normName(name).length < 3) return null;
+    const q = "/cards/named?fuzzy=" + encodeURIComponent(name);
+    if (info.set){ try { return await sf(q + "&set=" + encodeURIComponent(info.set)); } catch(e){ if (e.offline) throw e; } }
+    try { return await sf(q); } catch(e){ if (e.offline) throw e; return null; }
+  }
+  // One pass. Auto mode waits for the same title on two reads in a row, and won't re-add the card
+  // still sitting in the frame; the shutter button (forced) always adds.
+  async function scanTick(forced){
+    const v = $("scV");
+    if (!scan.worker || scan.busy || !v || !v.videoWidth || !$("scFrame")) return;
+    scan.busy = true;
+    try {
+      const r = frameRect(v); if (!r) return;
+      const name = cleanTitle(await ocr(cropRegion(v, r, 0.05, 0.035, 0.74, 0.065), 7));
+      if (!forced){
+        if (normName(name).length < 4){ scan.candidate = ""; if (Date.now() - scan.lastAt > 2500) scan.lastName = ""; return; }
+        if (scan.lastName && similar(name, scan.lastName) > 0.7) return;
+        if (!scan.candidate || similar(name, scan.candidate) < 0.7){ scan.candidate = name; setScanStatus("Reading… " + name); return; }
+      }
+      const info = parseInfo(await ocr(cropRegion(v, r, 0.03, 0.86, 0.52, 0.135), 6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/•*. "));
+      setScanStatus("Looking up " + (name || "card") + "…");
+      const raw = await lookup(name, info);
+      if (!raw){ setScanStatus(name ? "Couldn't match “" + name + "”. Try steadier, or type it below." : "Couldn't read that card.", "bad"); scan.candidate = ""; return; }
+      addToQueue(trimCard(raw), info.set && info.cn && raw.set === info.set);
+      scan.lastName = raw.name; scan.lastAt = Date.now(); scan.candidate = "";
+      const fr = $("scFrame"); if (fr){ fr.classList.add("hit"); setTimeout(() => fr.classList.remove("hit"), 450); }
+      beep();
+      setScanStatus("Added " + displayName(trimCard(raw)) + (info.set && info.cn && raw.set === info.set ? " · " + raw.set.toUpperCase() + " #" + raw.collector_number : ""), "ok");
+    } catch(e){
+      setScanStatus(e && e.offline ? "You're offline. Scanning needs a connection." : "Something went wrong reading that card.", "bad");
+    } finally { scan.busy = false; }
+  }
+  function addToQueue(c, exact){
+    rememberTemp(c);
+    const finish = (c.finishes || []).indexOf("nonfoil") >= 0 ? "nonfoil" : ((c.finishes || [])[0] || "nonfoil");
+    const top = scan.queue[0];
+    if (top && top.k === cardKey(c) && top.finish === finish) top.qty++;
+    else scan.queue.unshift({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), k: cardKey(c), c, finish, qty: 1, exact: !!exact });
+    saveQueue(); scanQueueUpdate();
+  }
+  const qItem = (id) => scan.queue.find((q) => q.id === id);
+  function scanQueueHtml(){
+    if (!scan.queue.length) return '<p class="hint" style="text-align:center;margin:18px 0">Scanned cards show up here for you to check before adding.</p>';
+    const total = scan.queue.reduce((a, q) => a + (cardPrice(q.c, q.finish) || 0) * q.qty, 0);
+    const opts = [["collection", "Collection"], ["wishlist", "Wishlist"]].concat(state.decks.map((d) => ["deck:" + d.id, "Collection + " + d.name]));
+    const dest = opts.some((o) => o[0] === prefs.scanDest) ? prefs.scanDest : "collection";
+    return '<div class="sect"><h2>Scanned</h2><span class="num faint">' + plural(scanCount(), "card") + " · " + money(total) + '</span><button class="btn sm soft" data-act="scanClear" style="margin-left:auto">Clear</button></div>' +
+      '<div class="panel">' + scan.queue.map((q) => {
+        const p = cardPrice(q.c, q.finish), fins = q.c.finishes || [];
+        return '<div class="row scan-row"><button class="thumb" data-act="scanPrints" data-id="' + esc(q.id) + '" aria-label="Change printing">' + cimg(q.c, "small") + "</button>" +
+          '<button class="main" data-act="scanPrints" data-id="' + esc(q.id) + '" style="text-align:left"><div class="t">' + esc(displayName(q.c)) + '</div><div class="s">' + esc(q.c.set.toUpperCase()) + " #" + esc(q.c.cn) + " · " + money(p == null ? null : p * q.qty) + (q.exact ? "" : ' · <span class="warn">printing guessed</span>') + "</div></button>" +
+          (fins.length > 1 ? '<button class="btn sm soft fin-btn" data-act="scanFinish" data-id="' + esc(q.id) + '">' + esc(FINISH_LABEL[q.finish] || q.finish) + "</button>" : "") +
+          '<div class="step" role="group" aria-label="Quantity"><button data-act="scanQty" data-id="' + esc(q.id) + '" data-d="-1" aria-label="One fewer">−</button><output>' + q.qty + '</output><button data-act="scanQty" data-id="' + esc(q.id) + '" data-d="1" aria-label="One more">+</button></div>' +
+          "</div>";
+      }).join("") + "</div>" +
+      '<div class="scan-commit"><select class="inp" data-change="scanDest" aria-label="Add to">' + opts.map((o) => '<option value="' + esc(o[0]) + '"' + (o[0] === dest ? " selected" : "") + ">" + esc(o[1]) + "</option>").join("") + "</select>" +
+      '<button class="btn pri" data-act="scanCommit">Add ' + plural(scanCount(), "card") + "</button></div>";
+  }
+  function scanQueueUpdate(){ const el = $("scQ"); if (el) el.innerHTML = scanQueueHtml(); }
+  const scanScreen = {
+    mount(){
+      $("screen").innerHTML = topbar({ title: "Scan cards", back: "#/collection", backLabel: "Collection" }) +
+        '<div class="page"><div id="scCam"></div>' +
+        '<form class="search" data-submit="scanName" style="margin-top:12px">' + ICON.search + '<input id="scName" type="search" placeholder="Or type a card name" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="go" aria-label="Card name"></form>' +
+        '<div id="scQ"></div></div>';
+      scanScreen.update();
+    },
+    update(){
+      const cam = $("scCam"); if (!cam) return;
+      if (!scan.on){
+        cam.innerHTML = '<div class="scan-cam idle">' + (scan.err ? '<p class="scan-err">' + esc(scan.err) + "</p>" : "") +
+          '<button class="btn pri" data-act="scanStart">' + ICON.camera + "Start camera</button></div>";
+      } else if (!$("scV")){
+        cam.innerHTML = '<div class="scan-cam"><video id="scV" playsinline muted autoplay></video><div class="scan-frame" id="scFrame"><i class="t"></i><i class="b"></i></div>' +
+          '<div class="scan-st" id="scSt" data-tone="' + esc(scan.tone) + '">' + esc(scan.status) + "</div>" +
+          '<div class="scan-ctl"><button class="btn soft" data-act="scanStop">Stop</button><button class="shutter" data-act="scanShot" aria-label="Scan this card now"></button><span style="width:72px"></span></div></div>';
+        const v = $("scV"); if (v && scan.stream){ v.srcObject = scan.stream; v.play().catch(() => {}); }
+      }
+      scanQueueUpdate();
+    },
+  };
+  function scanPrintsSheet(id){
+    const q = qItem(id); if (!q) return;
+    const st = { list: null, err: "" };
+    const draw = () => '<h2 id="sheetTitle">' + esc(displayName(q.c)) + '</h2><p class="lead">Pick the printing you have.</p>' +
+      (st.err ? '<p class="hint">' + esc(st.err) + "</p>" : !st.list ? '<div class="loading"><span class="spin"></span></div>' :
+        '<div class="grid">' + st.list.map((c, i) => '<button class="tile" data-act="scanPick" data-id="' + esc(id) + '" data-i="' + i + '">' + cimg(c, "small", cardKey(c) === q.k ? '<span class="qty">✓</span>' : "") +
+          '<div class="meta"><span class="setc ' + esc(c.rarity) + '">' + esc(c.set) + '</span><span class="faint">#' + esc(c.cn) + '</span><span class="p">' + money(cardPrice(c, "nonfoil") ?? cardPrice(c, "foil")) + "</span></div></button>").join("") + "</div>") +
+      '<div class="sheet-actions"><button class="btn danger" data-act="scanRemove" data-id="' + esc(id) + '">Remove</button><button class="btn" data-act="sheetClose">Done</button></div>';
+    SCANP.st = st;
+    openSheet(draw, { wide: true });
+    sf("/cards/search?unique=prints&order=released&q=" + encodeURIComponent("oracleid:" + q.c.oracle_id)).then((r) => {
+      st.list = (r && r.data || []).map(trimCard); rerenderSheet();
+    }).catch((e) => { st.err = e && e.offline ? "You're offline." : "Couldn't load printings."; rerenderSheet(); });
+  }
+  const SCANP = { st: null };
+  function scanCommit(){
+    if (!scan.queue.length) return;
+    const dest = prefs.scanDest || "collection";
+    const deck = dest.indexOf("deck:") === 0 ? deckById(dest.slice(5)) : null;
+    const store = dest === "wishlist" ? "wishlist" : "collection";
+    const n = scanCount();
+    scan.queue.forEach((q) => {
+      storeCard(q.c);
+      const k = ekey(q.c.set, q.c.cn, q.finish), e = state[store][k];
+      if (e) e.qty += q.qty; else state[store][k] = { set: q.c.set, cn: q.c.cn, finish: q.finish, qty: q.qty, added: today() };
+      if (deck) for (let i = 0; i < q.qty; i++) addCardToDeck(deck, q.k, q.finish);
+    });
+    touch(); save(store, "cards");
+    scan.queue = []; saveQueue(); scanQueueUpdate();
+    toast("Added " + plural(n, "card") + " to " + (store === "wishlist" ? "your wishlist" : "your collection") + (deck ? " and " + deck.name : "") + ".");
+  }
+  async function scanByName(name){
+    name = String(name || "").trim(); if (!name) return;
+    try {
+      const raw = await sf("/cards/named?fuzzy=" + encodeURIComponent(name));
+      addToQueue(trimCard(raw), false);
+      const i = $("scName"); if (i) i.value = "";
+    } catch(e){ if (e.offline) netError(e); else toast("No card matched “" + name + "”."); }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden" && scan.on){ stopScan(); scanScreen.update(); }
+  });
+
   /* ============================ routes table ============================ */
   const routes = {
     collection: collScreen,
@@ -2132,6 +2407,7 @@
     lists: listsScreen,
     wishlist: wishScreen,
     more: moreScreen,
+    scan: scanScreen,
   };
 
   /* ============================ event wiring ============================ */
@@ -2215,9 +2491,26 @@
     refreshPrices: () => refreshPrices(),
     reloadSeed: () => reloadSeed(),
     checkUpdate: () => checkUpdate(),
+    goScan: () => { location.hash = "#/scan"; },
+    scanStart: () => startScan(),
+    scanStop: () => { stopScan(); scanScreen.update(); },
+    scanShot: () => { if (!scan.worker){ toast("The card reader is still loading."); return; } return scanTick(true); },
+    scanClear: async () => { if (await confirmSheet({ title: "Clear scanned cards?", message: plural(scanCount(), "card") + " will be removed from the list. Nothing is added.", ok: "Clear", danger: true })){ scan.queue = []; saveQueue(); scanQueueUpdate(); } },
+    scanQty: (el) => { const q = qItem(el.dataset.id); if (!q) return; q.qty += +el.dataset.d; if (q.qty <= 0) scan.queue.splice(scan.queue.indexOf(q), 1); saveQueue(); scanQueueUpdate(); },
+    scanFinish: (el) => { const q = qItem(el.dataset.id); if (!q) return; const f = q.c.finishes || []; q.finish = f[(f.indexOf(q.finish) + 1) % f.length] || "nonfoil"; saveQueue(); scanQueueUpdate(); },
+    scanPrints: (el) => scanPrintsSheet(el.dataset.id),
+    scanPick: (el) => {
+      const q = qItem(el.dataset.id), c = SCANP.st && SCANP.st.list && SCANP.st.list[+el.dataset.i]; if (!q || !c) return;
+      q.c = c; q.k = cardKey(c); q.exact = true; rememberTemp(c);
+      if ((c.finishes || []).indexOf(q.finish) < 0) q.finish = (c.finishes || ["nonfoil"])[0];
+      saveQueue(); scanQueueUpdate(); closeSheet();
+    },
+    scanRemove: (el) => { const q = qItem(el.dataset.id); if (q) scan.queue.splice(scan.queue.indexOf(q), 1); saveQueue(); scanQueueUpdate(); closeSheet(); },
+    scanCommit: () => scanCommit(),
     setTheme: (el) => { prefs.theme = el.dataset.v; savePrefs(); applyLook(); document.querySelectorAll('[data-act="setTheme"]').forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === prefs.theme))); },
   };
   const CHG = {
+    scanDest: (el) => { prefs.scanDest = el.value; savePrefs(); },
     fBinder: (el) => { coll.f.binder = el.value; coll.shownFn = null; collScreen.update(); },
     cBinder: async (el) => {
       const c = getCard(CS.k); if (!c) return;
@@ -2257,6 +2550,7 @@
     deckAdd: (el) => deckSuggest(el.value),
   };
   const SUB = {
+    scanName: () => scanByName(($("scName") || {}).value),
     noop: () => { const i = document.activeElement; if (i && i.blur) i.blur(); },
     search: () => { const i = $("sQ"); srch.q = i ? i.value : srch.q; runSearch(srch.q); if (i) i.blur(); },
     prompt: () => { if (PROMPT.resolve) PROMPT.resolve($("promptIn").value); },

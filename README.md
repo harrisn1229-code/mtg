@@ -12,4 +12,4 @@ Live: https://harrisn1229-code.github.io/mtg/
 
 Bump `VERSION` in `sw.js` whenever any app file changes.
 
-Card data and images come from [Scryfall](https://scryfall.com). Binder is unofficial Fan Content, not approved or endorsed by Wizards of the Coast.
+Card data and images come from [Scryfall](https://scryfall.com). Card scanning reads text with [Tesseract.js](https://github.com/naptha/tesseract.js), loaded from jsDelivr the first time you scan. Binder is unofficial Fan Content, not approved or endorsed by Wizards of the Coast.
