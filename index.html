@@ -451,6 +451,10 @@
   @keyframes spin{to{transform:rotate(360deg)}}
   .hint{font-size:13px;color:var(--muted);margin:10px 0 0}
   .hint code{font:12.5px var(--f-mono);background:var(--surface-2);padding:1px 5px;border-radius:5px;color:var(--text)}
+  .role{margin:10px 0 14px;padding:10px 14px 12px;border-radius:var(--r-md);background:var(--accent-soft)}
+  .role-h{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent-text)}
+  .role .btn.sm{min-height:30px;background:var(--surface)}
+  .role p{margin:6px 0 0;font-size:15px;line-height:1.45}
   .scan-cam{position:relative;aspect-ratio:3/4;max-height:68vh;margin:0 auto;border-radius:var(--r-md);overflow:hidden;background:#0b0b0d;box-shadow:var(--sh-1)}
   .scan-cam.idle{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;aspect-ratio:3/2}
   .scan-err{color:#f3c2b0;font-size:14px;margin:0}
@@ -1293,9 +1297,12 @@
     }
     const legal = c.legal_commander === "legal" ? '<span class="badge ok">Commander legal</span>' : '<span class="badge bad">Not legal in Commander</span>';
     const prices = (c.finishes && c.finishes.length ? c.finishes : ["nonfoil"]).map((f) => "<div><span>" + esc(FINISH_LABEL[f] || f) + "</span><b>" + money(parseFloat(c.prices && c.prices[FINISH_PRICE[f]]) || null) + "</b></div>").join("");
+    const de = curDeckEntry();
+    const role = de ? '<div class="role"><div class="role-h"><span>Role in this deck</span><button class="btn sm soft" data-act="dnote">' + (de.e.note ? "Edit" : "Add") + "</button></div>" +
+      (de.e.note ? "<p>" + esc(de.e.note) + "</p>" : '<p class="faint">No note yet.</p>') + "</div>" : "";
     let html = '<div class="cs">' + art + "<div>" +
       '<h2 class="cs-name" id="sheetTitle"><span>' + esc(displayName(c)) + "</span>" + (hasFaceText ? "" : manaHtml(c.mana_cost)) + "</h2>" +
-      (c.flavor_name ? '<div class="cs-real">' + esc(c.name) + "</div>" : "") + text +
+      (c.flavor_name ? '<div class="cs-real">' + esc(c.name) + "</div>" : "") + role + text +
       '<div class="cs-set"><span class="setc ' + esc(c.rarity) + '">' + esc(c.set) + "</span><span>" + esc(c.set_name) + "</span><span>#" + esc(c.cn) + "</span><span>" + esc(cap(c.rarity)) + "</span>" + (c.released ? "<span>" + esc(c.released.slice(0, 4)) + "</span>" : "") + "</div>" +
       '<div class="cs-set">' + legal + (c.game_changer ? '<span class="badge warn">Game Changer</span>' : "") + "</div>" +
       '<div style="margin-top:14px"><div class="prices">' + prices + "</div></div>" +
@@ -1306,6 +1313,7 @@
       if (d && e && d.entries.indexOf(e) >= 0){
         const secs = deckSections(d);
         html += '<div class="box"><h3>In ' + esc(d.name) + "</h3>" +
+
           '<div class="qrow"><div class="lbl">Quantity<small>' + esc(FINISH_LABEL[e.finish] || e.finish) + (e.printing_inferred ? " · printing guessed on import" : "") + "</small></div>" + stepper("dq", e.finish, e.qty, "Deck quantity") + "</div>" +
           '<div class="qrow"><div class="lbl">Section</div><select class="inp" data-change="dsec" aria-label="Section">' + secs.map((s) => '<option value="' + esc(s) + '"' + (s === e.section ? " selected" : "") + ">" + esc(s) + "</option>").join("") + '<option value="__new">New section…</option></select></div>' +
           '<div class="qrow"><div class="lbl">' + deckOwnLabel(c, e) + '</div><button class="btn sm danger" data-act="drm">Remove</button></div></div>';
@@ -2525,6 +2533,13 @@
     reloadSeed: () => reloadSeed(),
     checkUpdate: () => checkUpdate(),
     syncDecks: () => syncPublishedDecks(true),
+    dnote: async () => {
+      const cur = curDeckEntry(); if (!cur) return;
+      const k = CS.k, ctx = CS.ctx;
+      const v = await promptSheet({ title: "Role in this deck", label: "What it does here", value: cur.e.note || "", placeholder: "e.g. Doubles Brion's fling damage", ok: "Save" });
+      if (v !== null){ const t = v.trim(); if (t) cur.e.note = t; else delete cur.e.note; deckTouched(cur.d); }
+      openCard(k, ctx);
+    },
     goScan: () => { location.hash = "#/scan"; },
     scanStart: () => startScan(),
     scanStop: () => { stopScan(); scanScreen.update(); },

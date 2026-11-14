@@ -102,9 +102,13 @@ function parseDeckBlock(block) {
     const line = raw.trim();
     if (!line) continue;
     if (line.startsWith("#")) { section = line.replace(/^#+\s*/, "") || "Main"; continue; }
-    const m = line.match(LINE);
+    // Optional "// note" after a card: what it does in this deck (shown on the card's page).
+    const cut = line.indexOf(" // ");
+    const note = cut >= 0 ? line.slice(cut + 4).trim() : "";
+    const m = (cut >= 0 ? line.slice(0, cut) : line).match(LINE);
     if (!m) continue;
     const e = { qty: Number(m[1]), name: m[2].trim(), section };
+    if (note) e.note = note;
     if (m[3]) { e.set = m[3].toLowerCase(); e.cn = m[4]; }
     e.finish = m[5] ? (m[5].toUpperCase() === "E" ? "etched" : "foil") : "nonfoil";
     entries.push(e);
@@ -260,6 +264,7 @@ for (const d of decks) {
     if (!r) { console.warn(`  [${d.name}] dropped: ${e.name}`); continue; }
     const row = { set: r.set, cn: r.cn, finish: e.finish, qty: e.qty, section: e.section };
     if (r.inferred) row.printing_inferred = true;
+    if (e.note) row.note = e.note;
     out.push(row);
   }
   d.entries = out;
