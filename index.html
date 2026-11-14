@@ -1863,6 +1863,7 @@
         act("backup", ICON.share, "Back up everything", "Collection, wishlist, decks, binders and card data as JSON") + "</div></div><div>" +
         '<div class="sect"><h2>Prices &amp; data</h2></div><div class="panel">' +
         act("refreshPrices", ICON.refresh, "Refresh prices", "Prices as of " + fmtDate(pricedAt) + " · fetched from Scryfall") +
+        act("checkUpdate", ICON.refresh, "Check for app update", "Get the newest version of the app now") +
         act("reloadSeed", ICON.refresh, "Reload published collection", "Replace this device’s data with the published list" + (state.meta.seedVersion ? " (" + state.meta.seedVersion + ")" : "")) + "</div>" +
         '<div class="sect"><h2>Appearance</h2></div><div class="panel pad">' + themeSeg + "</div></div></div>" +
         '<p class="footer">Card data and images from Scryfall. Binder is unofficial Fan Content, not approved or endorsed by Wizards of the Coast.<br>Binder v' + VERSION + "</p>" +
@@ -2049,6 +2050,19 @@
       toast("Prices updated for " + plural(res.found.length, "printing") + (res.notFound.length ? " (" + res.notFound.length + " not found)" : "") + ".");
     } catch(e){ pg.done(); netError(e, "Price refresh stopped."); }
   }
+  // Ask the service worker to look for a new version now. If there is one, it takes over and the page
+  // reloads itself (see the controllerchange listener at boot).
+  async function checkUpdate(){
+    const sw = navigator.serviceWorker;
+    const reg = sw && await sw.getRegistration().catch(() => null);
+    if (!reg){ location.reload(); return; }
+    toast("Checking for an update…");
+    try { await reg.update(); } catch(e){ toast("Couldn't check — are you online?"); return; }
+    if (reg.installing || reg.waiting){ toast("Updating…"); if (reg.waiting) reg.waiting.postMessage("skipWaiting"); return; }
+    const keys = await caches.keys().catch(() => []);
+    const ver = (keys.find((k) => k.startsWith("mtg-")) || "").replace("mtg-", "");
+    toast("You're on the latest version" + (ver ? " (" + ver + ")" : "") + ".");
+  }
   async function fetchSeed(){
     const r = await fetch("data/seed.json", { cache: "no-store" });
     if (!r.ok) throw new Error("HTTP " + r.status);
@@ -2200,6 +2214,7 @@
     restore: () => restoreBackup(),
     refreshPrices: () => refreshPrices(),
     reloadSeed: () => reloadSeed(),
+    checkUpdate: () => checkUpdate(),
     setTheme: (el) => { prefs.theme = el.dataset.v; savePrefs(); applyLook(); document.querySelectorAll('[data-act="setTheme"]').forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === prefs.theme))); },
   };
   const CHG = {
