@@ -37,7 +37,7 @@ export const effectMethods = {
       case "target": {
         const i = ref.i | 0;
         if (ctx.overload) {
-          const spec = (ctx.targetSpecs || [])[i];
+          const spec = (ctx.overloadSpecs || ctx.targetSpecs || [])[i];
           if (spec) return this.overloadAll(spec, ctx);
         }
         return [...((ctx.targets || [])[i] || [])];
@@ -172,7 +172,10 @@ export const effectMethods = {
     }
     if ("greatestPower" in A) { let m = 0; for (const o of this.find(A.greatestPower, ctx)) m = Math.max(m, o.c.power | 0); return m; }
     if ("totalPower" in A) { let m = 0; for (const o of this.find(A.totalPower, ctx)) m += Math.max(0, o.c.power | 0); return m; }
-    if ("opponents" in A) return this.opponentsOf(ctx.you).length;
+    if ("opponents" in A || "numOpponents" in A) return this.opponentsOf(ctx.you).length;
+    if ("sum" in A) { let m = 0; for (const o of this.find(A.of ?? { types: ["creature"], controller: "you" }, ctx)) m += Math.max(0, (A.sum === "toughness" ? o.c.toughness : A.sum === "cmc" ? o.c.cmc : o.c.power) | 0); return m; }
+    if ("greatest" in A) { let m = 0; for (const o of this.find(A.of ?? { types: ["creature"], controller: "you" }, ctx)) m = Math.max(m, (A.greatest === "toughness" ? o.c.toughness : A.greatest === "cmc" ? o.c.cmc : o.c.power) | 0); return m; }
+    if ("event" in A) { const v = ctx.event ? ctx.event[A.event] : 0; return typeof v === "number" ? v : 0; }
     if ("x" in A) return ctx.x | 0;
     if ("value" in A) return this.amount(A.value, ctx);
     return 0;
@@ -216,6 +219,11 @@ export const effectMethods = {
       case "controlCommander": return this.state.battlefield.some((id) => { const o = this.state.objects[id]; return o.isCommander && o.controller === ctx.you; });
       case "opponentLostLife": return this.opponentsOf(ctx.you).some((p) => this.state.players[p].lifeLostThisTurn > 0);
       case "_echoDue": return !!ctx.source?.echoDue;
+      case "opponents": return cmp(this.opponentsOf(ctx.you).length, C.op || ">=", this.amount(C.n ?? 1, ctx));
+      case "matches": { const ids = this.refsSync(C.what ?? "it", ctx); return ids.some((id) => { const o = this.lkiOf(id, ctx) || this.state.objects[id]; return !!o && this.matches(o, C.filter, ctx, "*"); }); }
+      case "sacrificed": return (ctx.sacrificed || []).some((o) => this.matches(o, C.filter, ctx, "*"));
+      case "hasInHand": { const pl = this.state.players[ctx.you]; return !!pl && pl.hand.some((id) => id !== ctx.source?.id && this.matches(this.state.objects[id], C.filter, ctx, "*")); }
+      case "ringBearer": return !!this.state.players[ctx.you]?.ring.bearer;
       default:
         if (!ctx.quiet) this.manualOnce(ctx.source, `Condition not automated (${t}); treated as false`);
         return false;
@@ -244,7 +252,7 @@ export const effectMethods = {
     if (!e || typeof e !== "object") { this.manual(ctx.source, "Malformed effect skipped"); return; }
     if (typeof e.run === "function") { yield* e.run(this, ctx); return; }
     const fn = OPS[String(e.op) + "$"];
-    if (!fn) { this.manual(ctx.source, e.text || `Not automated: ${e.op}`); return; }
+    if (!fn) { (ctx.manaAbility ? this.manualOnce : this.manual).call(this, ctx.source, e.text || `Not automated: ${e.op}`); return; }
     this.beginBatch();
     try {
       yield* fn.call(this, e, ctx);
@@ -461,8 +469,11 @@ const OPS = {
     const out = [];
     let copyFrom = null;
     if (e.copyOf != null) { const ids = yield* this.refs$(e.copyOf, ctx); copyFrom = ids.length ? this.lkiOf(ids[0], ctx) : null; if (!copyFrom) return; }
+    let tok = e.token;
+    if (tok && typeof tok === "object" && ((tok.power != null && typeof tok.power !== "number") || (tok.toughness != null && typeof tok.toughness !== "number")))
+      tok = { ...tok, power: this.amount(tok.power, ctx), toughness: this.amount(tok.toughness, ctx) };
     for (const p of ps) {
-      const made = this.createToken(p, copyFrom ? { copyOf: copyFrom } : e.token, n, { tapped: e.tapped, attacking: e.attacking, source: ctx.source, ctx, nonLegendary: e.nonLegendary, power: e.power != null ? this.amount(e.power, ctx) : undefined, toughness: e.toughness != null ? this.amount(e.toughness, ctx) : undefined });
+      const made = this.createToken(p, copyFrom ? { copyOf: copyFrom } : tok, n, { tapped: e.tapped, attacking: e.attacking, source: ctx.source, ctx, nonLegendary: e.nonLegendary, power: e.power != null ? this.amount(e.power, ctx) : undefined, toughness: e.toughness != null ? this.amount(e.toughness, ctx) : undefined });
       out.push(...made.map((o) => o.id));
     }
     ctx.it = out; ctx.prev = out.length;
@@ -527,6 +538,7 @@ const OPS = {
     for (const o of what) if (o.zone === "battlefield" && o !== to) this.attach(o, to);
   },
   *addMana$(e, ctx) {
+    const auto = !!ctx.manaChoice;
     const ps = yield* this.whoPlayers$(e.who ?? "you", ctx);
     let times = e.amount != null ? Math.max(0, this.amount(e.amount, ctx)) : 1;
     const m = e.mana;
@@ -553,7 +565,7 @@ const OPS = {
           else add[col] += n;
         }
       }
-      this.addManaPool(p, add, ctx.source);
+      this.addManaPool(p, add, ctx.source, auto);
     }
   },
   *ringTempts$(e, ctx) { for (const p of yield* this.whoPlayers$(e.who ?? "you", ctx)) yield* this.ringTempts$(p); },
@@ -637,15 +649,22 @@ const OPS = {
     const st = e.static || {};
     let objIds = null;
     const a = st.affects;
-    if (a && a !== "self" && typeof a === "object") objIds = this.find(a, ctx).map((o) => o.id);
+    if (a && typeof a === "object" && a.ref) objIds = yield* this.refs$(a, ctx);
+    else if (a && a !== "self" && typeof a === "object") objIds = this.find(a, ctx).map((o) => o.id);
     else if (a === "self" || a == null) objIds = ctx.source ? [ctx.source.id] : [];
     else if (a === "it") objIds = [...(ctx.it || [])];
-    else if (a && typeof a === "object" && a.ref) objIds = yield* this.refs$(a, ctx);
     if (a === "you" || a === "opponent") objIds = null;
     const fixed = st.type === "pump" ? [this.amount(st.power ?? 0, ctx), this.amount(st.toughness ?? 0, ctx)] : null;
     this.addEffect(st, ctx, { objIds, until: e.until || "endOfTurn", fixedPT: fixed });
   },
-  *manual$(e, ctx) { this.manual(ctx.source, e.text || "Resolve manually"); },
+  *animate$(e, ctx) {
+    const objs = this.objsOf(yield* this.refs$(e.what ?? "self", ctx)).filter((o) => o.zone === "battlefield");
+    if (!objs.length) return;
+    this.addEffect({ type: "asType", addTypes: e.types || ["creature"], addSubtypes: e.subtypes || [], colors: e.colors, power: e.power, toughness: e.toughness, keywords: asArr(e.keywords) }, ctx, { objIds: objs.map((o) => o.id), until: e.until || "endOfTurn" });
+    this.log(`${objs.map((o) => o.c.name).join(", ")} become${objs.length === 1 ? "s" : ""} ${e.power != null ? `a ${e.power}/${e.toughness} ` : ""}creature${(e.until || "endOfTurn") === "endOfTurn" ? " until end of turn" : ""}`);
+    ctx.it = objs.map((o) => o.id);
+  },
+  *manual$(e, ctx) { if (ctx.manaAbility) this.manualOnce(ctx.source, e.text || "Resolve manually"); else this.manual(ctx.source, e.text || "Resolve manually"); },
   *noop$() {},
   *reveal$(e, ctx) {
     const objs = this.objsOf(yield* this.refs$(e.what ?? "it", ctx));

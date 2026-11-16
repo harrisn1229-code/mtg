@@ -390,14 +390,15 @@ export const renderMethods = {
     const W = H.clientWidth, Hh = H.clientHeight;
     const n = this.handEls.size;
     if (!W || !Hh) return;
-    const hw = clamp(Math.floor((Hh - 10) / 1.4), 52, 128);
+    const hw = this.root.dataset.orient === "land" ? 58 : clamp(Math.floor((Hh - 10) / 1.4), 52, this.root.dataset.orient === "wide" ? 104 : 128);
     H.style.setProperty("--hw", hw + "px");
-    let step = n > 1 ? Math.min(hw + 8, (W - hw - 8) / (n - 1)) : 0;
+    const pad = Math.round(hw * 0.2);
+    let step = n > 1 ? Math.min(hw + 8, (W - hw - 2 * pad) / (n - 1)) : 0;
     step = Math.max(step, 14);
     const total = hw + step * (n - 1);
-    const left0 = Math.max(4, (W - total) / 2);
+    const left0 = Math.max(pad, (W - total) / 2);
     const mid = (n - 1) / 2;
-    const ang = n > 1 ? Math.min(3.4, 22 / n) : 0;
+    const ang = n > 1 ? Math.min(2.4, 16 / n) : 0;
     let i = 0;
     this.el.hand.querySelectorAll(".hc").forEach((el) => {
       const d = i - mid;
@@ -581,9 +582,10 @@ export const renderMethods = {
       if (!W || !H) return;
       const nL = s._nLands || 0, nP = s._nPerm || 0;
       // lands: a single row, as large as fits
-      let lw = 30;
-      const maxLw = clamp(Math.floor(H * 0.34 / 1.4), 34, 64);
-      for (let w = maxLw; w >= 30; w -= 2) {
+      let lw = 26;
+      const isLand = this.root.dataset.orient === "land";
+      const maxLw = clamp(Math.floor(H * (isLand ? 0.27 : 0.34) / 1.4), 26, 64);
+      for (let w = maxLw; w >= 26; w -= 2) {
         const need = nL * (w + gap) + (s._nTapped || 0) * w * 0.42;
         if (need <= W) { lw = w; break; }
         lw = w;
@@ -594,18 +596,19 @@ export const renderMethods = {
       s.bf.style.setProperty("--landh", landH + "px");
       // permanents: wrap, largest card that fits
       const availH = H - landH - 8 - (nL ? 4 : 0) - 14;
-      let cw = 44, scroll = true;
+      const minCw = isLand ? 36 : 44;
+      let cw = minCw, scroll = true;
       const maxCw = this.root.dataset.orient === "wide" ? 104 : this.root.dataset.orient === "land" ? 66 : 84;
       const scale = { s: 0.86, m: 1, l: 1.14 }[this.settings.cardSize || "m"];
       const top = Math.min(Math.floor(maxCw * scale), Math.floor(availH / 1.4));
-      for (let w = top; w >= 44; w -= 2) {
+      for (let w = top; w >= minCw; w -= 2) {
         const per = Math.max(1, Math.floor((W + gap) / (w + gap + 4)));
         const tappedExtra = (s._nPermTapped || 0) * w * 0.42;
         const rows = Math.ceil((nP * (w + gap + 4) + tappedExtra) / (W + gap));
         if (rows * (w * 1.4 + gap) <= availH) { cw = w; scroll = false; break; }
         cw = w;
       }
-      if (nP === 0) cw = Math.max(44, Math.min(top, 74));
+      if (nP === 0) cw = Math.max(minCw, Math.min(top, 74));
       s.bf.style.setProperty("--cw", cw + "px");
       s.perm.classList.toggle("scroll", scroll);
       if (p === this.me) this._cw = cw;

@@ -111,7 +111,7 @@ export function parseFilter(text, opts = {}) {
 
   // controller / owner
   let m;
-  const ctrl = /\s+(you control|you don't control|an opponent controls|your opponents control|opponents control|each opponent controls|you own|you don't own|an opponent owns|your opponents own)\b/i;
+  const ctrl = /\s+(you control|you don't control|an opponent controls|your opponents control|opponents control|each opponent controls|defending player controls|you own|you don't own|an opponent owns|your opponents own)\b/i;
   if ((m = s.match(ctrl))) {
     const w = m[1].toLowerCase();
     if (/own/.test(w)) f.owner = /^you own/.test(w) ? "you" : "opponent";
@@ -161,7 +161,8 @@ export function parseFilter(text, opts = {}) {
   for (let i = 0; i < toks.length; i++) {
     const wOrig = toks[i];
     const w = wOrig.toLowerCase();
-    if (w === "," || w === "or" || w === "and/or" || w === "and") { pushGroup(); continue; }
+    if (w === "and") fail("'and' in filter (ambiguous)");
+    if (w === "," || w === "or" || w === "and/or") { pushGroup(); continue; }
     if (w === "a" || w === "an" || w === "the") continue;
     cur.any = true;
     if (w === "another" || w === "other") { f.other = true; continue; }
@@ -210,7 +211,9 @@ export function parseFilter(text, opts = {}) {
   if (built.length === 1) core = built[0];
   else {
     const keys = built.map((b) => Object.keys(b).sort().join(","));
-    if (keys.every((k) => k === "types")) core = { types: [...new Set(built.flatMap((b) => b.types))] };
+    if (built.every((b) => Object.keys(b).every((k) => k === "subtypes" || k === "supertypes")) && built.some((b) => b.supertypes)) {
+      core = { supertypes: [...new Set(built.flatMap((b) => b.supertypes || []))], subtypes: [...new Set(built.flatMap((b) => b.subtypes || []))] };
+    } else if (keys.every((k) => k === "types")) core = { types: [...new Set(built.flatMap((b) => b.types))] };
     else if (keys.every((k) => k === "subtypes")) core = { subtypes: [...new Set(built.flatMap((b) => b.subtypes))] };
     else core = { anyOf: built };
   }

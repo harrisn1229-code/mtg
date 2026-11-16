@@ -183,7 +183,7 @@ export const inputMethods = {
   },
   focusHint() {
     if (this.sheets.length) return;
-    this.el.go.focus({ preventScroll: true });
+    if (window.matchMedia && window.matchMedia('(pointer:fine)').matches) this.el.go.focus({ preventScroll: true });
   },
 
   /* choose: tap to toggle, min/max enforced */

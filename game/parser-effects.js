@@ -56,7 +56,7 @@ export function addTarget(text, ctx) {
 }
 export function targetSpecOf(ref, ctx) { return ref && ref.ref === "target" ? ctx.targets[ref.i] : null; }
 
-const PRONOUN_OBJ = /^(?:it|him|her|them|that (?:creature|permanent|card|land|artifact|token|planeswalker|enchantment|spell)|those (?:creatures|permanents|cards|lands|artifacts|tokens)|the (?:creature|permanent)|each of them)$/i;
+const PRONOUN_OBJ = /^(?:it|him|her|them|that (?:creature|permanent|card|land|artifact|token|planeswalker|enchantment|spell)|they|those (?:creatures|permanents|cards|lands|artifacts|tokens)|the (?:creature|permanent)|each of them)$/i;
 
 export function playerRef(text, ctx) {
   const t = text.trim().replace(/’/g, "'");
@@ -66,6 +66,7 @@ export function playerRef(text, ctx) {
   if (/^each player$/i.test(t)) return "eachPlayer";
   if (/^(?:that player|the player|they|he or she)$/i.test(t)) {
     if (ctx.player) return ctx.player;
+    if (/^they$/i.test(t)) return null;
     fail("that player without antecedent");
   }
   if (/^that spell's controller$/i.test(t) && ctx.trig && ctx.trig.spellCtrl) return { ref: "controllerOf", of: { ref: "event", what: "source" } };
@@ -135,7 +136,7 @@ function thatMuch(ctx) {
 function possessiveRef(w, ctx) {
   w = w.toLowerCase().replace(/’/g, "'");
   if (w === "~'s" || w === "~") return "self";
-  if (w === "its" || /^that (?:creature|permanent|card|artifact|token)'s$/.test(w) || w === "his" || w === "her") {
+  if (w === "its" || /^that (?:creature|permanent|card|artifact|token|spell)'s$/.test(w) || w === "his" || w === "her") {
     if (!ctx.last) fail("possessive without antecedent");
     return ctx.last;
   }
@@ -154,9 +155,10 @@ export function countOf(text, ctx) {
     return { countersOn: r, kind };
   }
   if (/^cards? in (?:your|their|that player's|target player's|target opponent's|each opponent's) hands?$/i.test(t)) {
-    const w = t.match(/in (\w+(?:'s)?(?: \w+)?) hand/i)[1].toLowerCase();
+    const w = t.match(/in (.+?) hands?$/i)[1].toLowerCase();
     if (w === "your") return { handSize: "you" };
     if (w === "their" || w === "that player's") return { handSize: ctx.player || fail("their hand") };
+    if (/^target (?:opponent|player)'s$/.test(w)) return { handSize: addTarget(w.replace(/'s$/, ""), ctx) };
     fail("hand of " + w);
   }
   const f = parseFilter(t);
@@ -172,7 +174,7 @@ export function expr(text, ctx) {
   if ((m = t.match(/^(?:the )?(?:total )?(power|toughness|mana value)(?: and toughness)? of (.+)$/i)) && /^(?:power|toughness|mana value)$/i.test(m[1]) && !/^total/i.test(t) && !/^(?:target|that|this|the sacrificed)/i.test(m[2]) === false) {
     /* "the power of target creature" is rare; fall through */
   }
-  if ((m = t.match(/^(its|~'s|that (?:creature|permanent|card|artifact|token)'s|the sacrificed (?:creature|permanent|artifact|land)'s|(?:enchanted|equipped) creature's|this creature's) (power|toughness|mana value)$/i))) {
+  if ((m = t.match(/^(its|~'s|that (?:creature|permanent|card|artifact|token|spell)'s|the sacrificed (?:creature|permanent|artifact|land)'s|(?:enchanted|equipped) creature's|this creature's) (power|toughness|mana value)$/i))) {
     const kind = m[2].toLowerCase();
     if (/^the sacrificed/i.test(m[1])) { ctx.flags.usesSacrificed = true; return { sacrificed: kind === "mana value" ? "cmc" : kind }; }
     const r = possessiveRef(m[1], ctx) || fail("possessive");
@@ -212,7 +214,7 @@ function signedAmt(sign, tok, ctx) {
   let a;
   if (t === "x") a = ctx.xAmount ?? "x";
   else a = +t;
-  if (sign === "-") return typeof a === "number" ? -a : { mul: [-1, a] };
+  if (sign === "-") return typeof a === "number" ? (a === 0 ? 0 : -a) : { mul: [-1, a] };
   return a;
 }
 
@@ -526,7 +528,7 @@ function parseMay(s, sents, i, ctx) {
   // look for "if you do" / "if you don't" follow-ups
   const thenSents = [];
   const elseSents = [];
-  const ifDo = /^if (?:you|that player|the player|they) do,? ?(.*)$/i;
+  const ifDo = /^if (?:you|that player|the player|they) do\b,? ?(.*)$/i;
   const ifNot = /^if (?:you|that player|the player|they) (?:don't|doesn't),? ?(.*)$/i;
   let j = i + 1;
   let mm;
@@ -612,6 +614,14 @@ export function parseClauses(s, ctx) {
 function parseClause(c, ctx) {
   c = c.trim().replace(/^then,?\s+/i, "").replace(/[.]$/, "");
   let m;
+  if (/^it's still an? \w+$/i.test(c)) return [];
+  if ((m = c.match(/^until end of turn, (.+)$/i)) && !/ becomes /i.test(c)) return parseClause(m[1] + " until end of turn", ctx);
+  if ((m = c.match(/^until end of turn, ~ becomes an? (\d+)\/(\d+) ([a-z ]+?)(?:creature)(?: with (.+))?$/i))) {
+    const words = m[3].trim().split(/\s+/).filter((w) => w && w !== "and");
+    const colors = [], subtypes = [];
+    for (const w of words) { if (COLORS[w.toLowerCase()]) colors.push(COLORS[w.toLowerCase()]); else subtypes.push(w.toLowerCase()); }
+    return [{ op: "animate", what: "self", power: +m[1], toughness: +m[2], colors, subtypes, keywords: m[4] ? parseKeywordList(m[4]) : [], until: "endOfTurn" }];
+  }
   // ---- conditional prefix: "If COND, EFFECT"
   if (/^if /i.test(c)) {
     const body = c.slice(3);
@@ -667,7 +677,7 @@ function parseClause(c, ctx) {
   }
   const r = playerRules(who, rest, ctx, !!sub);
   if (r) return r;
-  if (!sub) {
+  if (!sub || who === "you") {
     const r2 = imperativeRules(rest, ctx);
     if (r2) return r2;
   }
@@ -731,14 +741,20 @@ function objectSubjectRules(c, ctx) {
     const b = objRef(m[2], ctx);
     return [{ op: "fight", a, b }];
   }
+  if ((m = c.match(/^(.+?) (?:each )?gets? (.+?) until end of turn and can't be blocked this turn$/i))) {
+    const a = objectSubjectRules(`${m[1]} gets ${m[2]} until end of turn`, ctx);
+    if (!a) fail("pump+unblockable");
+    const what = a[0].what;
+    return [...a, { op: "until", until: "endOfTurn", static: { type: "cantBeBlocked", affects: what } }];
+  }
   // --- gets +N/+N (and gains ...) until end of turn
-  if ((m = c.match(/^(.+?) gets? ([+-])(\d+|x)\/([+-])(\d+|x)(?: and (?:gains?|has|have) (.+?))?(?: until end of turn| this turn)?$/i)) && !/^(?:you|each opponent|each player)$/i.test(m[1])) {
+  if ((m = c.match(/^(.+?) (?:each )?gets? ([+-])(\d+|x)\/([+-])(\d+|x)(?: and (?:gains?|has|have) (.+?))?(?: until end of turn| this turn)?$/i)) && !/^(?:you|each opponent|each player)$/i.test(m[1])) {
     const until = /until end of turn|this turn/i.test(c);
     if (!until) fail("pump without duration");
     return pumpEffect(m[1], m, ctx, until);
   }
   // --- gains keywords until end of turn
-  if ((m = c.match(/^(.+?) (?:gains?|has|have) (.+?) until end of turn$/i)) && !/^(?:you|each opponent|each player|they|that player)$/i.test(m[1]) && !/\bgain control\b/i.test(c)) {
+  if ((m = c.match(/^(.+?) (?:also )?(?:gains?|has|have) (.+?) until end of turn$/i)) && !/^(?:you|each opponent|each player|that player)$/i.test(m[1]) && !/\bgain control\b/i.test(c)) {
     const what = objRef(m[1], ctx, { bare: true });
     let kws;
     try { kws = parseKeywordList(m[2]); } catch (e) { if (e instanceof Fail) fail("granted ability: " + m[2]); throw e; }
@@ -1006,7 +1022,7 @@ function imperativeRules(c, ctx) {
     return [e];
   }
   // transform
-  if ((m = c.match(/^transform (~|this \w+)$/i))) return [{ op: "transform", what: "self" }];
+  if ((m = c.match(/^transform (~|it|this \w+)$/i))) return [{ op: "transform", what: "self" }];
   // amass
   if ((m = c.match(/^amass (\w+) (\d+)$/i))) {
     const st = subtypeOf(m[1]) || fail("amass type");

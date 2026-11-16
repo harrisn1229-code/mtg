@@ -34,6 +34,9 @@ export const manaMethods = {
               for (let i = 0; i < (m.n || 1); i++) units.push(cols);
             } else if (m && m.any) {
               for (let i = 0; i < (this.amount(m.any, ctx) || 1); i++) units.push(ALL5);
+            } else if (m && m.color) {
+              const col = colorLetter(m.color);
+              for (let i = 0; i < (this.amount(m.n ?? 1, ctx) || 0); i++) units.push([col || "C"]);
             } else if (m && m.identity) {
               const ids = this.identityOf(p);
               for (let i = 0; i < (this.amount(m.identity, ctx) || 1); i++) units.push(ids.length ? ids : ["C"]);

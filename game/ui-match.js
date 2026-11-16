@@ -2,38 +2,16 @@
    and drives it (human answers from the UI, AI answers from decide()).
    Rendering is diffed by object id: stable elements, FLIP moves, no full re-render per event. */
 
-import { esc, oid, cap, manaHtml, textHtml, makeCard, fillCard, setLive, viewOfObj, viewOfData, artCrop, imgSize } from "./ui-card.js";
+import { esc, oid, cap } from "./ui-card.js";
 import { createSound } from "./ui-sound.js";
-import { saveSettings, writeSave, clearSave, recordResult, DEFAULT_STOPS } from "./ui-store.js";
+import { writeSave, clearSave, recordResult } from "./ui-store.js";
+import { CANCEL, SPEED, PHASES, SVGNS, IC, isMeaningful } from "./ui-shared.js";
 import { sheetMethods } from "./ui-sheets.js";
+import { renderMethods } from "./ui-render.js";
+import { fxMethods } from "./ui-fx.js";
+import { inputMethods } from "./ui-input.js";
 
-const CANCEL = Symbol("cancel");
-const SVGNS = "http://www.w3.org/2000/svg";
-const PHASES = [
-  ["untap", "Untap", ["untap"]], ["upkeep", "Upkeep", ["upkeep"]], ["draw", "Draw", ["draw"]], ["main1", "Main 1", ["main1"]],
-  ["combat", "Combat", ["beginCombat", "declareAttackers", "declareBlockers", "combatDamage", "endCombat"]],
-  ["main2", "Main 2", ["main2"]], ["end", "End", ["end", "cleanup"]],
-];
-const STOP_KEYS = { upkeep: ["upkeep"], draw: ["draw"], main1: ["main1"], combat: ["beginCombat", "declareAttackers", "declareBlockers"], main2: ["main2"], end: ["end"] };
-const STEP_NEXT = { main1: "to combat", beginCombat: "to attackers", declareAttackers: "to blockers", declareBlockers: "to damage", combatDamage: "to end of combat", endCombat: "to main 2", main2: "to end step", end: "to cleanup", upkeep: "to draw", draw: "to main 1" };
-const SPEED = { slow: 1.7, normal: 1, fast: 0.4 };
-
-const IC = {
-  lib: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3.5" width="12" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 7v12.5A1.5 1.5 0 0 0 5.5 21H15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
-  gy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V10a6 6 0 0 1 12 0v11z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 8v6M9.5 10.5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
-  ex: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 4.5v15M4.5 12h15" stroke="currentColor" stroke-width="1.8" stroke-dasharray="2 3" stroke-linecap="round"/></svg>',
-  menu: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
-  log: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M5 10h14M5 15h9M5 20h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
-  undo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5M4 12h10a6 6 0 0 1 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  emote: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M8.5 14.2c1.8 2 5.2 2 7 0M9 9.6v.6M15 9.6v.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
-  skip: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6l8 6-8 6zM15 6l8 6-8 6z" fill="currentColor" transform="scale(.92) translate(1 1)"/></svg>',
-  tools: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6.5a4 4 0 0 0 4.9 4.9L21 13l-3 3-1.6-1.6M3 21l9-9 3 3-9 9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>',
-  cmd: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 5.6 6 .8-4.4 4.2 1.1 6L12 16.7 6.7 19.6l1.1-6L3.4 9.4l6-.8z" fill="currentColor"/></svg>',
-};
-export { IC };
-
-export const isMeaningful = (a) => a && !a.mana && a.type !== "special";
-const lc = (x) => String(x || "").toLowerCase();
+export { IC, isMeaningful };
 
 export class Match {
   constructor(o) {
@@ -93,6 +71,7 @@ export class Match {
     } catch (e) {
       console.error(e);
       this.root.classList.remove("loading");
+      if (restoring) clearSave();
       this.fatal("The match could not be " + (restoring ? "restored" : "started") + ": " + (e && e.message ? e.message : e));
       return;
     }
@@ -163,9 +142,7 @@ export class Match {
       '<div class="hand" aria-label="Your hand"></div>' +
       '<footer class="bar"><div class="rbs">' +
       '<button class="rb" data-act="menu" aria-label="Menu">' + IC.menu + '</button>' +
-      '<button class="rb" data-act="log" aria-label="Game log">' + IC.log + '</button>' +
       '<button class="rb" data-act="undo" aria-label="Undo last action">' + IC.undo + '</button>' +
-      '<button class="rb" data-act="emote" aria-label="Emote">' + IC.emote + '</button>' +
       '<button class="rb" data-act="tools" aria-label="Manual tools" hidden>' + IC.tools + '</button>' +
       '<button class="rb" data-act="passTurn" aria-label="Pass until end of turn">' + IC.skip + '</button>' +
       '</div><button class="go" data-act="go"><span class="go-l">Pass</span><small class="go-s"></small></button></footer>' +
@@ -524,10 +501,4 @@ export class Match {
   }
 }
 
-Object.assign(Match.prototype, sheetMethods);
-import { renderMethods } from "./ui-render.js";
-Object.assign(Match.prototype, renderMethods);
-import { fxMethods } from "./ui-fx.js";
-Object.assign(Match.prototype, fxMethods);
-import { inputMethods } from "./ui-input.js";
-Object.assign(Match.prototype, inputMethods);
+Object.assign(Match.prototype, sheetMethods, renderMethods, fxMethods, inputMethods);

@@ -143,6 +143,7 @@ function parseActivated(L, text, mkCtx) {
 // ----- triggers
 
 const CMP_VERBS = "enters(?: the battlefield)?|dies|leaves the battlefield|attacks|blocks";
+const OR_ANOTHER_VERBS = "enters(?: the battlefield)?(?: from your graveyard)?|dies|leaves the battlefield|attacks|blocks";
 function subjectFilter(t, ev) {
   // returns "self" | "equipped" | "enchanted" | Filter
   t = t.trim();
@@ -209,7 +210,7 @@ function parseWhenText(text) {
     return { triggers: trigs, info: inf };
   }
   // "~ or another creature you control dies"
-  cm = t.match(/^(~|.+?) or (another .+?) (enters(?: the battlefield)?|dies|leaves the battlefield|attacks|blocks)$/i);
+  cm = t.match(new RegExp(`^(~|.+?) or (another .+?) (${OR_ANOTHER_VERBS})$`, "i"));
   if (cm) {
     const a = parseWhenText(`${cm[1]} ${cm[3]}`);
     const b = parseWhenText(`${cm[2]} ${cm[3]}`);
@@ -295,7 +296,7 @@ function parseTriggered(L, text, mkCtx) {
     const ctxInfo = tr.info;
     const ctx = mkCtx({});
     ctx.trig = { amount: !!ctxInfo.amount, spellCtrl: !!ctxInfo.spellCtrl };
-    if (ctxInfo.subject === "self") ctx.last = "self";
+    if (ctxInfo.subject === "self" || ctxInfo.subject === "none") ctx.last = "self";
     else if (ctxInfo.subject === "object") ctx.last = EVT_OBJ;
     else if (ctxInfo.subject === "cast") { ctx.last = EVT_OBJ; ctx.player = EVT_PLAYER; }
     if (ctxInfo.subject === "player" || ctxInfo.subject === "turnPlayer" || ctxInfo.playerEvt) ctx.player = EVT_PLAYER;
@@ -345,7 +346,7 @@ function buildTriggeredBody(effTxt, ctx) {
 }
 
 function parseModeBlock(countWord, bullets, ctx0, mkCtx) {
-  const lines = bullets.split(/\n/).map((l) => l.replace(/^•\s*/, "").trim()).filter(Boolean);
+  const lines = bullets.split(/\n/).map((l) => l.replace(/^•\s*/, "").replace(/^[A-Z][A-Za-z' ]{1,28} — /, "").trim()).filter(Boolean);
   const cw = countWord.toLowerCase();
   const modes = [];
   for (const l of lines) {
@@ -385,7 +386,7 @@ function parseStaticLine(L, text, def, mkCtx) {
   // leading / trailing conditions
   if ((m = s.match(/^during your turn, (.+)$/i))) { condition = { type: "yourTurn" }; s = m[1]; }
   else if ((m = s.match(/^as long as (.+?), (.+)$/i))) { condition = parseCond(m[1], {}); s = m[2]; }
-  else if ((m = s.match(/^(.+?) as long as (.+)$/i)) && !/^you may/i.test(s)) { condition = parseCond(m[2], {}); s = m[1]; }
+  else if ((m = s.match(/^(.+?) as long as (.+)$/i)) && (!/^you may/i.test(s) || /^you may cast ~ from your graveyard as long as/i.test(s))) { condition = parseCond(m[2], {}); s = m[1]; }
 
   if (/^~ enters (?:the battlefield )?tapped$/i.test(s)) return [st({ type: "entersTapped", affects: "self" }, condition)];
   if ((m = s.match(/^~ enters (?:the battlefield )?tapped unless (.+)$/i))) return [st({ type: "entersTapped", affects: "self", unless: parseCond(m[1], {}) }, condition)];
@@ -439,20 +440,16 @@ function parseStaticLine(L, text, def, mkCtx) {
   if ((m = s.match(/^if an? (.+?) entering the battlefield causes a triggered ability of a permanent you control to trigger, that ability triggers an additional time$/i))) {
     return [st({ type: "doubleTriggers", event: "enters", filter: parseFilter(m[1]) })];
   }
-  // damage modification
-  if ((m = s.match(/^if an? (.+?)source(?: you control)? would deal damage to (.+?), (?:it|that source) deals (double|triple|that much damage plus (\d+)) (?:that damage|damage)?(?: to (?:that player|that permanent|that player or permanent|that permanent or player))? instead$/i))) {
-    const srcTxt = m[1].trim();
-    const youCtl = / you control would/i.test(s.slice(0, s.indexOf("would")));
-    const src = { };
-    if (srcTxt) { const f = parseFilter(srcTxt.replace(/\s*$/, "") + " source".replace(" source", "")); Object.assign(src, f); }
-    if (youCtl || /^if an? .+ source you control would/i.test(s)) src.controller = "you";
-    if (!Object.keys(src).length) Object.assign(src, {});
-    const e = { type: "damageMod", source: Object.keys(src).length ? src : "any", to: damageVictims(m[2]) };
-    if (/double/i.test(m[3])) e.mul = 2; else if (/triple/i.test(m[3])) e.mul = 3; else e.add = +m[4];
+  // damage modification (shape matches engine.modifyDamage: source Filter, sourceController, to string, mul/add/prevent)
+  if ((m = s.match(/^if an? ([a-z ]*?)source( you control)? would deal damage to (.+?), (?:it|that source) deals (double|triple|that much damage plus (\d+))(?: (?:that damage|damage))?(?: to (?:that player|that permanent|that player or permanent|that permanent or player))? instead$/i))) {
+    const e = { type: "damageMod", to: damageVictims(m[3]) };
+    if (m[1].trim()) { const f = parseFilter(m[1].trim() + " permanent"); delete f.types; e.source = f; }
+    if (m[2]) e.sourceController = "you";
+    if (/double/i.test(m[4])) e.mul = 2; else if (/triple/i.test(m[4])) e.mul = 3; else e.add = +m[5];
     return [st(e)];
   }
-  if ((m = s.match(/^if a source would deal damage to (.+?), prevent half that damage, rounded (up|down)$/i))) {
-    return [st({ type: "damageMod", source: "any", to: damageVictims(m[1]), prevent: "half", round: m[2].toLowerCase() })];
+  if ((m = s.match(/^if a source would deal damage to (.+?), prevent half that damage, rounded (up|down)$/i)) && m[2].toLowerCase() === "up") {
+    return [st({ type: "damageMod", to: damageVictims(m[1]), prevent: "half" })];
   }
   // characteristic-defining
   if ((m = s.match(/^~'s power and toughness are each equal to (.+)$/i))) {
@@ -484,10 +481,10 @@ function parseStaticLine(L, text, def, mkCtx) {
 
 function damageVictims(txt) {
   const t = txt.trim().toLowerCase();
-  if (/^an opponent$/.test(t)) return { players: "opponent" };
-  if (/^an opponent or a permanent an opponent controls$/.test(t)) return { players: "opponent", permanents: { controller: "opponent" } };
-  if (/^you or a permanent you control$/.test(t)) return { players: "you", permanents: { controller: "you" } };
-  if (/^a permanent or player$/.test(t) || /^a player or permanent$/.test(t)) return { players: "any", permanents: {} };
+  if (t === "an opponent") return "opponent";
+  if (t === "an opponent or a permanent an opponent controls") return "opponentOrPermanent";
+  if (t === "you or a permanent you control") return "youOrPermanent";
+  if (t === "a permanent or player" || t === "a player or permanent") return "any";
   fail("damage victims: " + txt);
 }
 
@@ -546,7 +543,7 @@ function stripAbilityWord(L) {
 }
 
 function mkCtxFactory(def, extra = {}) {
-  const f = (o = {}) => createCtx({ ...o, parseAbility: parseQuotedAbility, isSpell: extra.isSpell, sacrificed: extra.sacrificed || o.sacrificed });
+  const f = (o = {}) => { const c = createCtx({ ...o, parseAbility: parseQuotedAbility, isSpell: extra.isSpell, sacrificed: extra.sacrificed || o.sacrificed }); c.cardName = def ? def.name : undefined; return c; };
   return f;
 }
 

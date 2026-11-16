@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Binder game dev harness</title>
+<style>html,body{margin:0;background:#101216;color:#ddd;font:14px system-ui}#note{padding:12px}</style>
+</head><body><div id="note">Loading mock match… (?scene=board|stack|target|attack|block|mulligan|picker|modes|colors|number|confirm|over|full &amp; ?open=pause|zoom|log|settings|zone)</div>
+<script type="module">
+import { loadCss } from "./ui.js";
+import * as mock from "./dev-mock.js";
+const q = new URLSearchParams(location.search);
+const scene = q.get("scene") || "board";
+globalThis.__MOCK_SCENE__ = scene;
+await loadCss();
+const app = await mock.loadSeed("../data/seed.json");
+const decks = mock.listDecks(app.state);
+const mine = decks[0], theirs = decks[1];
+const yb = mock.buildDeck(app.state, mine.id), ob = mock.buildDeck(app.state, theirs.id);
+const { Match } = await import("./ui-match.js");
+const { loadSettings, saveSettings } = await import("./ui-store.js");
+const settings = loadSettings();
+settings.sound = false; settings.speed = q.get("speed") || "fast";
+if (q.get("rm")) settings.reduceMotion = true;
+const setup = { deckId: mine.id, oppDeckId: theirs.id, difficulty: "normal", life: 40, commander: true, first: 0, freeMulligan: true,
+  you: { name: mine.commander || "You", art: yb.art }, opp: { name: theirs.commander || "Opponent", art: ob.art } };
+const factory = (s, seed) => mock.createGame({
+  players: [{ name: "You", deck: yb, ai: false }, { name: "Opponent", deck: ob, ai: true }],
+  options: { startingLife: 40, seed, scene }, compile: mock.compile });
+const m = new Match({ factory, decide: mock.decide, setup, seed: 7, answers: [], settings, saveSettings: () => {}, onExit: (r) => { document.getElementById("note").textContent = "exit: " + r; } });
+window.__m = m;
+document.getElementById("note").remove();
+await m.open(scene !== "full" && !q.get("intro"));
+const open = q.get("open");
+setTimeout(() => {
+  if (open === "pause") m.openPause();
+  else if (open === "settings") m.openSettings();
+  else if (open === "log") m.openLog();
+  else if (open === "zone") m.openZone(0, "graveyard");
+  else if (open === "zoom") { const id = q.get("id") || m.S.players[0].hand[0]; m.openZoom([id]); }
+  else if (open === "tools") m.openTools();
+  window.__ready = true;
+}, 500);
+</script></body></html>

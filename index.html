@@ -147,6 +147,7 @@
     color:var(--faint);text-decoration:none;font-size:11px;font-weight:600;border-radius:12px}
   .nav a[aria-current="page"]{color:var(--accent-text)}
   .nav a[aria-current="page"] svg.i{stroke-width:2.2}
+  @media (max-width:389px){.nav a{font-size:10px;letter-spacing:-.01em}}
   .brand{display:none}
   @media (min-width:900px){
     .shell{padding-bottom:0;padding-left:calc(var(--rail-w) + env(safe-area-inset-left,0px))}
@@ -387,6 +388,7 @@
   .dhead .info{min-width:0;flex:1}
   .dhead .cmd{font-weight:700;font-size:16px}
   .dhead .arch{font-size:13.5px;color:var(--muted);margin-top:2px}
+  .dhead .playbtn{margin-top:10px}
   .dhead .line{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-top:6px;font-size:13.5px;color:var(--muted)}
   .dlayout{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
   @media (min-width:1100px){.dlayout{grid-template-columns:minmax(0,1fr) 380px;align-items:start}.tabsw{display:none}.dlayout .stats-col{position:sticky;top:76px}}
@@ -488,6 +490,7 @@
     <a href="#/collection" data-tab="collection"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="7.5" height="10" rx="1.4"/><rect x="13.5" y="4" width="7.5" height="10" rx="1.4"/><path d="M3 18h18M3 21h12"/></svg>Collection</a>
     <a href="#/search" data-tab="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>Search</a>
     <a href="#/decks" data-tab="decks"><svg class="i" viewBox="0 0 24 24"><rect x="7" y="3" width="12" height="16" rx="1.8"/><path d="M4.5 6.5v12.2c0 1.2 1 2.3 2.3 2.3H15"/></svg>Decks</a>
+    <a href="#/play" data-tab="play"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m10 8.6 5.4 3.4-5.4 3.4z"/></svg>Play</a>
     <a href="#/lists" data-tab="lists"><svg class="i" viewBox="0 0 24 24"><path d="M5 4h11.5A2.5 2.5 0 0 1 19 6.5V20H7.5A2.5 2.5 0 0 1 5 17.5z"/><path d="M5 17.5A2.5 2.5 0 0 1 7.5 15H19M9 8h6"/></svg>Lists</a>
     <a href="#/more" data-tab="more"><svg class="i" viewBox="0 0 24 24"><path d="M4 19V11M10 19V5M16 19v-6M22 19H2"/></svg>More</a>
   </nav>
@@ -551,6 +554,7 @@
     check: '<svg class="i sm" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></svg>',
     binder: '<svg class="i sm" viewBox="0 0 24 24"><path d="M5 4h11.5A2.5 2.5 0 0 1 19 6.5V20H7.5A2.5 2.5 0 0 1 5 17.5z"/><path d="M5 17.5A2.5 2.5 0 0 1 7.5 15H19"/></svg>',
     refresh: '<svg class="i" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>',
+    play: '<svg class="i sm" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none"/></svg>',
     camera: '<svg class="i" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   };
 
@@ -989,7 +993,7 @@
   /* ============================ router ============================ */
   // Hash routes so the browser / phone back button works: #/collection, #/search, #/decks,
   // #/deck/<id>, #/lists, #/binder/<id>, #/wishlist, #/more.
-  const TAB_OF = { collection: "collection", binder: "lists", search: "search", decks: "decks", deck: "decks", lists: "lists", wishlist: "lists", more: "more", scan: "collection" };
+  const TAB_OF = { collection: "collection", binder: "lists", search: "search", decks: "decks", deck: "decks", lists: "lists", wishlist: "lists", more: "more", scan: "collection", play: "play" };
   const cur = { name: "", arg: "" };
   function parseHash(){
     const parts = location.hash.replace(/^#\/?/, "").split("/");
@@ -1637,7 +1641,8 @@
       $("dHead").innerHTML = '<div class="dhead">' + (cmd[0] && cmd[0].img ? '<div class="art"><img src="' + esc(artCrop(cmd[0].img)) + '" alt=""></div>' : "") +
         '<div class="info"><div class="cmd">' + esc(cmd.length ? cmd.map(displayName).join(" + ") : (d.commander || "No commander")) + "</div>" +
         (d.archetype ? '<div class="arch">' + esc(d.archetype) + "</div>" : "") +
-        '<div class="line">' + pipsHtml(deckIdentity(d)) + (d.bracket ? '<span class="badge">Bracket ' + esc(d.bracket) + "</span>" : "") + '<span class="num">' + money(deckValue(d)) + "</span></div></div></div>";
+        '<div class="line">' + pipsHtml(deckIdentity(d)) + (d.bracket ? '<span class="badge">Bracket ' + esc(d.bracket) + "</span>" : "") + '<span class="num">' + money(deckValue(d)) + "</span></div>" +
+        '<a class="btn pri sm playbtn" href="#/play/' + encodeURIComponent(d.id) + '">' + ICON.play + " Play</a></div></div>";
       $("dBody").innerHTML = '<div class="toolbar"><div class="seg" role="group" aria-label="Group by"><button data-act="dGroup" data-v="section" aria-pressed="' + (prefs.deckGroup !== "type") + '">Sections</button><button data-act="dGroup" data-v="type" aria-pressed="' + (prefs.deckGroup === "type") + '">Type</button></div>' +
         '<button class="icon-btn" data-act="dView" aria-label="' + (prefs.deckView === "grid" ? "Show as list" : "Show as cards") + '">' + (prefs.deckView === "grid" ? ICON.list : ICON.grid) + "</button>" +
         '<span class="grow"></span>' +
@@ -2438,6 +2443,27 @@
     if (document.visibilityState === "hidden" && scan.on){ stopScan(); scanScreen.update(); }
   });
 
+  /* ============================ play (lazy-loaded game) ============================ */
+  // The game lives in ./game/ and is only fetched when this tab opens; if it fails the rest of the app is unaffected.
+  const playScreen = {
+    api: null,
+    async mount(arg){
+      const scr = $("screen");
+      const head = topbar({ title: "Play", sub: "Test your decks against the AI" });
+      scr.innerHTML = head + '<div class="page narrow"><div class="loading"><span class="spin"></span><p>Loading the game…</p></div></div>';
+      try {
+        const mod = await import("./game/ui.js");
+        if (cur.name !== "play" || cur.arg !== arg) return;
+        playScreen.api = await mod.mountLobby(scr, { app: window.mtgApp, deckId: arg });
+      } catch(e){
+        console.error(e);
+        if (cur.name !== "play") return;
+        scr.innerHTML = head + '<div class="page narrow">' + emptyHtml("The game couldn’t be loaded", "Binder works as usual; this feature needs its files to be available. Check your connection and try again.", '<br><a class="btn pri" href="#/play">Try again</a>') + "</div>";
+      }
+    },
+    update(){ const a = playScreen.api; if (a && a.refresh && $("screen")._lobby === a) a.refresh(); },
+  };
+
   /* ============================ routes table ============================ */
   const routes = {
     collection: collScreen,
@@ -2449,6 +2475,7 @@
     wishlist: wishScreen,
     more: moreScreen,
     scan: scanScreen,
+    play: playScreen,
   };
 
   /* ============================ event wiring ============================ */

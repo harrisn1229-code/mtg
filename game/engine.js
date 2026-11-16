@@ -143,7 +143,7 @@ export class Game {
   // ================================================================ public API
   start() {
     if (this._gen) return;
-    this._gen = this.main$();
+    this._gen = this.main$(); // lint-allow: creates the root generator
     this._advance(undefined);
   }
 
@@ -176,6 +176,16 @@ export class Game {
     // multiplayer: if the pending request belongs to the conceded player, answer it with a minimal default
     const req = this.request;
     if (req && req.player === i) { const a = this.defaultAnswer(req); this.request = null; this._advance(a); }
+  }
+
+  /** Recompute the pending priority request's actions (e.g. after test setup or out-of-band state edits). */
+  refreshRequest() {
+    const r = this.request;
+    if (!r || r.kind !== "priority") return;
+    this.markDirty(); this.refresh();
+    const acts = this.legalActions(r.player);
+    r.actions = acts.map(publicAction);
+    r._i.actions = acts;
   }
 
   drainEvents() { const e = this._events; this._events = []; return e; }
@@ -267,7 +277,7 @@ export class Game {
 
   /** Build a request; internal data is attached non-enumerably. */
   mkReq(req, internal) {
-    if (internal) Object.defineProperty(req, "_i", { value: internal, enumerable: false });
+    if (internal) Object.defineProperty(req, "_i", { value: internal, enumerable: false, writable: true, configurable: true });
     return req;
   }
 
@@ -483,7 +493,11 @@ export class Game {
       if (e.type === "entersTapped" && (e.affects == null || e.affects === "self")) {
         let unless = false;
         if (e.unless) { try { unless = this.evalCond(e.unless, ctx); } catch { unless = false; } }
-        if (!unless) o.tapped = true;
+        if (!unless) {
+          o.tapped = true;
+          if (e.unlessPay) this.pendInternal(o, o.controller, { kind: "triggered", text: `Pay ${describeCost(e.unlessPay)} to untap ${o.c.name}?`,
+            effects: [{ op: "may", cost: e.unlessPay, text: `Pay ${describeCost(e.unlessPay)} so ${o.c.name} is untapped?`, effects: [{ op: "untap", what: "self" }] }] }, { type: "enters", obj: o });
+        }
       } else if (e.type === "entersWithCounters" && (e.affects == null || e.affects === "self")) {
         const n = this.amount(e.amount ?? 1, { ...ctx, x: o.x | 0, kicked: o.kicked });
         if (n > 0) o.counters[e.kind || "+1/+1"] = (o.counters[e.kind || "+1/+1"] | 0) + n;
@@ -607,18 +621,18 @@ export class Game {
     this.fireTrigger({ type: "tapped", obj: o, forMana: !!forMana, player: o.controller });
     return true;
   }
-  untap(o) {
+  untap(o, silent) {
     if (!o || o.zone !== "battlefield" || !o.tapped) return false;
     o.tapped = false;
     this.markDirty();
-    this.emit({ t: "untap", obj: o.id, text: `${o.c.name} untaps` });
+    this.emit({ t: "untap", obj: o.id, text: `${o.c.name} untaps`, ...(silent ? { silent: true } : {}) });
     return true;
   }
-  addManaPool(p, add, src) {
+  addManaPool(p, add, src, silent) {
     const pl = this.state.players[p];
     let any = false;
     for (const k of ["W", "U", "B", "R", "G", "C"]) if (add[k]) { pl.mana[k] += add[k]; any = true; }
-    if (any) this.emit({ t: "mana", player: p, added: poolToString(add), text: `${pl.name} adds ${poolToString(add)}${src?.c?.name ? ` (${src.c.name})` : ""}` });
+    if (any) this.emit({ t: "mana", player: p, added: poolToString(add), text: `${pl.name} adds ${poolToString(add)}${src?.c?.name ? ` (${src.c.name})` : ""}`, ...(silent ? { silent: true } : {}) });
   }
   addMana(p, str) { const q = parseManaCost(str); this.addManaPool(p, { W: q.W, U: q.U, B: q.B, R: q.R, G: q.G, C: q.C + q.generic }); }
 
@@ -803,12 +817,15 @@ export class Game {
         const isSelf = evt.obj && evt.obj.id === s.id;
         if (abZone !== zone && !(isSelf && SELF_EVENTS.has(evt.type) && ab.on.who === "self")) continue;
         let ok = false;
+        this._evtOverride = null;
         try { ok = this.triggerMatches(ab.on, evt, s, ctrl); } catch { ok = false; }
-        if (!ok) continue;
+        if (!ok) { this._evtOverride = null; continue; }
         const ctx = { source: s, you: ctrl, event: evt, quiet: true };
-        if (ab.condition) { let c = false; try { c = this.evalCond(ab.condition, ctx); } catch { c = false; } if (!c) continue; }
+        if (ab.condition) { let c = false; try { c = this.evalCond(ab.condition, { ...ctx, event: this._evtOverride || evt }); } catch { c = false; } if (!c) { this._evtOverride = null; continue; } }
         const times = 1 + this.triggerDoubling(evt, ctrl);
-        for (let i = 0; i < times; i++) st.pendingTriggers.push({ sourceId: s.id, source: s, ab, controller: ctrl, event: evt });
+        const ev2 = this._evtOverride || evt;
+        this._evtOverride = null;
+        for (let i = 0; i < times; i++) st.pendingTriggers.push({ sourceId: s.id, source: s, ab, controller: ctrl, event: ev2 });
       }
     };
     for (const id of st.battlefield) {
@@ -883,6 +900,7 @@ export class Game {
       if (who === "you") return o.controller === ctrl;
       if (who === "opponent") return o.controller !== ctrl;
       if (who === "other" || who === "another") return o.id !== s.id;
+      if (who === "equipped" || who === "enchanted" || who === "attached") return !!s.attachedTo && o.id === s.attachedTo;
       if (typeof who === "object") return this.matches(o, who, ctx, "*");
       if (typeof who === "string") return this.matches(o, who, ctx, "*");
       return false;
@@ -918,7 +936,12 @@ export class Game {
         if (on.filter && !this.matches(evt.obj, on.filter, ctx, "*")) return false;
         return true;
       case "dealsDamage": case "dealsCombatDamage": {
-        if (!whoObj(on.who, evt.source)) return false;
+        if (!!on.batch !== !!evt.batch) return false;
+        if (evt.batch) {
+          const parts = evt.parts.filter((pt) => whoObj(on.who, pt.source));
+          if (!parts.length) return false;
+          this._evtOverride = { ...evt, amount: parts.reduce((n, pt) => n + pt.amount, 0), objs: parts.map((pt) => pt.source), source: parts[0].source, obj: parts[0].source };
+        } else if (!whoObj(on.who, evt.source)) return false;
         const to = on.to || "any";
         const tp = isPid(evt.target) ? +evt.target.slice(1) : null;
         if (to === "player" && tp == null) return false;
@@ -938,6 +961,7 @@ export class Game {
         return whoPlayer(w, evt.player);
       }
       case "cast":
+        if (evt.copy && !on.orCopy) return false;
         if (on.who === "self") { if (!evt.obj || evt.obj.id !== s.id) return false; }
         else if (!whoPlayer(on.who, evt.player)) return false;
         if (on.filter && !this.matches(evt.obj, on.filter, ctx, "*")) return false;
@@ -1160,7 +1184,7 @@ export class Game {
         }
         p = this.nextPlayer(p);
       } else {
-        const act = acts[ans.index];
+        const act = (req._i ? req._i.actions : acts)[ans.index];
         try { yield* this.doAction$(p, act); }
         catch (err) { if (err && err.engineFatal) throw err; this.manual(act?.objRef, `Action failed: ${err && err.message}`); }
         passes = 0;
@@ -1251,7 +1275,7 @@ export class Game {
   spellCtx(o) {
     return {
       source: o, you: o.controller, targets: o._targets || [], targetSpecs: o._targetSpecs || [], x: o.x | 0, kicked: !!o.kicked,
-      modes: o._modes || [], sacrificed: o._sacrificed || [], overload: o.castVariant === "overload", it: [], prev: 0, event: null,
+      modes: o._modes || [], sacrificed: o._sacrificed || [], overload: o.castVariant === "overload", overloadSpecs: this.faceDef(o).spell?.targets || [], it: [], prev: 0, event: null,
     };
   }
 
@@ -1276,6 +1300,7 @@ export class Game {
     st.objects[id] = c;
     st.stack.push(id);
     this.emit({ t: "cast", obj: id, player: controller, targets: c.targets, copy: true, text: `${this.pname(controller)} copies ${o.c.name}` });
+    if (!o.isAbility) this.fireTrigger({ type: "cast", obj: c, player: controller, copy: true });
     this.markDirty();
     return c;
   }
@@ -1431,7 +1456,7 @@ export class Game {
     // untap
     yield* this.step$("untap");
     this.expireEffects("yourNextTurn", a);
-    for (const id of st.battlefield) { const o = st.objects[id]; if (o.controller === a) { o.sick = false; if (o.tapped && !this.hasKw(o, "doesn't untap") && !o.c.doesntUntap) this.untap(o); } }
+    for (const id of st.battlefield) { const o = st.objects[id]; if (o.controller === a) { o.sick = false; if (o.tapped && !this.hasKw(o, "doesn't untap") && !o.c.doesntUntap) this.untap(o, true); } }
     this.markDirty();
     this.refresh();
     // upkeep

@@ -35,7 +35,7 @@ export function listDecks(state) {
     const playable = d.format === "commander" ? n >= 95 : b.cards.length >= 40;
     return {
       id: d.id, name: d.name, format: d.format, commander: d.commander, count: n, playable,
-      missing: b.missing, identity: Array.from(id), art: b.commanders[0] ? b.commanders[0].img : "",
+      missing: b.missing.length, identity: Array.from(id), art: b.commanders[0] ? b.commanders[0].img : "",
       reason: playable ? "" : "Needs more cards",
     };
   });
@@ -47,7 +47,7 @@ export function buildDeck(state, id) {
   b.commanders.forEach((c) => (c.color_identity || []).forEach((x) => idn.add(x)));
   return {
     id: d.id, name: d.name, isCommander: d.format === "commander", startingLife: d.format === "commander" ? 40 : 20,
-    commanders: b.commanders, cards: b.cards, missing: b.missing, identity: Array.from(idn), art: b.commanders[0] ? b.commanders[0].img : "",
+    commanders: b.commanders, cards: b.cards, missing: b.missing.length, identity: Array.from(idn), art: b.commanders[0] ? b.commanders[0].img : "",
   };
 }
 export function coverage(card) {
@@ -380,6 +380,7 @@ export function createGame(cfg) {
       yield* priority$("main1");
     } else if (scene === "target") {
       const o = players[0].hand.map((i) => objects[i]).find((x) => !isLand(x));
+      o.c.types = ["instant"]; o.c.cmc = 2; o.c.cost = "{1}{B}"; o.c.text = "Destroy target creature.";
       yield* doAction$(0, { type: "cast", obj: o.id, label: "Cast", zone: "hand" });
       yield* priority$("main1");
     } else if (scene === "picker") {
