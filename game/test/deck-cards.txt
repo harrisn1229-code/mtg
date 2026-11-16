@@ -1,0 +1,1022 @@
+### Abrade {1}{R} | Instant | 
+Choose one —
+• Abrade deals 3 damage to target creature.
+• Destroy target artifact.
+
+### Act of Treason {2}{R} | Sorcery | 
+Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn. (It can attack and {T} this turn.)
+
+### An Offer You Can't Refuse {U} | Instant | 
+Counter target noncreature spell. Its controller creates two Treasure tokens. (They're artifacts with "{T}, Sacrifice this token: Add one mana of any color.")
+
+### Anger of the Gods {1}{R}{R} | Sorcery | 
+Anger of the Gods deals 3 damage to each creature. If a creature dealt damage this way would die this turn, exile it instead.
+
+### Arcane Denial {1}{U} | Instant | 
+Counter target spell. Its controller may draw up to two cards at the beginning of the next turn's upkeep.
+You draw a card at the beginning of the next turn's upkeep.
+
+### Arcane Signet {2} | Artifact | 
+{T}: Add one mana of any color in your commander's color identity.
+
+### Archfiend of Depravity {3}{B}{B} | Creature — Demon | 5/4
+Flying
+At the beginning of each opponent's end step, that player chooses up to two creatures they control, then sacrifices the rest.
+
+### Archmage Emeritus {2}{U}{U} | Creature — Human Wizard | 2/2
+Magecraft — Whenever you cast or copy an instant or sorcery spell, draw a card.
+
+### Ashnod's Altar {3} | Artifact | 
+Sacrifice a creature: Add {C}{C}.
+
+### Austere Command {4}{W}{W} | Sorcery | 
+Choose two —
+• Destroy all artifacts.
+• Destroy all enchantments.
+• Destroy all creatures with mana value 3 or less.
+• Destroy all creatures with mana value 4 or greater.
+
+### Balor {3}{R}{R} | Creature — Demon | 5/5
+Flying
+Whenever this creature attacks or dies, choose one or more. Each mode must target a different player.
+• Target opponent draws three cards, then discards three cards at random.
+• Target opponent sacrifices a nontoken artifact of their choice.
+• This creature deals damage to target opponent equal to the number of cards in their hand.
+
+### Bastion of Remembrance {2}{B} | Enchantment | 
+When this enchantment enters, create a 1/1 white Human Soldier creature token.
+Whenever a creature you control dies, each opponent loses 1 life and you gain 1 life.
+
+### Battlefield Forge  | Land | 
+{T}: Add {C}.
+{T}: Add {R} or {W}. This land deals 1 damage to you.
+
+### Beast Within {2}{G} | Instant | 
+Destroy target permanent. Its controller creates a 3/3 green Beast creature token.
+
+### Birthday Escape {U} | Sorcery | 
+Draw a card. The Ring tempts you.
+
+### Bitter Reunion {1}{R} | Enchantment | 
+When this enchantment enters, you may discard a card. If you do, draw two cards.
+{1}, Sacrifice this enchantment: Creatures you control gain haste until end of turn.
+
+### Bitter Triumph {1}{B} | Instant | 
+As an additional cost to cast this spell, discard a card or pay 3 life.
+Destroy target creature or planeswalker.
+
+### Black Sun's Zenith {X}{B}{B} | Sorcery | 
+Put X -1/-1 counters on each creature. Shuffle Black Sun's Zenith into its owner's library.
+
+### Blasphemous Act {8}{R} | Sorcery | 
+This spell costs {1} less to cast for each creature on the battlefield.
+Blasphemous Act deals 13 damage to each creature.
+
+### Blood Artist {1}{B} | Creature — Vampire | 0/1
+Whenever this creature or another creature dies, target player loses 1 life and you gain 1 life.
+
+### Bloodghast {B}{B} | Creature — Vampire Spirit | 2/1
+This creature can't block.
+This creature has haste as long as an opponent has 10 or less life.
+Landfall — Whenever a land you control enters, you may return this card from your graveyard to the battlefield.
+
+### Bojuka Bog  | Land | 
+This land enters tapped.
+When this land enters, exile target player's graveyard.
+{T}: Add {B}.
+
+### Bonecrusher Giant // Stomp {2}{R} // {1}{R} | Creature — Giant // Instant — Adventure | 4/3
+Whenever this creature becomes the target of a spell, this creature deals 2 damage to that spell's controller. // Damage can't be prevented this turn. Stomp deals 2 damage to any target.
+
+### Boros Charm {R}{W} | Instant | 
+Choose one —
+• Boros Charm deals 4 damage to target player or planeswalker.
+• Permanents you control gain indestructible until end of turn.
+• Target creature gains double strike until end of turn.
+
+### Boros Signet {2} | Artifact | 
+{1}, {T}: Add {R}{W}.
+
+### Braids, Cabal Minion {2}{B}{B} | Legendary Creature — Human Minion | 2/2
+At the beginning of each player's upkeep, that player sacrifices an artifact, creature, or land of their choice.
+
+### Brainstorm {U} | Instant | 
+Draw three cards, then put two cards from your hand on top of your library in any order.
+
+### Brion Stoutarm {2}{R}{W} | Legendary Creature — Giant Warrior | 4/4
+Lifelink
+{R}, {T}, Sacrifice another creature: Brion Stoutarm deals damage equal to the sacrificed creature's power to target player or planeswalker.
+
+### Buried Alive {2}{B} | Sorcery | 
+Search your library for up to three creature cards, put them into your graveyard, then shuffle.
+
+### Burnished Hart {3} | Artifact Creature — Elk | 2/2
+{3}, Sacrifice this creature: Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.
+
+### Butcher of Malakir {5}{B}{B} | Creature — Vampire Warrior | 5/4
+Flying
+Whenever this creature or another creature you control dies, each opponent sacrifices a creature of their choice.
+
+### Cackling Counterpart {1}{U}{U} | Instant | 
+Create a token that's a copy of target creature you control.
+Flashback {5}{U}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+
+### Call of the Ring {1}{B} | Enchantment | 
+At the beginning of your upkeep, the Ring tempts you.
+Whenever you choose a creature as your Ring-bearer, you may pay 2 life. If you do, draw a card.
+
+### Carrier Thrall {1}{B} | Creature — Vampire | 2/1
+When this creature dies, create a 1/1 colorless Eldrazi Scion creature token. It has "Sacrifice this token: Add {C}."
+
+### Carrion Feeder {B} | Creature — Zombie | 1/1
+This creature can't block.
+Sacrifice a creature: Put a +1/+1 counter on this creature.
+
+### Castle Ardenvale  | Land | 
+This land enters tapped unless you control a Plains.
+{T}: Add {W}.
+{2}{W}{W}, {T}: Create a 1/1 white Human creature token.
+
+### Castle Locthwain  | Land | 
+This land enters tapped unless you control a Swamp.
+{T}: Add {B}.
+{1}{B}{B}, {T}: Draw a card, then you lose life equal to the number of cards in your hand.
+
+### Chandra's Ignition {3}{R}{R} | Sorcery | 
+Target creature you control deals damage equal to its power to each other creature and each opponent.
+
+### Chaos Warp {2}{R} | Instant | 
+The owner of target permanent shuffles it into their library, then reveals the top card of their library. If it's a permanent card, they put it onto the battlefield.
+
+### Chelonian Tackle {2}{G} | Sorcery | 
+Target creature you control gets +0/+10 until end of turn. Then it fights up to one target creature an opponent controls. (Each deals damage equal to its power to the other.)
+
+### Chittering Witch {3}{B} | Creature — Human Warlock | 2/2
+When this creature enters, create a number of 1/1 black Rat creature tokens equal to the number of opponents you have.
+{1}{B}, Sacrifice a creature: Target creature gets -2/-2 until end of turn.
+
+### Choked Estuary  | Land | 
+As this land enters, you may reveal an Island or Swamp card from your hand. If you don't, this land enters tapped.
+{T}: Add {U} or {B}.
+
+### Cinder Glade  | Land — Mountain Forest | 
+({T}: Add {R} or {G}.)
+This land enters tapped unless you control two or more basic lands.
+
+### Claim the Firstborn {R} | Sorcery | 
+Gain control of target creature with mana value 3 or less until end of turn. Untap that creature. It gains haste until end of turn.
+
+### Claim the Precious {1}{B}{B} | Sorcery | 
+Destroy target creature. The Ring tempts you.
+
+### Clifftop Retreat  | Land | 
+This land enters tapped unless you control a Mountain or a Plains.
+{T}: Add {R} or {W}.
+
+### Colossal Majesty {2}{G} | Enchantment | 
+At the beginning of your upkeep, if you control a creature with power 4 or greater, draw a card.
+
+### Command Tower  | Land | 
+{T}: Add one mana of any color in your commander's color identity.
+
+### Commander's Sphere {3} | Artifact | 
+{T}: Add one mana of any color in your commander's color identity.
+Sacrifice this artifact: Draw a card.
+
+### Consider {U} | Instant | 
+Surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
+Draw a card.
+
+### Counterspell {U}{U} | Instant | 
+Counter target spell.
+
+### Crippling Fear {2}{B}{B} | Sorcery | 
+Choose a creature type. Creatures that aren't of the chosen type get -3/-3 until end of turn.
+
+### Cultivate {2}{G} | Sorcery | 
+Search your library for up to two basic land cards, reveal those cards, put one onto the battlefield tapped and the other into your hand, then shuffle.
+
+### Darkslick Shores  | Land | 
+This land enters tapped unless you control two or fewer other lands.
+{T}: Add {U} or {B}.
+
+### Deadly Dispute {1}{B} | Instant | 
+As an additional cost to cast this spell, sacrifice an artifact or creature.
+Draw two cards and create a Treasure token. (It's an artifact with "{T}, Sacrifice this token: Add one mana of any color.")
+
+### Diabolic Tutor {2}{B}{B} | Sorcery | 
+Search your library for a card, put that card into your hand, then shuffle.
+
+### Dig Through Time {6}{U}{U} | Instant | 
+Delve (Each card you exile from your graveyard while casting this spell pays for {1}.)
+Look at the top seven cards of your library. Put two of them into your hand and the rest on the bottom of your library in any order.
+
+### Dockside Chef {B} | Enchantment Creature — Human Citizen | 1/2
+{1}{B}, Sacrifice an artifact or creature: Draw a card.
+
+### Dread Presence {3}{B} | Creature — Nightmare | 3/3
+Whenever a Swamp you control enters, choose one —
+• You draw a card and you lose 1 life.
+• This creature deals 2 damage to any target and you gain 2 life.
+
+### Dreadful as the Storm {2}{U} | Instant | 
+Target creature has base power and toughness 5/5 until end of turn. The Ring tempts you.
+
+### Drivnod, Carnage Dominus {3}{B}{B} | Legendary Creature — Phyrexian Horror | 8/3
+If a creature dying causes a triggered ability of a permanent you control to trigger, that ability triggers an additional time.
+{B/P}{B/P}, Exile three creature cards from your graveyard: Put an indestructible counter on Drivnod. ({B/P} can be paid with either {B} or 2 life.)
+
+### Drown in Ichor {1}{B} | Sorcery | 
+Target creature gets -4/-4 until end of turn. Proliferate. (Choose any number of permanents and/or players, then give each another counter of each kind already there.)
+
+### Drowned Catacomb  | Land | 
+This land enters tapped unless you control an Island or a Swamp.
+{T}: Add {U} or {B}.
+
+### Dubious Delicacy {2}{B} | Artifact — Food | 
+Flash
+When this artifact enters, up to one target creature gets -3/-3 until end of turn.
+{2}, {T}, Sacrifice this artifact: You gain 3 life.
+{2}, {T}, Sacrifice this artifact: Target opponent loses 3 life.
+
+### Elder Gargaroth {3}{G}{G} | Creature — Beast | 6/6
+Reach, vigilance, trample
+Whenever this creature attacks or blocks, choose one —
+• Create a 3/3 green Beast creature token.
+• You gain 3 life.
+• Draw a card.
+
+### Elemental Bond {2}{G} | Enchantment | 
+Whenever a creature you control with power 3 or greater enters, draw a card.
+
+### Elrond, Lord of Rivendell {2}{U} | Legendary Creature — Elf Noble | 3/2
+Whenever Elrond or another creature you control enters, scry 1. If this is the second time this ability has resolved this turn, the Ring tempts you.
+
+### Elvish Mystic {G} | Creature — Elf Druid | 1/1
+{T}: Add {G}.
+
+### Etali, Primal Storm {4}{R}{R} | Legendary Creature — Elder Dinosaur | 6/6
+Whenever Etali attacks, exile the top card of each player's library, then you may cast any number of spells from among those cards without paying their mana costs.
+
+### Everquill Phoenix {2}{R}{R} | Creature — Phoenix | 4/4
+Mutate {3}{R} (If you cast this spell for its mutate cost, put it over or under target non-Human creature you own. They mutate into the creature on top plus all abilities from under it.)
+Flying
+Whenever this creature mutates, create a red artifact token named Feather with "{1}, Sacrifice this token: Return target Phoenix card from your graveyard to the battlefield tapped."
+
+### Eviscerator's Insight {1}{B} | Instant | 
+As an additional cost to cast this spell, sacrifice an artifact or creature.
+Draw two cards.
+Flashback {4}{B} (You may cast this card from your graveyard for its flashback cost and any additional costs. Then exile it.)
+
+### Evolving Wilds  | Land | 
+{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+
+### Fabled Passage  | Land | 
+{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle. Then if you control four or more lands, untap that land.
+
+### Fact or Fiction {3}{U} | Instant | 
+Reveal the top five cards of your library. An opponent separates those cards into two piles. Put one pile into your hand and the other into your graveyard.
+
+### Falkenrath Noble {3}{B} | Creature — Vampire Noble | 2/2
+Flying
+Whenever this creature or another creature dies, target player loses 1 life and you gain 1 life.
+
+### Farseek {1}{G} | Sorcery | 
+Search your library for a Plains, Island, Swamp, or Mountain card, put it onto the battlefield tapped, then shuffle.
+
+### Feed the Swarm {1}{B} | Sorcery | 
+Destroy target creature or enchantment an opponent controls. You lose life equal to that permanent's mana value.
+
+### Fellwar Stone {2} | Artifact | 
+{T}: Add one mana of any color that a land an opponent controls could produce.
+
+### Fiendish Duo {4}{R}{R} | Creature — Devil | 5/5
+First strike (This creature deals combat damage before creatures without first strike.)
+If a source would deal damage to an opponent, it deals double that damage to that player instead.
+
+### Fiery Emancipation {3}{R}{R}{R} | Enchantment | 
+If a source you control would deal damage to a permanent or player, it deals triple that damage to that permanent or player instead.
+
+### Final Vengeance {B} | Sorcery | 
+As an additional cost to cast this spell, sacrifice a creature or enchantment.
+Exile target creature.
+
+### Flametongue Kavu {3}{R} | Creature — Kavu | 4/2
+When this creature enters, it deals 4 damage to target creature.
+
+### Flawless Maneuver {2}{W} | Instant | 
+If you control a commander, you may cast this spell without paying its mana cost.
+Creatures you control gain indestructible until end of turn.
+
+### Flayer of the Hatebound {5}{R} | Creature — Devil | 4/2
+Undying (When this creature dies, if it had no +1/+1 counters on it, return it to the battlefield under its owner's control with a +1/+1 counter on it.)
+Whenever this creature or another creature enters from your graveyard, that creature deals damage equal to its power to any target.
+
+### Fleshbag Marauder {2}{B} | Creature — Zombie Warrior | 3/1
+When this creature enters, each player sacrifices a creature of their choice.
+
+### Fling {1}{R} | Instant | 
+As an additional cost to cast this spell, sacrifice a creature.
+Fling deals damage equal to the sacrificed creature's power to any target.
+
+### Flow State {1}{U} | Sorcery | 
+Look at the top three cards of your library. Put one of them into your hand and the rest on the bottom of your library in any order. If there is an instant card and a sorcery card in your graveyard, instead put two of them into your hand and the rest on the bottom of your library in any order.
+
+### Foreboding Statue // Forsaken Thresher {3} | Artifact Creature — Construct // Artifact Creature — Construct | 
+{T}: Add one mana of any color. Put an omen counter on this creature.
+At the beginning of your end step, if there are three or more omen counters on this creature, untap it, then transform it. // At the beginning of your first main phase, add one mana of any color.
+
+### Forest  | Basic Land — Forest | 
+({T}: Add {G}.)
+
+### Frantic Search {2}{U} | Instant | 
+Draw two cards, then discard two cards. Untap up to three lands.
+
+### Furycalm Snarl  | Land | 
+As this land enters, you may reveal a Mountain or Plains card from your hand. If you don't, this land enters tapped.
+{T}: Add {R} or {W}.
+
+### Gaius van Baelsar {2}{B}{B} | Legendary Creature — Human Soldier | 3/2
+When Gaius van Baelsar enters, choose one —
+• Each player sacrifices a creature token of their choice.
+• Each player sacrifices a nontoken creature of their choice.
+• Each player sacrifices an enchantment of their choice.
+
+### Game Trail  | Land | 
+As this land enters, you may reveal a Mountain or Forest card from your hand. If you don't, this land enters tapped.
+{T}: Add {R} or {G}.
+
+### Gandalf, Friend of the Shire {3}{U} | Legendary Creature — Avatar Wizard | 2/4
+Flash
+You may cast sorcery spells as though they had flash.
+Whenever the Ring tempts you, if you chose a creature other than Gandalf as your Ring-bearer, draw a card.
+
+### Garruk's Packleader {4}{G} | Creature — Beast | 4/4
+Whenever another creature you control with power 3 or greater enters, you may draw a card.
+
+### Garruk's Uprising {2}{G} | Enchantment | 
+When this enchantment enters, if you control a creature with power 4 or greater, draw a card.
+Creatures you control have trample. (Each of those creatures can deal excess combat damage to the player or planeswalker it's attacking.)
+Whenever a creature you control with power 4 or greater enters, draw a card.
+
+### Gemrazer {3}{G} | Creature — Beast | 4/4
+Mutate {1}{G}{G} (If you cast this spell for its mutate cost, put it over or under target non-Human creature you own. They mutate into the creature on top plus all abilities from under it.)
+Reach, trample
+Whenever this creature mutates, destroy target artifact or enchantment an opponent controls.
+
+### Generous Gift {2}{W} | Instant | 
+Destroy target permanent. Its controller creates a 3/3 green Elephant creature token.
+
+### Ghalta, Primal Hunger {10}{G}{G} | Legendary Creature — Elder Dinosaur | 12/12
+This spell costs {X} less to cast, where X is the total power of creatures you control.
+Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
+
+### Ghostly Flicker {2}{U} | Instant | 
+Exile two target artifacts, creatures, and/or lands you control, then return those cards to the battlefield under your control.
+
+### Gigantosaurus {G}{G}{G}{G}{G} | Creature — Dinosaur | 10/10
+
+
+### Gisela, Blade of Goldnight {4}{R}{W}{W} | Legendary Creature — Angel | 5/5
+Flying, first strike
+If a source would deal damage to an opponent or a permanent an opponent controls, that source deals double that damage to that player or permanent instead.
+If a source would deal damage to you or a permanent you control, prevent half that damage, rounded up.
+
+### Go for the Throat {1}{B} | Instant | 
+Destroy target nonartifact creature.
+
+### Goblin Bombardment {1}{R} | Enchantment | 
+Sacrifice a creature: This enchantment deals 1 damage to any target.
+
+### God-Eternal Bontu {3}{B}{B} | Legendary Creature — Zombie God | 5/6
+Menace
+When God-Eternal Bontu enters, sacrifice any number of other permanents, then draw that many cards.
+When God-Eternal Bontu dies or is put into exile from the battlefield, you may put her into her owner's library third from the top.
+
+### Gollum, Patient Plotter {1}{B} | Legendary Creature — Halfling Horror | 3/1
+When Gollum leaves the battlefield, the Ring tempts you.
+{B}, Sacrifice a creature: Return this card from your graveyard to your hand. Activate only as a sorcery.
+
+### Goreclaw, Terror of Qal Sisma {3}{G} | Legendary Creature — Bear | 4/3
+Creature spells you cast with power 4 or greater cost {2} less to cast.
+Whenever Goreclaw attacks, each creature you control with power 4 or greater gets +1/+1 and gains trample until end of turn.
+
+### Goremand {4}{B}{B} | Creature — Demon | 5/5
+As an additional cost to cast this spell, sacrifice a creature.
+Flying
+Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
+When this creature enters, each opponent sacrifices a creature.
+
+### Gothmog, Morgul Lieutenant {3}{B} | Legendary Creature — Human Soldier | 3/3
+When Gothmog enters, amass Orcs 1. (Put a +1/+1 counter on an Army you control. It's also an Orc. If you don't control an Army, create a 0/0 black Orc Army creature token first.)
+Creature tokens you control have deathtouch.
+
+### Gravecrawler {B} | Creature — Zombie | 2/1
+This creature can't block.
+You may cast this card from your graveyard as long as you control a Zombie.
+
+### Gravkill {3}{B} | Instant | 
+Exile target creature or Spacecraft.
+
+### Gray Merchant of Asphodel {3}{B}{B} | Creature — Zombie | 2/4
+When this creature enters, each opponent loses X life, where X is your devotion to black. You gain life equal to the life lost this way. (Each {B} in the mana costs of permanents you control counts toward your devotion to black.)
+
+### Greater Good {2}{G}{G} | Enchantment | 
+Sacrifice a creature: Draw cards equal to the sacrificed creature's power, then discard three cards.
+
+### Grim Haruspex {2}{B} | Creature — Human Wizard | 3/2
+Morph {B} (You may cast this card face down as a 2/2 creature for {3}. Turn it face up any time for its morph cost.)
+Whenever another nontoken creature you control dies, draw a card.
+
+### Hammer of Purphoros {1}{R}{R} | Legendary Enchantment Artifact | 
+Creatures you control have haste.
+{2}{R}, {T}, Sacrifice a land: Create a 3/3 colorless Golem enchantment artifact creature token.
+
+### Harmonize {2}{G}{G} | Sorcery | 
+Draw three cards.
+
+### Haunt of the Dead Marshes {B} | Creature — Nightmare Elf | 1/1
+When this creature enters, scry 1.
+{2}{B}: Return this card from your graveyard to the battlefield tapped. Activate only if you control a legendary creature.
+
+### Hero's Downfall {1}{B}{B} | Instant | 
+Destroy target creature or planeswalker.
+
+### High Market  | Land | 
+{T}: Add {C}.
+{T}, Sacrifice a creature: You gain 1 life.
+
+### Hulking Raptor {2}{G}{G} | Creature — Dinosaur | 5/3
+Ward {2}
+At the beginning of your first main phase, add {G}{G}.
+
+### Illusionist's Bracers {2} | Artifact — Equipment | 
+Whenever an ability of equipped creature is activated, if it isn't a mana ability, copy that ability. You may choose new targets for the copy.
+Equip {3}
+
+### Ilysian Caryatid {1}{G} | Creature — Plant | 1/1
+{T}: Add one mana of any color. If you control a creature with power 4 or greater, add two mana of any one color instead.
+
+### Infernal Captor {3}{R} | Creature — Devil Rogue | 3/3
+Exploit (When this creature enters, you may sacrifice a creature.)
+When this creature exploits a creature, gain control of target artifact or creature until end of turn. Untap that permanent. It gains haste until end of turn.
+
+### Infernal Grasp {1}{B} | Instant | 
+Destroy target creature. You lose 2 life.
+
+### Inferno Titan {4}{R}{R} | Creature — Giant | 6/6
+{R}: This creature gets +1/+0 until end of turn.
+Whenever this creature enters or attacks, it deals 3 damage divided as you choose among one, two, or three targets.
+
+### Inherited Envelope {3} | Artifact | 
+When this artifact enters, the Ring tempts you.
+{T}: Add one mana of any color.
+
+### Inspiring Vantage  | Land | 
+This land enters tapped unless you control two or fewer other lands.
+{T}: Add {R} or {W}.
+
+### Insurrection {5}{R}{R}{R} | Sorcery | 
+Untap all creatures and gain control of them until end of turn. They gain haste until end of turn.
+
+### Island  | Basic Land — Island | 
+({T}: Add {U}.)
+
+### Jeska's Will {2}{R} | Sorcery | 
+Choose one. If you control a commander as you cast this spell, you may choose both instead.
+• Add {R} for each card in target opponent's hand.
+• Exile the top three cards of your library. You may play them this turn.
+
+### Kari Zev's Expertise {1}{R}{R} | Sorcery | 
+Gain control of target creature or Vehicle until end of turn. Untap it. It gains haste until end of turn.
+You may cast a spell with mana value 2 or less from your hand without paying its mana cost.
+
+### Karmic Guide {3}{W}{W} | Creature — Angel Spirit | 2/2
+Flying, protection from black
+Echo {3}{W}{W} (At the beginning of your upkeep, if this came under your control since the beginning of your last upkeep, sacrifice it unless you pay its echo cost.)
+When this creature enters, return target creature card from your graveyard to the battlefield.
+
+### Karplusan Forest  | Land | 
+{T}: Add {C}.
+{T}: Add {R} or {G}. This land deals 1 damage to you.
+
+### Kessig Wolf Run  | Land | 
+{T}: Add {C}.
+{X}{R}{G}, {T}: Target creature gets +X/+0 and gains trample until end of turn.
+
+### Kodama's Reach {2}{G} | Sorcery — Arcane | 
+Search your library for up to two basic land cards, reveal those cards, put one onto the battlefield tapped and the other into your hand, then shuffle.
+
+### Kogla, the Titan Ape {3}{G}{G}{G} | Legendary Creature — Ape | 7/6
+When Kogla enters, it fights up to one target creature you don't control.
+Whenever Kogla attacks, destroy target artifact or enchantment defending player controls.
+{1}{G}: Return target Human you control to its owner's hand. Kogla gains indestructible until end of turn.
+
+### Lash of the Balrog {B} | Sorcery | 
+As an additional cost to cast this spell, sacrifice a creature or pay {4}.
+Destroy target creature.
+
+### Late to Dinner {3}{W} | Sorcery | 
+Return target creature card from your graveyard to the battlefield. Create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")
+
+### Light Up the Stage {2}{R} | Sorcery | 
+Spectacle {R} (You may cast this spell for its spectacle cost rather than its mana cost if an opponent lost life this turn.)
+Exile the top two cards of your library. Until the end of your next turn, you may play those cards.
+
+### Lightning Greaves {2} | Artifact — Equipment | 
+Equipped creature has haste and shroud. (It can't be the target of spells or abilities.)
+Equip {0}
+
+### Lightning Helix {R}{W} | Instant | 
+Lightning Helix deals 3 damage to any target and you gain 3 life.
+
+### Llanowar Elves {G} | Creature — Elf Druid | 1/1
+{T}: Add {G}.
+
+### Lord of the Nazgûl {3}{U}{B} | Legendary Creature — Wraith Noble | 4/3
+Flying
+Wraiths you control have protection from Ring-bearers.
+Whenever you cast an instant or sorcery spell, create a 3/3 black Wraith creature token with menace. Then if you control nine or more Wraiths, Wraiths you control have base power and toughness 9/9 until end of turn.
+
+### Massacre Girl, Known Killer {2}{B}{B} | Legendary Creature — Human Assassin | 4/4
+Menace
+Creatures you control have wither. (They deal damage to creatures in the form of -1/-1 counters.)
+Whenever a creature an opponent controls dies, if its toughness was less than 1, draw a card.
+
+### Merciless Executioner {2}{B} | Creature — Orc Warrior | 3/1
+When this creature enters, each player sacrifices a creature of their choice.
+
+### Meteor Golem {7} | Artifact Creature — Golem | 3/3
+When this creature enters, destroy target nonland permanent an opponent controls.
+
+### Midnight Reaper {2}{B} | Creature — Zombie Knight | 3/2
+Whenever a nontoken creature you control dies, this creature deals 1 damage to you and you draw a card.
+
+### Mind Stone {2} | Artifact | 
+{T}: Add {C}.
+{1}, {T}, Sacrifice this artifact: Draw a card.
+
+### Mirkwood Bats {3}{B} | Creature — Bat | 2/3
+Flying
+Whenever you create or sacrifice a token, each opponent loses 1 life.
+
+### Mirror Entity {2}{W} | Creature — Shapeshifter | 1/1
+Changeling (This card is every creature type.)
+{X}: Until end of turn, creatures you control have base power and toughness X/X and gain all creature types.
+
+### Mizzium Mortars {1}{R} | Sorcery | 
+Mizzium Mortars deals 4 damage to target creature you don't control.
+Overload {3}{R}{R}{R} (You may cast this spell for its overload cost. If you do, change "target" in its text to "each.")
+
+### Mob Rule {4}{R}{R} | Sorcery | 
+Choose one —
+• Gain control of all creatures with power 4 or greater until end of turn. Untap those creatures. They gain haste until end of turn.
+• Gain control of all creatures with power 3 or less until end of turn. Untap those creatures. They gain haste until end of turn.
+
+### Mosswort Bridge  | Land | 
+Hideaway 4 (When this land enters, look at the top four cards of your library, exile one face down, then put the rest on the bottom in a random order.)
+This land enters tapped.
+{T}: Add {G}.
+{G}, {T}: You may play the exiled card without paying its mana cost if creatures you control have total power 10 or greater.
+
+### Mountain  | Basic Land — Mountain | 
+({T}: Add {R}.)
+
+### Murderous Rider // Swift End {1}{B}{B} // {1}{B}{B} | Creature — Zombie Knight // Instant — Adventure | 2/3
+Lifelink
+When this creature dies, put it on the bottom of its owner's library. // Destroy target creature or planeswalker. You lose 2 life. (Then exile this card. You may cast the creature later from exile.)
+
+### Myriad Landscape  | Land | 
+This land enters tapped.
+{T}: Add {C}.
+{2}, {T}, Sacrifice this land: Search your library for up to two basic land cards that share a land type, put them onto the battlefield tapped, then shuffle.
+
+### Nasty End {1}{B} | Instant | 
+As an additional cost to cast this spell, sacrifice a creature.
+Draw two cards. If the sacrificed creature was legendary, draw three cards instead.
+
+### Nature's Lore {1}{G} | Sorcery | 
+Search your library for a Forest card, put that card onto the battlefield, then shuffle.
+
+### Nazgûl {2}{B} | Creature — Wraith Knight | 1/2
+Deathtouch
+When this creature enters, the Ring tempts you.
+Whenever the Ring tempts you, put a +1/+1 counter on each Wraith you control.
+A deck can have up to nine cards named Nazgûl.
+
+### Needle Spires  | Land | 
+This land enters tapped.
+{T}: Add {R} or {W}.
+{2}{R}{W}: Until end of turn, this land becomes a 2/1 red and white Elemental creature with double strike. It's still a land.
+
+### Nested Shambler {B} | Creature — Zombie | 1/1
+When this creature dies, create X tapped 1/1 green Squirrel creature tokens, where X is this creature's power.
+
+### Night's Whisper {1}{B} | Sorcery | 
+You draw two cards and lose 2 life.
+
+### Nothic {4}{B} | Creature — Horror | 4/3
+Weird Insight — When this creature dies, roll a d20.
+1—9 | You draw a card and you lose 1 life.
+10—19 | You draw two cards and you lose 2 life.
+20 | You draw seven cards and you lose 7 life.
+
+### Ophiomancer {2}{B} | Creature — Human Shaman | 2/2
+At the beginning of each upkeep, if you control no Snakes, create a 1/1 black Snake creature token with deathtouch.
+
+### Opt {U} | Instant | 
+Scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+Draw a card.
+
+### Outpost Siege {3}{R} | Enchantment | 
+As this enchantment enters, choose Khans or Dragons.
+• Khans — At the beginning of your upkeep, exile the top card of your library. Until end of turn, you may play that card.
+• Dragons — Whenever a creature you control leaves the battlefield, this enchantment deals 1 damage to any target.
+
+### Overwhelming Stampede {3}{G}{G} | Sorcery | 
+Until end of turn, creatures you control gain trample and get +X/+X, where X is the greatest power among creatures you control.
+
+### Path of Ancestry  | Land | 
+This land enters tapped.
+{T}: Add one mana of any color in your commander's color identity. When that mana is spent to cast a creature spell that shares a creature type with your commander, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+
+### Path to Exile {W} | Instant | 
+Exile target creature. Its controller may search their library for a basic land card, put that card onto the battlefield tapped, then shuffle.
+
+### Pawn of Ulamog {1}{B}{B} | Creature — Vampire Shaman | 2/2
+Whenever this creature or another nontoken creature you control dies, you may create a 0/1 colorless Eldrazi Spawn creature token. It has "Sacrifice this token: Add {C}."
+
+### Pitiless Plunderer {3}{B} | Creature — Human Pirate | 1/4
+Whenever another creature you control dies, create a Treasure token. (It's an artifact with "{T}, Sacrifice this token: Add one mana of any color.")
+
+### Plaguecrafter {2}{B} | Creature — Human Shaman | 3/2
+When this creature enters, each player sacrifices a creature or planeswalker of their choice. Each player who can't discards a card.
+
+### Plains  | Basic Land — Plains | 
+({T}: Add {W}.)
+
+### Preordain {U} | Sorcery | 
+Scry 2, then draw a card. (To scry 2, look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)
+
+### Priest of Forgotten Gods {1}{B} | Creature — Human Cleric | 1/2
+{T}, Sacrifice two other creatures: Any number of target players each lose 2 life and sacrifice a creature of their choice. You add {B}{B} and draw a card. (Activate only as an instant.)
+
+### Primal Might {X}{G} | Sorcery | 
+Target creature you control gets +X/+X until end of turn. Then it fights up to one target creature you don't control. (Each deals damage equal to its power to the other.)
+
+### Pyrohemia {2}{R}{R} | Enchantment | 
+At the beginning of the end step, if no creatures are on the battlefield, sacrifice this enchantment.
+{R}: This enchantment deals 1 damage to each creature and each player.
+
+### Quartzwood Crasher {2}{R}{R}{G} | Creature — Dinosaur Beast | 6/6
+Trample
+Whenever one or more creatures you control with trample deal combat damage to a player, create an X/X green Dinosaur Beast creature token with trample, where X is the amount of damage those creatures dealt to that player.
+
+### Ram Through {1}{G} | Instant | 
+Target creature you control deals damage equal to its power to target creature you don't control. If the creature you control has trample, excess damage is dealt to that creature's controller instead.
+
+### Rampant Growth {1}{G} | Sorcery | 
+Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.
+
+### Ranging Raptors {2}{G} | Creature — Dinosaur | 2/3
+Enrage — Whenever this creature is dealt damage, you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+
+### Reassembling Skeleton {1}{B} | Creature — Skeleton Warrior | 1/1
+{1}{B}: Return this card from your graveyard to the battlefield tapped.
+
+### Regisaur Alpha {3}{R}{G} | Creature — Dinosaur | 4/4
+Other Dinosaurs you control have haste.
+When this creature enters, create a 3/3 green Dinosaur creature token with trample.
+
+### Return of the Wildspeaker {4}{G} | Instant | 
+Choose one —
+• Draw cards equal to the greatest power among non-Human creatures you control.
+• Non-Human creatures you control get +3/+3 until end of turn.
+
+### Rewrite Regrets {3}{B} | Sorcery | 
+Return target creature or planeswalker card with mana value 6 or less from your graveyard to the battlefield.
+Empower Jace 2. (Put two loyalty counters on a Jace token you control. If you don't control one, first create a blue Jace planeswalker token with "[−1]: Surveil 1" and "[−3]: Draw a card.")
+
+### Rings of Brighthearth {3} | Artifact | 
+Whenever you activate an ability, if it isn't a mana ability, you may pay {2}. If you do, copy that ability. You may choose new targets for the copy.
+
+### Ringsight {1}{U}{B} | Sorcery | 
+The Ring tempts you. Search your library for a card that shares a color with a legendary creature you control, reveal it, put it into your hand, then shuffle.
+
+### Ringwraiths {4}{B}{B} | Creature — Wraith Knight | 5/5
+When this creature enters, target creature an opponent controls gets -3/-3 until end of turn. If that creature is legendary, its controller loses 3 life.
+When the Ring tempts you, return this card from your graveyard to your hand.
+
+### Ripjaw Raptor {2}{G}{G} | Creature — Dinosaur | 4/5
+Enrage — Whenever this creature is dealt damage, draw a card.
+
+### Rite of Replication {2}{U}{U} | Sorcery | 
+Kicker {5} (You may pay an additional {5} as you cast this spell.)
+Create a token that's a copy of target creature. If this spell was kicked, create five of those tokens instead.
+
+### Rogue's Passage  | Land | 
+{T}: Add {C}.
+{4}, {T}: Target creature can't be blocked this turn.
+
+### Rootbound Crag  | Land | 
+This land enters tapped unless you control a Mountain or a Forest.
+{T}: Add {R} or {G}.
+
+### Rorix Bladewing {3}{R}{R}{R} | Legendary Creature — Dragon | 6/5
+Flying, haste
+
+### Rugged Highlands  | Land | 
+This land enters tapped.
+When this land enters, you gain 1 life.
+{T}: Add {R} or {G}.
+
+### Rugged Prairie  | Land | 
+{T}: Add {C}.
+{R/W}, {T}: Add {R}{R}, {R}{W}, or {W}{W}.
+
+### Sacred Foundry  | Land — Mountain Plains | 
+({T}: Add {R} or {W}.)
+As this land enters, you may pay 2 life. If you don't, it enters tapped.
+
+### Sam's Desperate Rescue {B} | Sorcery | 
+Return target creature card from your graveyard to your hand. The Ring tempts you.
+
+### Sauron's Ransom {1}{U}{B} | Instant | 
+Choose an opponent. They look at the top four cards of your library and separate them into a face-down pile and a face-up pile. Put one pile into your hand and the other into your graveyard. The Ring tempts you.
+
+### Sea Hag // Aquatic Ingress {4}{U} // {2}{U} | Creature — Hag // Instant — Adventure | 3/5
+When this creature enters, creatures your opponents control get -4/-0 until end of turn. // Up to two target creatures each get +1/+0 until end of turn and can't be blocked this turn. (Then exile this card. You may cast the creature later from exile.)
+
+### Secluded Courtyard  | Land | 
+As this land enters, choose a creature type.
+{T}: Add {C}.
+{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type.
+
+### Shamanic Revelation {3}{G}{G} | Sorcery | 
+Draw a card for each creature you control.
+Ferocious — You gain 4 life for each creature you control with power 4 or greater.
+
+### Sheltered Thicket  | Land — Mountain Forest | 
+({T}: Add {R} or {G}.)
+This land enters tapped.
+Cycling {2} ({2}, Discard this card: Draw a card.)
+
+### Sheoldred's Edict {1}{B} | Instant | 
+Choose one —
+• Each opponent sacrifices a nontoken creature of their choice.
+• Each opponent sacrifices a creature token of their choice.
+• Each opponent sacrifices a planeswalker of their choice.
+
+### Shipwreck Marsh  | Land | 
+This land enters tapped unless you control two or more other lands.
+{T}: Add {U} or {B}.
+
+### Shire Terrace  | Land | 
+{T}: Add {C}.
+{1}, {T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+
+### Skullclamp {1} | Artifact — Equipment | 
+Equipped creature gets +1/-1.
+Whenever equipped creature dies, draw two cards.
+Equip {1}
+
+### Smothering Tithe {3}{W} | Enchantment | 
+Whenever an opponent draws a card, that player may pay {2}. If the player doesn't, you create a Treasure token. (It's an artifact with "{T}, Sacrifice this token: Add one mana of any color.")
+
+### Snakeskin Veil {G} | Instant | 
+Put a +1/+1 counter on target creature you control. It gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)
+
+### Sol Ring {1} | Artifact | 
+{T}: Add {C}{C}.
+
+### Soothing of Sméagol {1}{U} | Instant | 
+Return target nontoken creature to its owner's hand. The Ring tempts you.
+
+### Spark Double {3}{U} | Creature — Illusion | 0/0
+You may have this creature enter as a copy of a creature or planeswalker you control, except it enters with an additional +1/+1 counter on it if it's a creature, it enters with an additional loyalty counter on it if it's a planeswalker, and it isn't legendary.
+
+### Spectator Seating  | Land | 
+This land enters tapped unless you have two or more opponents.
+{T}: Add {R} or {W}.
+
+### Spiteful Prankster {2}{R} | Creature — Devil | 3/2
+During your turn, this creature has first strike.
+Whenever another creature dies, this creature deals 1 damage to target player or planeswalker.
+
+### Stew the Coneys {2}{G} | Instant | 
+Target creature you control deals damage equal to its power to target creature you don't control. Create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")
+
+### Storm's Wrath {2}{R}{R} | Sorcery | 
+Storm's Wrath deals 4 damage to each creature and each planeswalker.
+
+### Sun Titan {4}{W}{W} | Creature — Giant | 6/6
+Vigilance
+Whenever this creature enters or attacks, you may return target permanent card with mana value 3 or less from your graveyard to the battlefield.
+
+### Sunbaked Canyon  | Land | 
+{T}, Pay 1 life: Add {R} or {W}.
+{1}, {T}, Sacrifice this land: Draw a card.
+
+### Sundown Pass  | Land | 
+This land enters tapped unless you control two or more other lands.
+{T}: Add {R} or {W}.
+
+### Sunken Hollow  | Land — Island Swamp | 
+({T}: Add {U} or {B}.)
+This land enters tapped unless you control two or more basic lands.
+
+### Swamp  | Basic Land — Swamp | 
+({T}: Add {B}.)
+
+### Swiftfoot Boots {2} | Artifact — Equipment | 
+Equipped creature has hexproof and haste. (It can't be the target of spells or abilities your opponents control. It can attack and {T} no matter when it came under your control.)
+Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
+
+### Swords to Plowshares {W} | Instant | 
+Exile target creature. Its controller gains life equal to its power.
+
+### Syr Konrad, the Grim {3}{B}{B} | Legendary Creature — Human Knight | 5/4
+Whenever another creature dies, or a creature card is put into a graveyard from anywhere other than the battlefield, or a creature card leaves your graveyard, Syr Konrad deals 1 damage to each opponent.
+{1}{B}: Each player mills a card. (They each put the top card of their library into their graveyard.)
+
+### Talisman of Conviction {2} | Artifact | 
+{T}: Add {C}.
+{T}: Add {R} or {W}. This artifact deals 1 damage to you.
+
+### Talisman of Dominance {2} | Artifact | 
+{T}: Add {C}.
+{T}: Add {U} or {B}. This artifact deals 1 damage to you.
+
+### Talisman of Impulse {2} | Artifact | 
+{T}: Add {C}.
+{T}: Add {R} or {G}. This artifact deals 1 damage to you.
+
+### Taurean Mauler {2}{R} | Creature — Shapeshifter | 2/2
+Changeling (This card is every creature type.)
+Whenever an opponent casts a spell, you may put a +1/+1 counter on this creature.
+
+### Teferi's Protection {2}{W} | Instant | 
+Until your next turn, your life total can't change and you gain protection from everything. All permanents you control phase out. (While they're phased out, they're treated as though they don't exist. They phase in before you untap during your untap step.)
+Exile Teferi's Protection.
+
+### Temple of Abandon  | Land | 
+This land enters tapped.
+When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+{T}: Add {R} or {G}.
+
+### Temple of Deceit  | Land | 
+This land enters tapped.
+When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+{T}: Add {U} or {B}.
+
+### Temur Battle Rage {1}{R} | Instant | 
+Target creature gains double strike until end of turn.
+Ferocious — That creature also gains trample until end of turn if you control a creature with power 4 or greater.
+
+### Terramorphic Expanse  | Land | 
+{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+
+### Territory Culler {4}{G} | Creature — Eldrazi | 7/5
+Devoid (This card has no color.)
+Reach
+Landfall — Whenever a land you control enters, look at the top card of your library. If it's a creature card, you may reveal it and put it into your hand. If you don't put the card into your hand, you may put it into your graveyard.
+
+### The Black Breath {2}{B} | Sorcery | 
+Creatures your opponents control get -1/-1 until end of turn. The Ring tempts you.
+
+### Thousand-Year Elixir {3} | Artifact | 
+You may activate abilities of creatures you control as though those creatures had haste.
+{1}, {T}: Untap target creature.
+
+### Threaten {2}{R} | Sorcery | 
+Untap target creature and gain control of it until end of turn. That creature gains haste until end of turn. (It can attack and {T} this turn.)
+
+### Titanoth Rex {7}{G}{G} | Creature — Dinosaur Beast | 11/11
+Trample
+Cycling {1}{G} ({1}{G}, Discard this card: Draw a card.)
+When you cycle this card, put a trample counter on target creature you control.
+
+### Tithing Blade // Consuming Sepulcher {1}{B} | Artifact // Artifact | 
+When this artifact enters, each opponent sacrifices a creature of their choice.
+Craft with creature {4}{B} ({4}{B}, Exile this artifact, Exile a creature you control or a creature card from your graveyard: Return this card transformed under its owner's control. Craft only as a sorcery.) // At the beginning of your upkeep, each opponent loses 1 life and you gain 1 life.
+
+### Topiary Lecturer {2}{G} | Creature — Elf Druid | 1/2
+Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)
+{T}: Add an amount of {G} equal to this creature's power.
+
+### Torbran, Thane of Red Fell {1}{R}{R}{R} | Legendary Creature — Dwarf Noble | 2/4
+If a red source you control would deal damage to an opponent or a permanent an opponent controls, it deals that much damage plus 2 instead.
+
+### Toxic Deluge {2}{B} | Sorcery | 
+As an additional cost to cast this spell, pay X life.
+All creatures get -X/-X until end of turn.
+
+### Tyvar's Stand {X}{G} | Instant | 
+Target creature you control gets +X/+X and gains hexproof and indestructible until end of turn. (It can't be the target of spells or abilities your opponents control. Damage and effects that say "destroy" don't destroy it.)
+
+### Umbral Collar Zealot {1}{B} | Creature — Human Cleric | 3/2
+Sacrifice another creature or artifact: Surveil 1. (Look at the top card of your library. You may put it into your graveyard.)
+
+### Underground River  | Land | 
+{T}: Add {C}.
+{T}: Add {U} or {B}. This land deals 1 damage to you.
+
+### Unseal the Necropolis {2}{B} | Instant | 
+Each player mills three cards. Then you return up to two creature cards from your graveyard to your hand. (To mill three cards, a player puts the top three cards of their library into their graveyard.)
+
+### Vampiric Rites {B} | Enchantment | 
+{1}{B}, Sacrifice a creature: You gain 1 life and draw a card.
+
+### Vengeful Bloodwitch {1}{B} | Creature — Vampire Warlock | 1/1
+Whenever this creature or another creature you control dies, target opponent loses 1 life and you gain 1 life.
+
+### Village Rites {B} | Instant | 
+As an additional cost to cast this spell, sacrifice a creature.
+Draw two cards.
+
+### Villainous Wrath {3}{B}{B} | Sorcery | 
+Target opponent loses life equal to the number of creatures they control. Then destroy all creatures.
+
+### Violent Echoes {2}{R}{R} | Instant | 
+Violent Echoes deals 6 damage to target creature or planeswalker. If excess damage was dealt to that permanent this way, empower Jace X, where X is that excess damage. (Put that many loyalty counters on a Jace token you control. If you don't control one, first create a blue Jace planeswalker token with "[−1]: Surveil 1" and "[−3]: Draw a card.")
+
+### Viscera Seer {B} | Creature — Vampire Wizard | 1/1
+Sacrifice a creature: Scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+
+### Warstorm Surge {5}{R} | Enchantment | 
+Whenever a creature you control enters, it deals damage equal to its power to any target.
+
+### Wayfarer's Bauble {1} | Artifact | 
+{2}, {T}, Sacrifice this artifact: Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.
+
+### Westvale Abbey // Ormendahl, Profane Prince  | Land // Legendary Creature — Demon | 
+{T}: Add {C}.
+{5}, {T}, Pay 1 life: Create a 1/1 white and black Human Cleric creature token.
+{5}, {T}, Sacrifice five creatures: Transform this land, then untap it. // Flying, lifelink, indestructible, haste
+
+### Witch-king of Angmar {3}{B}{B} | Legendary Creature — Wraith Noble | 5/3
+Flying
+Whenever one or more creatures deal combat damage to you, each opponent sacrifices a creature of their choice that dealt combat damage to you this turn. The Ring tempts you.
+Discard a card: Witch-king of Angmar gains indestructible until end of turn. Tap him.
+
+### Witch-king, Bringer of Ruin {4}{B}{B} | Legendary Creature — Wraith Noble | 5/3
+Flying
+Whenever Witch-king attacks, defending player sacrifices a creature with the least power among creatures they control.
+
+### Wither and Bloom {1}{B} | Instant | 
+Target creature gets -3/-3 until end of turn.
+{1}{B}, Exile this card from your graveyard: Put a +1/+1 counter on target creature you control. Activate only as a sorcery.
+
+### Woe Strider {2}{B} | Creature — Horror | 3/2
+When this creature enters, create a 0/1 white Goat creature token.
+Sacrifice another creature: Scry 1.
+Escape—{3}{B}{B}, Exile four other cards from your graveyard. (You may cast this card from your graveyard for its escape cost.)
+This creature escapes with two +1/+1 counters on it.
+
+### Wolfwillow Haven {1}{G} | Enchantment — Aura | 
+Enchant land
+Whenever enchanted land is tapped for mana, its controller adds an additional {G}.
+{4}{G}, Sacrifice this Aura: Create a 2/2 green Wolf creature token. Activate only during your turn.
+
+### Wood Elves {2}{G} | Creature — Elf Scout | 1/1
+When this creature enters, search your library for a Forest card, put that card onto the battlefield, then shuffle.
+
+### Wrack with Madness {3}{R} | Sorcery | 
+Target creature deals damage to itself equal to its power.
+
+### Wrath of the Bloodmane {2}{R} | Instant | 
+This spell costs {1} less to cast if you control a legendary creature.
+Wrath of the Bloodmane deals 4 damage to target creature or planeswalker.
+
+### Wrathful Raptors {4}{R} | Creature — Dinosaur | 5/5
+Trample
+Whenever a Dinosaur you control is dealt damage, it deals that much damage to any target that isn't a Dinosaur.
+
+### Wurmcoil Engine {6} | Artifact Creature — Phyrexian Wurm | 6/6
+Deathtouch, lifelink
+When this creature dies, create a 3/3 colorless Phyrexian Wurm artifact creature token with deathtouch and a 3/3 colorless Phyrexian Wurm artifact creature token with lifelink.
+
+### Wurmcoil Larva {3}{B}{B} | Artifact Creature — Phyrexian Wurm | 3/3
+Deathtouch, lifelink
+When this creature dies, create a 1/2 black Phyrexian Wurm artifact creature token with deathtouch and a 2/1 black Phyrexian Wurm artifact creature token with lifelink.
+
+### Yahenni, Undying Partisan {2}{B} | Legendary Creature — Aetherborn Vampire | 2/2
+Haste
+Whenever a creature an opponent controls dies, put a +1/+1 counter on Yahenni.
+Sacrifice another creature: Yahenni gains indestructible until end of turn.
+
+### Yidaro, Wandering Monster {5}{R}{R} | Legendary Creature — Dinosaur Turtle | 8/8
+Trample, haste
+Cycling {1}{R}
+When you cycle this card, shuffle it into your library from your graveyard. If you've cycled a card named Yidaro, Wandering Monster four or more times this game, put it onto the battlefield from your graveyard instead. (Do this before you draw.)
+
+### Zealous Conscripts {4}{R} | Creature — Human Warrior | 3/3
+Haste
+When this creature enters, gain control of target permanent until end of turn. Untap that permanent. It gains haste until end of turn.
+
+### Zilortha, Strength Incarnate {3}{R}{G} | Legendary Creature — Dinosaur | 7/3
+Trample
+Lethal damage dealt to creatures you control is determined by their power rather than their toughness.
+
+### Zulaport Cutthroat {1}{B} | Creature — Human Rogue Ally | 1/1
+Whenever this creature or another creature you control dies, each opponent loses 1 life and you gain 1 life.
