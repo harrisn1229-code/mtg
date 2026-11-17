@@ -386,10 +386,12 @@ export class Match {
   /* ----- human ----- */
   askHuman(req) {
     this.mode = this.makeMode(req);
+    this.persist();
     return new Promise((resolve) => {
       this._wait = { resolve, req };
       this.skipFx = false;
-      this.enterMode();
+      try { this.enterMode(); } catch (e) { console.error(e); this.openFallback(req); }
+      this.startWatchdog(req);
     });
   }
   submit(ans) {
@@ -428,7 +430,7 @@ export class Match {
   canUndo() {
     if (!this.g || this.g.over || !this.marks.length) return false;
     const top = this.marks[this.marks.length - 1];
-    return !top.locked && !!this._wait;
+    return !top.locked;
   }
   undo() {
     if (!this.canUndo()) { this.toast("Can't undo: cards were drawn or revealed.", { warn: true }); return; }

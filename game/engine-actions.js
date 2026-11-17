@@ -409,7 +409,7 @@ export const actionMethods = {
   },
 
   /** Choose targets for each spec -> [[ids]...] or null if some spec can't be satisfied. */
-  *chooseTargets$(p, specs, src, ctx = {}) {
+  *chooseTargets$(p, specs, src, ctx = {}, effects = null) {
     const out = [];
     for (let i = 0; i < specs.length; i++) {
       const spec = specs[i] || {};
@@ -418,7 +418,7 @@ export const actionMethods = {
       if (cands.length < min) return null;
       if (max <= 0) { out.push([]); continue; }
       const options = cands.map((id) => ({ id, label: isPid(id) ? this.pname(+id.slice(1)) : this.objLabel(this.state.objects[id], p), type: isPid(id) ? "player" : "object" }));
-      const ch = yield* this.choose$(p, { prompt: `Choose ${min === max ? (max === 1 ? "a target" : max + " targets") : `up to ${max} targets`}${spec.text ? ": " + spec.text : ""} for ${src?.c?.name || "ability"}`, options, min, max, reason: "target", source: src?.id });
+      const ch = yield* this.choose$(p, { prompt: `Choose ${min === max ? (max === 1 ? "a target" : max + " targets") : `up to ${max} targets`}${spec.text ? ": " + spec.text : ""} for ${src?.c?.name || "ability"}`, options, min, max, reason: "target", source: src?.id, hint: { kind: "target", index: i, spec, effects: effects || [], chosen: out.map((x) => [...x]) } });
       out.push(ch.map((c) => c.id));
     }
     return out;
@@ -432,11 +432,11 @@ export const actionMethods = {
     if (ms.maxIf && ms.maxIf.cond && this.evalCond(ms.maxIf.cond, { ...ctx, source: src, you: p, quiet: true })) mx = Math.max(mx, ms.maxIf.max | 0);
     const min = Math.min(ms.min ?? 1, modes.length), max = Math.min(mx, avail.length);
     if (avail.length < min || max <= 0) return null;
-    const ch = yield* this.choose$(p, { prompt: `Choose ${min === max ? min : `${min}–${max}`} mode${max > 1 ? "s" : ""} for ${src?.c?.name || "spell"}`, options: avail.map((i) => ({ id: "m" + i, label: modes[i].text || `Mode ${i + 1}`, type: "mode" })), min, max, reason: "mode", source: src?.id });
+    const ch = yield* this.choose$(p, { prompt: `Choose ${min === max ? min : `${min}–${max}`} mode${max > 1 ? "s" : ""} for ${src?.c?.name || "spell"}`, options: avail.map((i) => ({ id: "m" + i, label: modes[i].text || `Mode ${i + 1}`, type: "mode" })), min, max, reason: "mode", source: src?.id, hint: { kind: "mode", modes } });
     const picked = ch.map((c) => +c.id.slice(1)).sort((a, b) => a - b);
     const modeTargets = [];
     for (const i of picked) {
-      const t = modes[i].targets?.length ? yield* this.chooseTargets$(p, modes[i].targets, src, ctx) : [];
+      const t = modes[i].targets?.length ? yield* this.chooseTargets$(p, modes[i].targets, src, ctx, modes[i].effects) : [];
       modeTargets.push(t || []);
     }
     return { modes: picked, modeTargets };
@@ -485,13 +485,13 @@ export const actionMethods = {
       let max = cost.x ? this.maxX(p, cost, { delve: delveN }) : 0;
       if (!cost.x && add0) max = add0.life === "x" || add0.life === "X" ? pl.life : 20;
       if (max < 0) return;
-      x = yield* this.number$(p, `Choose X for ${fd.name}`, 0, max, o.id);
+      x = yield* this.number$(p, `Choose X for ${fd.name}`, 0, max, o.id, { kind: "x", effects: fd.spell?.effects || [] });
     }
     ctx.x = x;
     // targets
     const specs = this.targetSpecsFor(o, fd, v.variant);
     let targets = [];
-    if (specs.length) { const t = yield* this.chooseTargets$(p, specs, o, ctx); if (!t) return; targets = t; }
+    if (specs.length) { const t = yield* this.chooseTargets$(p, specs, o, ctx, fd.subtypes.includes("aura") ? [{ op: "_aura" }] : fd.spell?.effects || []); if (!t) return; targets = t; }
     // pay
     let total = { ...cost, generic: cost.generic + x * cost.x, x: 0 };
     if (delveN && total.generic > 0) {
@@ -555,10 +555,10 @@ export const actionMethods = {
       else if (cost.removeCounters) max = o.counters[cost.removeCounters.kind || "+1/+1"] | 0;
       else max = 20;
       if (max < 0) return;
-      ctx.x = yield* this.number$(p, `Choose X for ${o.c.name}`, 0, max, o.id);
+      ctx.x = yield* this.number$(p, `Choose X for ${o.c.name}`, 0, max, o.id, { kind: "x", effects: ab.effects || [], loyalty: cost.loyalty != null });
     }
     let targets = [];
-    if (ab.targets && ab.targets.length) { const t = yield* this.chooseTargets$(p, ab.targets, o, ctx); if (!t) return; targets = t; }
+    if (ab.targets && ab.targets.length) { const t = yield* this.chooseTargets$(p, ab.targets, o, ctx, ab.effects); if (!t) return; targets = t; }
     if (!this.canPayCost(p, cost, o, ctx)) { this.log(`${this.pname(p)} can't pay for ${o.c.name}'s ability`); return; }
     const ok = yield* this.payCost$(p, cost, ctx);
     if (!ok) return;

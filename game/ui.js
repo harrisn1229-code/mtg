@@ -45,6 +45,7 @@ export function loadCss() {
 const TRIM_DROP = ["prices", "finishes", "set_name", "released", "rarity"];
 const trim = (c) => { const o = {}; Object.keys(c).forEach((k) => { if (TRIM_DROP.indexOf(k) < 0) o[k] = c[k]; }); return o; };
 const trimDeck = (d) => ({ commanders: d.commanders.map(trim), cards: d.cards.map(trim) });
+const canPlay = (d) => d.count > 0 && (!d.missing || d.count >= 40);
 const shortName = (d) => String(d.name || "").split(" — ")[0];
 const ago = (ts) => {
   const m = Math.max(0, Math.round((Date.now() - ts) / 60000));
@@ -77,6 +78,7 @@ async function openMatch(ctx, o) {
     onExit: (reason) => { ctx.onExit && ctx.onExit(reason); },
   });
   ctx.match = m;
+  if (lsGet("debug", false)) window.__mtgMatch = m;
   await m.open(!!o.restoring);
   return m;
 }
@@ -103,8 +105,8 @@ export async function mountLobby(screen, opts) {
   const pref = loadLobby();
   L.pref = pref;
   if (opts.deckId && L.decks.some((d) => d.id === opts.deckId)) pref.deckId = opts.deckId;
-  if (!L.decks.some((d) => d.id === pref.deckId && d.playable)) pref.deckId = (L.decks.find((d) => d.playable) || {}).id || "";
-  if (pref.oppId !== "random" && !L.decks.some((d) => d.id === pref.oppId && d.playable)) pref.oppId = "random";
+  if (!L.decks.some((d) => d.id === pref.deckId && canPlay(d))) pref.deckId = (L.decks.find((d) => canPlay(d)) || {}).id || "";
+  if (pref.oppId !== "random" && !L.decks.some((d) => d.id === pref.oppId && canPlay(d))) pref.oppId = "random";
   wire(screen);
   draw(L);
   return L;
@@ -116,10 +118,11 @@ function topbar(title, sub) {
 
 function deckCard(d, app, selected, kind) {
   const full = (app.state.decks || []).find((x) => x.id === d.id) || {};
-  const title = d.commander || shortName(d);
-  const sub = full.archetype || (d.name.split(" — ")[1] || cap(d.format || ""));
-  const why = d.playable ? "" : (d.count === 0 ? "This deck is empty." : (typeof d.missing === "number" ? d.missing : (d.missing || []).length) + " cards couldn’t be found in your collection data.");
-  return '<button class="dk' + (selected ? " on" : "") + (d.playable ? "" : " off") + '" data-lb="' + kind + '" data-id="' + esc(d.id) + '" aria-pressed="' + selected + '"' + (d.playable ? "" : " disabled") + ">" +
+  const title = d.name || shortName(d);
+  const sub = d.commander || full.archetype || cap(d.format || "");
+  const miss = typeof d.missing === "number" ? d.missing : (d.missing || []).length;
+  const why = !canPlay(d) ? (d.count === 0 ? "This deck is empty." : miss + " cards couldn’t be loaded (open the app online once to fetch them).") : (miss ? miss + " cards couldn’t be loaded (open the app online once to fetch them). You can still play." : "");
+  return '<button class="dk' + (selected ? " on" : "") + (canPlay(d) ? "" : " off") + '" data-lb="' + kind + '" data-id="' + esc(d.id) + '" aria-pressed="' + selected + '"' + (canPlay(d) ? "" : " disabled") + ">" +
     '<span class="dk-art"' + (d.art ? ' style="background-image:url(&quot;' + esc(artCrop(d.art)) + '&quot;)"' : "") + "></span>" +
     '<span class="dk-in"><b>' + esc(title) + '</b><small>' + esc(sub) + '</small><span class="dk-m">' + pipsOfColors(d.identity) + '<span class="num">' + d.count + " cards</span></span>" + (why ? '<em class="dk-why">' + esc(why) + "</em>" : "") + "</span></button>";
 }
@@ -130,7 +133,7 @@ function seg(key, label, opts, cur) {
 
 function draw(L) {
   const { screen, app, pref } = L;
-  const playable = L.decks.filter((d) => d.playable);
+  const playable = L.decks.filter((d) => canPlay(d));
   const save = loadSave();
   const you = L.decks.find((d) => d.id === pref.deckId);
   let h = topbar("Play", "Test your decks against the AI") + '<div class="page narrow lb">';
@@ -142,14 +145,14 @@ function draw(L) {
   h += '<div class="sect"><h2>Your deck</h2></div>';
   h += playable.length || L.decks.length ? '<div class="lb-decks">' + L.decks.map((d) => deckCard(d, app, d.id === pref.deckId, "you")).join("") + "</div>" : '<div class="empty"><b>No decks yet</b>Build a deck first, then come back to play it.<br><a class="btn pri" href="#/decks">Go to decks</a></div>';
   h += '<div class="sect"><h2>Opponent</h2></div><div class="chips scroll lb-opps"><button class="chip" data-lb="opp" data-id="random" aria-pressed="' + (pref.oppId === "random") + '">Random deck</button>' +
-    playable.map((d) => '<button class="chip" data-lb="opp" data-id="' + esc(d.id) + '" aria-pressed="' + (pref.oppId === d.id) + '">' + esc(d.commander || shortName(d)) + "</button>").join("") + "</div>";
+    playable.map((d) => '<button class="chip" data-lb="opp" data-id="' + esc(d.id) + '" aria-pressed="' + (pref.oppId === d.id) + '">' + esc(d.name || shortName(d)) + "</button>").join("") + "</div>";
   h += '<div class="sect"><h2>Rules</h2></div><div class="panel pad lb-opt">' +
     seg("difficulty", "Difficulty", [["easy", "Easy"], ["normal", "Normal"], ["hard", "Hard"]], pref.difficulty) +
     seg("life", "Starting life", [["auto", "Auto"], ["20", "20"], ["30", "30"], ["40", "40"]], pref.life) +
     seg("first", "Goes first", [["random", "Random"], ["you", "You"], ["ai", "AI"]], pref.first) +
     '<div class="lb-row"><span class="lb-l">Free first mulligan</span><button class="tg' + (pref.freeMulligan ? " on" : "") + '" role="switch" aria-checked="' + !!pref.freeMulligan + '" data-lb="mull" aria-label="Free first mulligan"><i></i></button></div></div>';
   h += '<details class="lb-cov" id="lbCov"' + (L._covOpen ? " open" : "") + '><summary>Cards that are only partly automated</summary><div class="lb-cov-b" id="lbCovB">' + covHtml(L, you) + "</div></details>";
-  h += '<div class="lb-cta"><button class="btn pri block lb-play" data-lb="play"' + (you ? "" : " disabled") + '>' + (you ? "Play " + esc(you.commander || shortName(you)) : "Pick a deck") + "</button></div>";
+  h += '<div class="lb-cta"><button class="btn pri block lb-play" data-lb="play"' + (you ? "" : " disabled") + '>' + (you ? "Play" : "Pick a deck") + "</button></div>";
   h += statsHtml(L);
   h += "</div>";
   screen.innerHTML = h;
@@ -234,7 +237,7 @@ async function startNew(L, btn) {
   btn.innerHTML = '<span class="spin" style="width:16px;height:16px"></span> Shuffling up…';
   try {
     const be = L.be;
-    const pool = L.decks.filter((d) => d.playable);
+    const pool = L.decks.filter((d) => canPlay(d));
     let opp = pool.find((d) => d.id === pref.oppId);
     if (!opp) opp = pool[Math.floor(Math.random() * pool.length)] || you;
     const yb = be.buildDeck(L.app.state, you.id), ob = be.buildDeck(L.app.state, opp.id);

@@ -198,6 +198,74 @@ export const sheetMethods = {
   act_mullNo() { if (this.mode && this.mode.kind === "mulligan") { this.closeDialogSheets(); this.submit({ keep: false }); } },
 
   /* ---------- pause / settings ---------- */
+
+  /* ---------- watchdog fallback: a plain list that can answer ANY pending request ---------- */
+  openFallback(req) {
+    req = req || (this._wait && this._wait.req);
+    if (!req || this.closed) return;
+    this.closeDialogSheets();
+    const nm = (id) => { const o = id != null && typeof id !== "object" ? this.S.objects[oid(id)] : id && id.c ? id : null; return o && o.c ? o.c.name : /^P\d$/.test(String(id)) ? (this.S.players[+String(id)[1]] || {}).name || String(id) : String(oid(id)); };
+    const sel = new Set(), blocks = {};
+    let value = req.min || 0, body = "", chk = null;
+    const A = (act, label, cls, extra) => '<button class="mbtn ' + (cls || "") + '" data-fb="' + act + '"' + (extra || "") + ">" + esc(label) + "</button>";
+    switch (req.kind) {
+      case "priority":
+        body = (req.actions || []).map((a, i) => A("act", (a.label || a.type) + (a.cost ? " (" + a.cost + ")" : ""), a.mana ? "" : "pri", ' data-i="' + i + '"')).join("") + A("pass", "Pass priority");
+        break;
+      case "choose":
+        body = '<p class="sub">Choose ' + (req.min === req.max ? req.min : req.min + "–" + req.max) + "</p>" + (req.options || []).map((o, i) => A("tog", o.label || nm(o.id), "", ' data-i="' + i + '" aria-pressed="false"')).join("") + A("done", "Confirm", "pri", " disabled");
+        chk = () => sel.size >= req.min && sel.size <= req.max;
+        break;
+      case "attackers":
+        body = (req.candidates || []).map((c, i) => A("tog", "Attack with " + nm(c.obj), "", ' data-i="' + i + '" aria-pressed="false"')).join("") + A("done", "Declare attackers", "pri");
+        break;
+      case "blockers":
+        body = (req.candidates || []).map((c, i) => '<label class="fbrow">' + esc(nm(c.obj)) + ' blocks <select data-fbsel="' + i + '"><option value="">nothing</option>' + (c.canBlock || []).map((a) => '<option value="' + esc(String(oid(a))) + '">' + esc(nm(a)) + "</option>").join("") + "</select></label>").join("") + A("done", "Declare blockers", "pri");
+        break;
+      case "confirm": body = A("yes", "Yes", "pri") + A("no", "No"); break;
+      case "mulligan": body = A("keep", "Keep this hand", "pri") + A("mull", "Mulligan"); break;
+      case "number": body = '<input class="fbnum" type="number" inputmode="numeric" min="' + req.min + '" max="' + req.max + '" value="' + value + '" aria-label="Number">' + A("done", "Confirm", "pri"); break;
+      default: body = A("dflt", "Continue", "pri");
+    }
+    const rec = this.sheetHtml('<h2>' + esc(req.prompt || "Your decision") + '</h2><div class="fblist">' + body + "</div>", { cls: "picker fallback", dialog: true, label: "Decision" });
+    const done = (ans) => { this.closeDialogSheets(); this.submit(ans); };
+    const sync = () => { const b = rec.body.querySelector('[data-fb="done"]'); if (b && chk) b.disabled = !chk(); rec.body.querySelectorAll('[data-fb="tog"]').forEach((t) => { const on = sel.has(+t.dataset.i); t.classList.toggle("sel", on); t.setAttribute("aria-pressed", on); }); };
+    rec.body.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-fb]"); if (!b) return;
+      const k = b.dataset.fb, i = +b.dataset.i;
+      if (k === "act") done({ type: "act", index: i });
+      else if (k === "pass") done({ type: "pass" });
+      else if (k === "tog") { if (sel.has(i)) sel.delete(i); else sel.add(i); sync(); }
+      else if (k === "yes" || k === "no") done({ yes: k === "yes" });
+      else if (k === "keep" || k === "mull") done({ keep: k === "keep" });
+      else if (k === "dflt") done(this.fallbackAnswer(req));
+      else if (k === "done") {
+        if (req.kind === "choose") done({ chosen: [...sel] });
+        else if (req.kind === "attackers") done({ attacks: [...sel].map((j) => ({ obj: req.candidates[j].obj, defender: req.candidates[j].defenders[0] })) });
+        else if (req.kind === "blockers") done({ blocks: (req.candidates || []).map((c, j) => blocks[j] ? { obj: c.obj, attacker: (c.canBlock || []).find((a) => String(oid(a)) === blocks[j]) } : null).filter(Boolean) });
+        else if (req.kind === "number") { const v = +rec.body.querySelector(".fbnum").value; done({ value: Math.max(req.min, Math.min(req.max, isNaN(v) ? req.min : v)) }); }
+      }
+    });
+    rec.body.addEventListener("change", (e) => { const s2 = e.target.closest("[data-fbsel]"); if (s2) blocks[+s2.dataset.fbsel] = s2.value; });
+    sync();
+  },
+  /* True when the human can currently see and act on the pending request. */
+  presentable() {
+    if (this.sheets.length) return true;
+    const m = this.mode;
+    if (!m) return false;
+    const go = this.el.go;
+    return !!(go && !go.hidden && go.offsetParent !== null);
+  },
+  startWatchdog(req) {
+    clearTimeout(this._wd);
+    const tick = () => {
+      if (this.closed || !this._wait || this._wait.req !== req) return;
+      if (!this.presentable()) { console.warn("watchdog: request not presentable", req.kind, req.reason); this.openFallback(req); }
+      this._wd = setTimeout(tick, 2500);
+    };
+    this._wd = setTimeout(tick, 1500);
+  },
   openPause() {
     if (this._pauseRec && this.sheets.indexOf(this._pauseRec) >= 0) { this.removeSheet(this._pauseRec); return; }
     const over = this.g.over;
@@ -205,11 +273,13 @@ export const sheetMethods = {
       '<button class="mbtn pri" data-act="close">Resume</button>' +
       '<button class="mbtn" data-act="openSettings">Settings</button>' +
       (!over ? '<button class="mbtn" data-act="pauseUndo"' + (this.canUndo() ? "" : " disabled") + ">Undo last action</button>" : "") +
+      (!over && this._wait ? '<button class="mbtn" data-act="pauseFallback">Show options as a list</button>' : "") +
       '<button class="mbtn" data-act="pauseLog">Game log</button><button class="mbtn" data-act="pauseEmote">Emote</button>' +
       (!over ? '<button class="mbtn danger" data-act="askConcede">Concede</button><button class="mbtn danger" data-act="askRestart">Restart match</button>' : "") +
       '<button class="mbtn" data-act="quit">Quit to lobby</button></div><p class="sub">Your match is saved automatically.</p>';
     this._pauseRec = this.sheetHtml(html, { cls: "small", label: "Paused" });
   },
+  act_pauseFallback() { this.closeAllSheets(); this.openFallback(); },
   act_pauseUndo() { this.closeAllSheets(); this.undo(); },
   act_pauseEmote() { this.closeAllSheets(); this.openEmote(); },
   act_pauseLog() { this.closeAllSheets(); this.openLog(); },

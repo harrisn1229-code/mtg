@@ -97,7 +97,7 @@ export const effectMethods = {
         const objs = this.find(ref.filter ?? {}, ref.chooser ? cctx : ctx);
         const min = Math.min(this.amount(ref.min ?? 1, ctx), objs.length);
         const max = Math.min(this.amount(ref.max ?? ref.min ?? 1, ctx), objs.length);
-        const picked = yield* this.chooseObjects$(chooser, objs, { prompt: ref.prompt || "Choose", min, max, reason: ref.reason || "generic", source: ctx.source?.id });
+        const picked = yield* this.chooseObjects$(chooser, objs, { prompt: ref.prompt || "Choose", min, max, reason: ref.reason || "generic", source: ctx.source?.id, hint: { kind: "choose", effects: this._curEffect ? [this._curEffect] : [], ref } });
         out.push(...picked.map((o) => o.id));
       }
       return out;
@@ -254,12 +254,14 @@ export const effectMethods = {
     const fn = OPS[String(e.op) + "$"];
     if (!fn) { (ctx.manaAbility ? this.manualOnce : this.manual).call(this, ctx.source, e.text || `Not automated: ${e.op}`); return; }
     this.beginBatch();
+    const prevEff = this._curEffect;
+    this._curEffect = e;
     try {
       yield* fn.call(this, e, ctx);
     } catch (err) {
       if (err && err.engineFatal) throw err;
       this.manual(ctx.source, `${e.text || e.op}: could not be automated (${err && err.message})`);
-    }
+    } finally { this._curEffect = prevEff; }
   },
 
   /** Players named by `who` (default you), APNAP ordered. */
@@ -455,7 +457,7 @@ const OPS = {
         const cost = typeof e.unlessPay === "object" && !e.unlessPay.generic && e.unlessPay.mana ? e.unlessPay.mana : e.unlessPay;
         const pc = typeof cost === "string" ? parseManaCost(cost) : parseManaCost(costFromAmount(this.amount(cost, ctx)));
         if (this.canPayMana(o.controller, pc)) {
-          const yes = yield* this.confirm$(o.controller, `Pay ${typeof cost === "string" ? cost : `{${this.amount(cost, ctx)}}`} to keep ${o.c.name} from being countered?`, ctx.source?.id);
+          const yes = yield* this.confirm$(o.controller, `Pay ${typeof cost === "string" ? cost : `{${this.amount(cost, ctx)}}`} to keep ${o.c.name} from being countered?`, ctx.source?.id, { kind: "payToKeep", obj: o.id });
           if (yes && (yield* this.payMana$(o.controller, pc))) { this.log(`${this.pname(o.controller)} pays to keep ${o.c.name}`); continue; }
         }
       }
@@ -610,7 +612,7 @@ const OPS = {
     const costOk = !e.cost || this.canPayCost(p, e.cost, ctx.source, ctx);
     if (costOk) {
       const label = e.text || e.prompt || (e.cost ? `Pay ${describeCost(e.cost)}?` : `${ctx.source?.c?.name || "Effect"}: do it?`);
-      yes = yield* this.confirm$(p, label, ctx.source?.id);
+      yes = yield* this.confirm$(p, label, ctx.source?.id, { kind: "may", effects: e.effects || [], cost: e.cost || null, else: e.else || null, who: p });
       if (yes && e.cost) yes = yield* this.payCost$(p, e.cost, { ...ctx, you: p });
     }
     ctx.did = yes;
@@ -623,12 +625,12 @@ const OPS = {
     if (!modes.length) return;
     const opts = modes.map((m, i) => ({ id: "m" + i, label: m.text || `Mode ${i + 1}`, type: "mode" }));
     const min = Math.min(e.min ?? 1, modes.length), max = Math.min(e.max ?? min, modes.length);
-    const ch = yield* this.choose$(ctx.you, { prompt: "Choose mode", options: opts, min, max, reason: "mode", source: ctx.source?.id });
+    const ch = yield* this.choose$(ctx.you, { prompt: "Choose mode", options: opts, min, max, reason: "mode", source: ctx.source?.id, hint: { kind: "mode", modes } });
     for (const c of ch) {
       const m = modes[+c.id.slice(1)];
       let targets = [];
       if (m.targets && m.targets.length) {
-        const t = yield* this.chooseTargets$(ctx.you, m.targets, ctx.source, { ...ctx });
+        const t = yield* this.chooseTargets$(ctx.you, m.targets, ctx.source, { ...ctx }, m.effects);
         if (!t) continue;
         targets = t;
       }
@@ -681,7 +683,7 @@ const OPS = {
       if (top.c.types.includes("land")) this.moveObj(top, "hand");
       else {
         if (o.zone === "battlefield") this.addCounters(o, "+1/+1", 1);
-        const gy = yield* this.confirm$(p, `Put ${top.c.name} into your graveyard?`, o.id);
+        const gy = yield* this.confirm$(p, `Put ${top.c.name} into your graveyard?`, o.id, { kind: "explore", card: top.id });
         if (gy) this.moveObj(top, "graveyard");
       }
     }
@@ -747,7 +749,7 @@ const OPS = {
     if (!o || o.zone !== "battlefield") return;
     o.echoDue = false;
     const cost = parseManaCost(e.cost);
-    if (this.canPayMana(o.controller, cost) && (yield* this.confirm$(o.controller, `Pay echo ${e.cost} for ${o.c.name}?`, o.id)) && (yield* this.payMana$(o.controller, cost))) return;
+    if (this.canPayMana(o.controller, cost) && (yield* this.confirm$(o.controller, `Pay echo ${e.cost} for ${o.c.name}?`, o.id, { kind: "echo" })) && (yield* this.payMana$(o.controller, cost))) return;
     this.sacrifice(o);
   },
   *_storm$(e, ctx) {
@@ -762,10 +764,10 @@ const OPS = {
     if (!target || target.zone !== "stack") return;
     const p = target.controller;
     const cost = String(e.cost || "{0}");
-    if (/life/i.test(cost)) { const n = +(cost.match(/\d+/) || [0])[0]; if (this.state.players[p].life > n && (yield* this.confirm$(p, `Pay ${n} life for ward?`, ctx.source?.id))) { this.loseLife(p, n); return; } }
+    if (/life/i.test(cost)) { const n = +(cost.match(/\d+/) || [0])[0]; if (this.state.players[p].life > n && (yield* this.confirm$(p, `Pay ${n} life for ward?`, ctx.source?.id, { kind: "ward", obj: target.id }))) { this.loseLife(p, n); return; } }
     else {
       const pc = parseManaCost(cost);
-      if (this.canPayMana(p, pc) && (yield* this.confirm$(p, `Pay ward ${cost} for ${ctx.source?.c?.name}?`, ctx.source?.id)) && (yield* this.payMana$(p, pc))) return;
+      if (this.canPayMana(p, pc) && (yield* this.confirm$(p, `Pay ward ${cost} for ${ctx.source?.c?.name}?`, ctx.source?.id, { kind: "ward", obj: target.id })) && (yield* this.payMana$(p, pc))) return;
     }
     this.counterObj(target, ctx.source);
   },

@@ -435,7 +435,7 @@ export const renderMethods = {
     });
     box.hidden = !ids.length;
     this.root.classList.toggle("has-stack", ids.length > 0);
-    if (!ids.length) { box.innerHTML = ""; this._skSig = ""; return; }
+    if (!ids.length) { box.innerHTML = ""; box._list = null; this._skSig = ""; return; }
     if (!box._list) {
       box.innerHTML = '<div class="sk-head"><b></b><span></span></div><div class="sk-list"></div><div class="sk-cap"></div>';
       box._head = box.querySelector(".sk-head b"); box._more = box.querySelector(".sk-head span"); box._list = box.querySelector(".sk-list"); box._cap = box.querySelector(".sk-cap");
@@ -596,7 +596,7 @@ export const renderMethods = {
       s.bf.style.setProperty("--landh", landH + "px");
       // permanents: wrap, largest card that fits
       const availH = H - landH - 8 - (nL ? 4 : 0) - 14;
-      const minCw = isLand ? 36 : 44;
+      const minCw = isLand ? 36 : 38;
       let cw = minCw, scroll = true;
       const maxCw = this.root.dataset.orient === "wide" ? 104 : this.root.dataset.orient === "land" ? 66 : 84;
       const scale = { s: 0.86, m: 1, l: 1.14 }[this.settings.cardSize || "m"];
@@ -610,6 +610,15 @@ export const renderMethods = {
       }
       if (nP === 0) cw = Math.max(minCw, Math.min(top, 74));
       s.bf.style.setProperty("--cw", cw + "px");
+      s.perm.classList.remove("scroll");
+      s.perm.style.alignContent = "flex-start"; // centered overflow hides its top half from scrollHeight
+      // measure the real wrapped height and shrink until nothing is clipped
+      for (let guard = 0; nP && guard < 14 && cw > minCw && s.perm.scrollHeight > s.perm.clientHeight + 1; guard++) {
+        cw = Math.max(minCw, cw - 2);
+        s.bf.style.setProperty("--cw", cw + "px");
+      }
+      scroll = !!nP && s.perm.scrollHeight > s.perm.clientHeight + 1;
+      s.perm.style.alignContent = "";
       s.perm.classList.toggle("scroll", scroll);
       if (p === this.me) this._cw = cw;
     });

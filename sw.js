@@ -5,10 +5,10 @@
    Fetches skip the browser's HTTP cache (GitHub Pages lets it keep files for
    10 minutes), so an update is picked up on the next launch, not 10 minutes later. */
 const PREFIX = "mtg-";
-const VERSION = PREFIX + "v1.1.0";
+const VERSION = PREFIX + "v1.1.1";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png", "./data/seed.json"];
 // Game files are cached one by one so a file that does not exist yet never blocks the install.
-const GAME = ["./game/ui.js", "./game/ui-card.js", "./game/ui-fx.js", "./game/ui-input.js", "./game/ui-match.js", "./game/ui-render.js", "./game/ui-shared.js", "./game/ui-sheets.js", "./game/ui-sound.js", "./game/ui-store.js", "./game/game.css", "./game/engine.js", "./game/engine-chars.js", "./game/engine-effects.js", "./game/engine-mana.js", "./game/engine-util.js", "./game/parser.js", "./game/parser-effects.js", "./game/parser-filters.js", "./game/overrides.js", "./game/overrides-1.js", "./game/overrides-2.js", "./game/decks.js", "./game/ai.js"];
+const GAME = ["./game/ai.js", "./game/decks.js", "./game/engine-actions.js", "./game/engine-chars.js", "./game/engine-combat.js", "./game/engine-effects.js", "./game/engine-mana.js", "./game/engine-util.js", "./game/engine.js", "./game/overrides-1.js", "./game/overrides-2.js", "./game/overrides.js", "./game/parser-effects.js", "./game/parser-filters.js", "./game/parser.js", "./game/ui-card.js", "./game/ui-fx.js", "./game/ui-input.js", "./game/ui-match.js", "./game/ui-render.js", "./game/ui-shared.js", "./game/ui-sheets.js", "./game/ui-sound.js", "./game/ui-store.js", "./game/ui.js", "./game/game.css"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(SHELL.map((u) => new Request(u, { cache: "reload" }))).then(() => Promise.all(GAME.map((u) => cache.add(new Request(u, { cache: "reload" })).catch(() => {}))))));

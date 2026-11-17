@@ -82,3 +82,22 @@ Files: `engine.js` (core, API, triggers, SBA, turns) + `engine-util.js`, `engine
 - (engine, later) Parser extensions now consumed: trigger `who:"equipped"|"enchanted"`, `cast{orCopy}` (copies fire `cast` with `copy:true`), `dealsCombatDamage{batch:true}` (one event per damaged player per damage step; `{event:"amount"}` = total from matching sources), `{sum,of}`, `until` with Ref `affects`, `addMana{color,n}`, `keywords.escapeExile`, `ModeSet.maxIf`, Amount-valued token P/T.
   `entersTapped.unlessPay` is approximated: the land enters tapped and a trigger asks "pay X to untap it?" (same outcome for shocklands).
 - Note: Node 22 `node --test game/test/` (a directory) errors; use `node --test game/test/*.test.js`.
+
+## Override agent: engine requests
+(append-only; written by the overrides agent. Each item lists the card(s), the missing hook, and what the override does meanwhile. Overrides gate speculative IR behind `CAPS` in `game/overrides-1.js`; flip the flag once the hook exists.)
+- **Static `{type:"lethalByPower"}`** (Zilortha, Strength Incarnate): SBA and combat damage assignment treat "lethal" as power instead of toughness for the controller's creatures. Meanwhile the line stays in `unparsed` (card is a 7/3 trampler). Flag: `CAPS.lethalByPower`.
+- **Cond `{type:"compare", a:Amount, op, b:Amount}`** plus Amounts `{startingLife:true}`, `{lifeGainedThisTurn:Ref}`, `{devotion:[colors]}` (Heliod and Purphoros "isn't a creature below devotion 5" via `asType{setTypes}` + this cond; Righteous Valkyrie uses `life>=47` with the existing `life` cond; Resplendent Angel uses a `run` script that reads `lifeGainedThisTurn`). Flag: `CAPS.compareCond`.
+- **`g.castFree$(p, obj, opts)`** (Etali, Kari Zev's Expertise, Mosswort Bridge): cast without paying the mana cost, using the normal target/mode prompts. Overrides carry a local fallback that handles permanents and simple spells.
+- **Fellwar Stone**: mana solver should know "any colour an opponent's land could produce" (the override's `run` ability works only when activated manually).
+- **Static `{type:"cantGainLife", who:"opponent"}`** (Tibalt, Rakish Instigator). Line stays flagged; -2 Devil works. Flag: `CAPS.cantGainLife`.
+- **Static "activate abilities as though haste"** (Thousand-Year Elixir).
+- **Event `zoneChange{from,to}` for card objects** (Syr Konrad: creature card put into a graveyard from anywhere but the battlefield / leaving your graveyard). The "another creature dies" part is implemented.
+- **Event `abilityActivated{source,isMana}` + copy-ability on the stack** (Rings of Brighthearth, Illusionist's Bracers).
+- **Mana spent tracking and restrictions** (`manaSpent` provenance; "spend this mana only to ..."): Secluded Courtyard, Path of Ancestry's scry, Topiary Lecturer (Increment). Overrides remove the unrestricted any-colour mana rather than hand out unrestricted mana.
+- **Enters-as-copy and "as this enters, choose" replacement hooks** (Spark Double; Outpost Siege's choice is stored by a script on resolution; Secluded Courtyard's creature-type choice).
+- **Phasing** (Teferi's Protection phases permanents out; the override gives protection from everything + life lock only and keeps the phasing line flagged).
+- **Mutate, morph / face-down** (Everquill Phoenix, Gemrazer, Grim Haruspex). UIs should hide `obj.faceDown` cards (Mosswort Bridge's hideaway sets it).
+- **Spectacle** alternative cost (Light Up the Stage), **craft** (Tithing Blade // Consuming Sepulcher).
+- **Triggered mana abilities** (Wolfwillow Haven's extra {G} when the enchanted land is tapped for mana).
+- **Bug**: `may{cost:{sac:...}}` does not propagate `ctx.sacrificed` to the `then` effects (the Ruthless Technomancer override works around it).
+- **Parser mis-parse found (fixed by override)**: `control` Cond only counts your permanents unless `filter.controller` is set, so "if no creatures are on the battlefield" (Pyrohemia) parsed wrongly. Parser should emit `{type:"count"}` for unqualified "are on the battlefield"/"exist" conditions.

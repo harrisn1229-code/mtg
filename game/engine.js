@@ -325,6 +325,7 @@ export class Game {
     const req = { kind: "choose", player: p, prompt: o.prompt || "Choose", options, min, max, reason: o.reason || "generic" };
     if (o.ordered) req.ordered = true;
     if (o.source) req.source = o.source;
+    setHint(req, o.hint || (this._curEffect ? { kind: "effect", effects: [this._curEffect] } : null));
     const ans = yield req;
     return ans.chosen.map((i) => options[i]);
   }
@@ -344,18 +345,20 @@ export class Game {
     if (x.zone === "graveyard" && x.owner !== viewer) return `${name} (${this.pname(x.owner)}'s graveyard)`;
     return name;
   }
-  *confirm$(p, prompt, source) {
+  *confirm$(p, prompt, source, hint) {
     if (this.over) return false;
     const req = { kind: "confirm", player: p, prompt: String(prompt || "Confirm?") };
     if (source) req.source = source;
+    setHint(req, hint);
     const ans = yield req;
     return ans.yes;
   }
-  *number$(p, prompt, min, max, source) {
+  *number$(p, prompt, min, max, source, hint) {
     min = Math.floor(min) || 0; max = Math.max(min, Math.floor(max) || 0);
     if (min === max || this.over) return min;
     const req = { kind: "number", player: p, prompt: String(prompt || "Choose a number"), min, max };
     if (source) req.source = source;
+    setHint(req, hint);
     const ans = yield req;
     return ans.value;
   }
@@ -1007,7 +1010,7 @@ export class Game {
       modes = r.modes; modeTargets = r.modeTargets;
     }
     if (ab.targets && ab.targets.length) {
-      const r = yield* this.chooseTargets$(t.controller, ab.targets, source, ctx);
+      const r = yield* this.chooseTargets$(t.controller, ab.targets, source, ctx, ab.effects);
       if (!r) { this.log(`${srcName}'s triggered ability has no legal targets`); return; }
       targets = r;
     }
@@ -1085,7 +1088,7 @@ export class Game {
       for (const [, list] of groups) {
         if (list.length < 2) continue;
         const p = list[0].controller;
-        const keep = yield* this.chooseObjects$(p, list, { prompt: `Legend rule: choose the ${list[0].c.name} to keep`, min: 1, max: 1, reason: "generic" });
+        const keep = yield* this.chooseObjects$(p, list, { prompt: `Legend rule: choose the ${list[0].c.name} to keep`, min: 1, max: 1, reason: "generic", hint: { kind: "keep" } });
         for (const o of list) if (o !== keep[0] && o.zone === "battlefield") this.moveObj(o, "graveyard");
         acted = true;
       }
@@ -1095,7 +1098,7 @@ export class Game {
         if (!o || !o.cmdPending) continue;
         o.cmdPending = false;
         if (!["graveyard", "exile", "hand", "library"].includes(o.zone)) continue;
-        const yes = yield* this.confirm$(o.owner, `Return ${o.c.name} to the command zone?`, o.id);
+        const yes = yield* this.confirm$(o.owner, `Return ${o.c.name} to the command zone?`, o.id, { kind: "commander" });
         if (yes) { this.moveObj(o, "command"); acted = true; }
       }
       // ring-bearer validity
@@ -1221,7 +1224,7 @@ export class Game {
     if (!this.pruneTargets(a, ctx)) { this.emit({ t: "countered", obj: a.id, text: `${name} is removed (all targets illegal)` }); return; }
     if (ab.condition && a.trigger) { let ok = false; try { ok = this.evalCond(ab.condition, ctx); } catch { ok = false; } if (!ok) { this.log(`${name}: condition no longer true`); return; } }
     if (ab.optional) {
-      const yes = yield* this.confirm$(a.controller, `${a.c.name.replace(/ (trigger|ability)$/, "")}: ${ab.text ? shorten(ab.text, 90) : "use this ability"}?`, a.sourceId);
+      const yes = yield* this.confirm$(a.controller, `${a.c.name.replace(/ (trigger|ability)$/, "")}: ${ab.text ? shorten(ab.text, 90) : "use this ability"}?`, a.sourceId, { kind: "may", effects: ab.effects || [] });
       if (!yes) return;
     }
     this.emit({ t: "resolve", obj: a.id, text: `${name} resolves` });
@@ -1348,7 +1351,7 @@ export class Game {
     const cands = st.battlefield.map((id) => st.objects[id]).filter((o) => o.controller === p && o.c.types.includes("creature"));
     let bearer = null;
     if (cands.length) {
-      const ch = yield* this.chooseObjects$(p, cands, { prompt: "The Ring tempts you — choose your Ring-bearer", min: 1, max: 1, reason: "generic" });
+      const ch = yield* this.chooseObjects$(p, cands, { prompt: "The Ring tempts you — choose your Ring-bearer", min: 1, max: 1, reason: "generic", hint: { kind: "ringBearer" } });
       bearer = ch[0] || null;
     }
     pl.ring.bearer = bearer ? bearer.id : null;
@@ -1540,6 +1543,10 @@ export function publicAction(a) {
 function stepLabel(s) {
   return { untap: "Untap step", upkeep: "Upkeep", draw: "Draw step", main1: "Main phase 1", beginCombat: "Beginning of combat", declareAttackers: "Declare attackers",
     declareBlockers: "Declare blockers", combatDamage: "Combat damage", firstStrikeDamage: "First-strike damage", endCombat: "End of combat", main2: "Main phase 2", end: "End step", cleanup: "Cleanup" }[s] || s;
+}
+/** Attach AI context to a request as a non-enumerable `_hint` (invisible to JSON / the UI). */
+function setHint(req, hint) {
+  if (hint) Object.defineProperty(req, "_hint", { value: hint, enumerable: false, writable: true, configurable: true });
 }
 function shorten(t, n = 70) { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; }
 export { shorten, stepLabel };
