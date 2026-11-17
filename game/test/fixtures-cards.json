@@ -1,0 +1,510 @@
+{
+ "Revel in Riches": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Revel in Riches",
+  "set": "xln",
+  "set_name": "Ixalan",
+  "cn": "117",
+  "rarity": "rare",
+  "released": "2017-09-29",
+  "mana_cost": "{4}{B}",
+  "cmc": 5,
+  "type_line": "Enchantment",
+  "oracle_text": "Whenever a creature an opponent controls dies, create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")\nAt the beginning of your upkeep, if you control ten or more Treasures, you win the game.",
+  "colors": [
+   "B"
+  ],
+  "color_identity": [
+   "B"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  }
+ },
+ "Black Market Connections": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Black Market Connections",
+  "set": "msc",
+  "set_name": "Marvel Super Heroes Commander",
+  "cn": "155",
+  "rarity": "rare",
+  "released": "2026-06-26",
+  "mana_cost": "{2}{B}",
+  "cmc": 3,
+  "type_line": "Enchantment",
+  "oracle_text": "At the beginning of your first main phase, choose one or more —\n• Sell Contraband — Create a Treasure token. You lose 1 life.\n• Buy Information — Draw a card. You lose 2 life.\n• Hire a Mercenary — Create a 3/2 colorless Shapeshifter creature token with changeling. You lose 3 life.",
+  "colors": [
+   "B"
+  ],
+  "color_identity": [
+   "B"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  }
+ },
+ "Skullport Merchant": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Skullport Merchant",
+  "set": "afr",
+  "set_name": "Adventures in the Forgotten Realms",
+  "cn": "120",
+  "rarity": "uncommon",
+  "released": "2021-07-23",
+  "mana_cost": "{2}{B}",
+  "cmc": 3,
+  "type_line": "Creature — Dwarf Citizen",
+  "oracle_text": "When this creature enters, create a Treasure token.\n{1}{B}, Sacrifice another creature or a Treasure: Draw a card.",
+  "colors": [
+   "B"
+  ],
+  "color_identity": [
+   "B"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  },
+  "pt": "1/4"
+ },
+ "Ruthless Technomancer": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Ruthless Technomancer",
+  "set": "nec",
+  "set_name": "Neon Dynasty Commander",
+  "cn": "35",
+  "rarity": "rare",
+  "released": "2022-02-18",
+  "mana_cost": "{3}{B}",
+  "cmc": 4,
+  "type_line": "Creature — Human Wizard",
+  "oracle_text": "When this creature enters, you may sacrifice another creature you control. If you do, create a number of Treasure tokens equal to that creature's power.\n{2}{B}, Sacrifice X artifacts: Return target creature card with power X or less from your graveyard to the battlefield. X can't be 0.",
+  "colors": [
+   "B"
+  ],
+  "color_identity": [
+   "B"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  },
+  "pt": "2/4"
+ },
+ "Pirate's Prize": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Pirate's Prize",
+  "set": "xln",
+  "set_name": "Ixalan",
+  "cn": "68",
+  "rarity": "common",
+  "released": "2017-09-29",
+  "mana_cost": "{3}{U}",
+  "cmc": 4,
+  "type_line": "Sorcery",
+  "oracle_text": "Draw two cards. Create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")",
+  "colors": [
+   "U"
+  ],
+  "color_identity": [
+   "U"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  }
+ },
+ "Grim Hireling": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Grim Hireling",
+  "set": "clb",
+  "set_name": "Commander Legends: Battle for Baldur's Gate",
+  "cn": "755",
+  "rarity": "rare",
+  "released": "2022-06-10",
+  "mana_cost": "{3}{B}",
+  "cmc": 4,
+  "type_line": "Creature — Tiefling Rogue",
+  "oracle_text": "Whenever one or more creatures you control deal combat damage to a player, create two Treasure tokens.\n{B}, Sacrifice X Treasures: Target creature gets -X/-X until end of turn. Activate only as a sorcery.",
+  "colors": [
+   "B"
+  ],
+  "color_identity": [
+   "B"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  },
+  "pt": "3/2"
+ },
+ "Spell Swindle": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Spell Swindle",
+  "set": "xln",
+  "set_name": "Ixalan",
+  "cn": "82",
+  "rarity": "rare",
+  "released": "2017-09-29",
+  "mana_cost": "{3}{U}{U}",
+  "cmc": 5,
+  "type_line": "Instant",
+  "oracle_text": "Counter target spell. Create X Treasure tokens, where X is that spell's mana value. (They're artifacts with \"{T}, Sacrifice this token: Add one mana of any color.\")",
+  "colors": [
+   "U"
+  ],
+  "color_identity": [
+   "U"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  }
+ },
+ "Archangel of Thune": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Archangel of Thune",
+  "set": "m14",
+  "set_name": "Magic 2014",
+  "cn": "5",
+  "rarity": "mythic",
+  "released": "2013-07-19",
+  "mana_cost": "{3}{W}{W}",
+  "cmc": 5,
+  "type_line": "Creature — Angel",
+  "oracle_text": "Flying, lifelink\nWhenever you gain life, put a +1/+1 counter on each creature you control.",
+  "colors": [
+   "W"
+  ],
+  "color_identity": [
+   "W"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  },
+  "pt": "3/4"
+ },
+ "Righteous Valkyrie": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Righteous Valkyrie",
+  "set": "khm",
+  "set_name": "Kaldheim",
+  "cn": "24",
+  "rarity": "rare",
+  "released": "2021-02-05",
+  "mana_cost": "{2}{W}",
+  "cmc": 3,
+  "type_line": "Creature — Angel Cleric",
+  "oracle_text": "Flying\nWhenever another Angel or Cleric you control enters, you gain life equal to that creature's toughness.\nAs long as you have at least 7 life more than your starting life total, creatures you control get +2/+2.",
+  "colors": [
+   "W"
+  ],
+  "color_identity": [
+   "W"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  },
+  "pt": "2/4"
+ },
+ "Lyra Dawnbringer": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Lyra Dawnbringer",
+  "set": "dom",
+  "set_name": "Dominaria",
+  "cn": "26",
+  "rarity": "mythic",
+  "released": "2018-04-27",
+  "mana_cost": "{3}{W}{W}",
+  "cmc": 5,
+  "type_line": "Legendary Creature — Angel",
+  "oracle_text": "Flying, first strike, lifelink\nOther Angels you control get +1/+1 and have lifelink.",
+  "colors": [
+   "W"
+  ],
+  "color_identity": [
+   "W"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  },
+  "pt": "5/5"
+ },
+ "Heliod, Sun-Crowned": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Heliod, Sun-Crowned",
+  "set": "thb",
+  "set_name": "Theros Beyond Death",
+  "cn": "18",
+  "rarity": "mythic",
+  "released": "2020-01-24",
+  "mana_cost": "{2}{W}",
+  "cmc": 3,
+  "type_line": "Legendary Enchantment Creature — God",
+  "oracle_text": "Indestructible\nAs long as your devotion to white is less than five, Heliod isn't a creature.\nWhenever you gain life, put a +1/+1 counter on target creature or enchantment you control.\n{1}{W}: Another target creature gains lifelink until end of turn.",
+  "colors": [
+   "W"
+  ],
+  "color_identity": [
+   "W"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  },
+  "pt": "5/5"
+ },
+ "Resplendent Angel": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Resplendent Angel",
+  "set": "m19",
+  "set_name": "Core Set 2019",
+  "cn": "34",
+  "rarity": "mythic",
+  "released": "2018-07-13",
+  "mana_cost": "{1}{W}{W}",
+  "cmc": 3,
+  "type_line": "Creature — Angel",
+  "oracle_text": "Flying\nAt the beginning of each end step, if you gained 5 or more life this turn, create a 4/4 white Angel creature token with flying and vigilance.\n{3}{W}{W}{W}: Until end of turn, Resplendent Angel gets +2/+2 and gains lifelink.",
+  "colors": [
+   "W"
+  ],
+  "color_identity": [
+   "W"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  },
+  "pt": "3/3"
+ },
+ "God-Eternal Oketra": {
+  "id": null,
+  "oracle_id": null,
+  "name": "God-Eternal Oketra",
+  "set": "war",
+  "set_name": "War of the Spark",
+  "cn": "16",
+  "rarity": "mythic",
+  "released": "2019-05-03",
+  "mana_cost": "{3}{W}{W}",
+  "cmc": 5,
+  "type_line": "Legendary Creature — Zombie God",
+  "oracle_text": "Double strike\nWhenever you cast a creature spell, create a 4/4 black Zombie Warrior creature token with vigilance.\nWhen God-Eternal Oketra dies or is put into exile from the battlefield, you may put it into its owner's library third from the top.",
+  "colors": [
+   "W"
+  ],
+  "color_identity": [
+   "W"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  },
+  "pt": "3/6"
+ },
+ "Tibalt, Rakish Instigator": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Tibalt, Rakish Instigator",
+  "set": "war",
+  "set_name": "War of the Spark",
+  "cn": "146",
+  "rarity": "uncommon",
+  "released": "2019-05-03",
+  "mana_cost": "{2}{R}",
+  "cmc": 3,
+  "type_line": "Legendary Planeswalker — Tibalt",
+  "oracle_text": "Your opponents can't gain life.\n−2: Create a 1/1 red Devil creature token with \"When this token dies, it deals 1 damage to any target.\"",
+  "colors": [
+   "R"
+  ],
+  "color_identity": [
+   "R"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  },
+  "loyalty": "5"
+ },
+ "Purphoros, God of the Forge": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Purphoros, God of the Forge",
+  "set": "ths",
+  "set_name": "Theros",
+  "cn": "135",
+  "rarity": "mythic",
+  "released": "2013-09-27",
+  "mana_cost": "{3}{R}",
+  "cmc": 4,
+  "type_line": "Legendary Enchantment Creature — God",
+  "oracle_text": "Indestructible\nAs long as your devotion to red is less than five, Purphoros isn't a creature.\nWhenever another creature you control enters, Purphoros deals 2 damage to each opponent.\n{2}{R}: Creatures you control get +1/+0 until end of turn.",
+  "colors": [
+   "R"
+  ],
+  "color_identity": [
+   "R"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  },
+  "pt": "6/5"
+ },
+ "Havoc Jester": {
+  "id": null,
+  "oracle_id": null,
+  "name": "Havoc Jester",
+  "set": "m21",
+  "set_name": "Core Set 2021",
+  "cn": "149",
+  "rarity": "uncommon",
+  "released": "2020-07-03",
+  "mana_cost": "{4}{R}",
+  "cmc": 5,
+  "type_line": "Creature — Devil",
+  "oracle_text": "Whenever you sacrifice a permanent, this creature deals 1 damage to any target.",
+  "colors": [
+   "R"
+  ],
+  "color_identity": [
+   "R"
+  ],
+  "legal_commander": "legal",
+  "img": null,
+  "finishes": [
+   "nonfoil",
+   "foil"
+  ],
+  "prices": {
+   "usd": null,
+   "usd_foil": null,
+   "usd_etched": null
+  },
+  "pt": "5/5"
+ }
+}
