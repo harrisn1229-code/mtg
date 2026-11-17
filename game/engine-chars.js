@@ -1,6 +1,6 @@
 // engine-chars.js — computed characteristics (simplified layer system), filter matching, ability lists.
 // Mixed into the Game prototype (methods use `this`).
-import { cmp, colorLetter, PERMANENT_TYPES, BASIC_LAND_MANA, parseManaCost } from "./engine-util.js";
+import { cmp, colorLetter, PERMANENT_TYPES, BASIC_LAND_MANA, parseManaCost, FACE_DOWN_DEF, CREATURE_TYPES } from "./engine-util.js";
 
 const EMPTY_C = { name: "?", types: [], subtypes: [], supertypes: [], colors: [], keywords: {}, abilities: [], power: 0, toughness: 0, cmc: 0 };
 const LAND_SUBS = new Set(["plains", "island", "swamp", "mountain", "forest", "desert", "gate", "lair", "locus", "cave", "sphere", "mine", "tower", "power-plant", "urza's", "town"]);
@@ -54,6 +54,13 @@ function synthAbilities(d) {
       effects: [{ op: "_echo", cost: costStr(kw.echo) }], text: `Echo ${costStr(kw.echo)}` });
   if (kw.storm)
     out.push({ kind: "triggered", synthetic: "storm", zone: "stack", on: { event: "cast", who: "self" }, effects: [{ op: "_storm" }], text: "Storm" });
+  if (kw.increment) // "Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature."
+    out.push({ kind: "triggered", synthetic: "increment", on: { event: "cast", who: "you" },
+      condition: { type: "or", any: [{ type: "compare", a: { event: "manaSpent" }, op: ">", b: { powerOf: "self" } }, { type: "compare", a: { event: "manaSpent" }, op: ">", b: { toughnessOf: "self" } }] },
+      effects: [{ op: "addCounters", what: "self", kind: "+1/+1", amount: 1 }], text: "Increment" });
+  if (kw.craft && typeof kw.craft === "object") // Craft with X {cost}: {cost}, exile this artifact, exile X you control / X card from your graveyard: return it transformed. Sorcery speed.
+    out.push({ kind: "activated", synthetic: "craft", sorcery: true, cost: { mana: kw.craft.cost || "{0}", exileSelf: true, craftWith: kw.craft.with || { types: ["creature"] }, craftCount: kw.craft.n || 1 },
+      effects: [{ op: "_craftReturn" }], text: `Craft with ${kw.craft.text || "a creature"} ${kw.craft.cost || ""}`.trim() });
   // intrinsic mana abilities of basic land types
   if (d.types.includes("land")) {
     const produced = new Set();
@@ -93,8 +100,19 @@ export function manaColorsOf(effects) {
 export const charMethods = {
   /** The CardDef currently describing obj (face-aware, copy-aware). */
   faceDef(o) {
+    if (o.faceDown && (o.zone === "battlefield" || o.zone === "stack" || o.zone === "phased")) return FACE_DOWN_DEF;
+    if (o.mergeDef) return o.mergeDef;
     const d = o.copyDef || o.def;
     if (o.face && d.faces && d.faces[o.face]) return d.faces[o.face];
+    return d;
+  },
+  /** Copiable values (CR 707.2): face-down 2/2, merged (mutate) values, a copy's copied values, or the current face. */
+  copiableDef(o) {
+    if (!o) return null;
+    if (o.faceDown && (o.zone === "battlefield" || o.zone === "stack" || o.zone === "phased" || o.lki)) return FACE_DOWN_DEF;
+    if (o.mergeDef) return o.mergeDef;
+    const d = o.copyDef || o.def;
+    if (!o.copyDef && o.face && d.faces && d.faces[o.face]) return d.faces[o.face];
     return d;
   },
 
@@ -122,9 +140,26 @@ export const charMethods = {
 
   markDirty() { this._dirty = true; },
 
-  /** Recompute obj.c for battlefield + stack objects, player-level static flags, controllers. */
+  /** Recompute obj.c for battlefield + stack objects, player-level static flags, controllers.
+   *  Statics whose amounts/conditions read power or toughness are re-evaluated until the P/T values are stable
+   *  (no stale reads of the previous refresh). */
   refresh(force) {
     if (!this._dirty && !force) return;
+    let before = this._ptDep ? this._ptSig() : null;
+    this._refreshOnce();
+    for (let pass = 0; pass < 3 && this._ptDep; pass++) {
+      const now = this._ptSig();
+      if (now === before) break;
+      before = now;
+      this._refreshOnce();
+    }
+  },
+  _ptSig() {
+    let s = "";
+    for (const id of this.state.battlefield) { const o = this.state.objects[id]; if (o && o.c) s += o.c.power + "/" + o.c.toughness + ","; }
+    return s;
+  },
+  _refreshOnce() {
     this._dirty = false;
     const st = this.state;
     const bf = [];
@@ -154,6 +189,7 @@ export const charMethods = {
     }
     act.sort((a, b) => a.ts - b.ts);
     this._statics = act;
+    this._ptDep = statics.some((s) => readsPT(s.st) || (s.cond && readsPT(s.cond)));
 
     // pass 1: base + type-changing
     const prevPow = new Map();
@@ -190,6 +226,8 @@ export const charMethods = {
             for (const a of abs) if (a && typeof a === "object") o.c.abilities.push({ ...a, _granted: true, _grantedBy: s.src?.id });
           }
         }
+      } else if (t === "activateAsHaste") {
+        for (const o of bf) if (this._affects(s, o)) o.c.activateAsHaste = true;
       } else if (t === "cantBlock" || t === "cantAttack" || t === "mustAttack" || t === "cantBeBlocked" || t === "cantBeCountered" || t === "mustBlock") {
         for (const o of bf) if (this._affects(s, o)) {
           if (t === "cantBeBlocked") (o.c.unblockable ||= []).push(s.st.exceptBy || null);
@@ -197,32 +235,27 @@ export const charMethods = {
         }
       }
     }
-    // pass 3: P/T
-    for (const o of bf) {
-      const c = o.c, d = this.faceDef(o);
-      if (!c.types.includes("creature")) { if (c.power === undefined) { /* non-creature */ } }
-      c.power = num(d.power); c.toughness = num(d.toughness);
-    }
+    // pass 3: P/T. Every amount and "affects" filter is evaluated first, while all objects still carry their previous
+    // complete P/T (refresh() iterates until stable), then the printed values are reset and the results applied.
+    const setOps = [], pumpOps = [];
     for (const s of act) {
       const t = s.st.type;
       if (t === "setPT" || t === "setBasePT" || (t === "asType" && (s.st.power != null || s.st.toughness != null))) {
         for (const o of bf) if (this._affects(s, o)) {
           const ctx = { source: s.src || o, you: s.you };
-          if (s.st.power != null) o.c.power = this.amount(s.st.power, ctx);
-          if (s.st.toughness != null) o.c.toughness = this.amount(s.st.toughness, ctx);
+          setOps.push([o, s.st.power != null ? this.amount(s.st.power, ctx) : null, s.st.toughness != null ? this.amount(s.st.toughness, ctx) : null]);
+        }
+      } else if (t === "pump" && (s.st.power || s.st.toughness)) {
+        const fixed = s.eff && s.eff.fixedPT; // locked amounts for resolved effects
+        for (const o of bf) if (this._affects(s, o)) {
+          const ctx = { source: s.src || o, you: s.you, x: s.eff?.x };
+          pumpOps.push([o, fixed ? fixed[0] : this.amount(s.st.power || 0, ctx), fixed ? fixed[1] : this.amount(s.st.toughness || 0, ctx)]);
         }
       }
     }
-    for (const s of act) {
-      if (s.st.type !== "pump") continue;
-      if (!s.st.power && !s.st.toughness) continue;
-      const fixed = s.eff && s.eff.fixedPT; // locked amounts for resolved effects
-      for (const o of bf) if (this._affects(s, o)) {
-        const ctx = { source: s.src || o, you: s.you, x: s.eff?.x };
-        o.c.power += fixed ? fixed[0] : this.amount(s.st.power || 0, ctx);
-        o.c.toughness += fixed ? fixed[1] : this.amount(s.st.toughness || 0, ctx);
-      }
-    }
+    for (const o of bf) { const d = this.faceDef(o); o.c.power = num(d.power); o.c.toughness = num(d.toughness); }
+    for (const [o, pw, tg] of setOps) { if (pw != null) o.c.power = pw; if (tg != null) o.c.toughness = tg; }
+    for (const [o, pw, tg] of pumpOps) { o.c.power += pw; o.c.toughness += tg; }
     for (const o of bf) {
       const c = o.c;
       for (const k in o.counters) {
@@ -236,13 +269,16 @@ export const charMethods = {
     // stack objects
     for (const id of st.stack) { const o = st.objects[id]; if (o && !o.isAbility) o.c = this.baseC(o); }
     // player-level statics
-    for (const pl of st.players) { pl.landsPerTurn = 1; pl.noMaxHand = false; pl.protection = false; pl.flashSorceries = false; }
+    for (const pl of st.players) { pl.landsPerTurn = 1; pl.noMaxHand = false; pl.protection = false; pl.flashSorceries = false; pl.lifeLocked = false; }
+    this._noPrevent = false;
     for (const s of act) {
       const t = s.st.type, p = st.players[s.you];
+      if (t === "cantPrevent") { this._noPrevent = true; continue; }
       if (!p) continue;
       if (t === "extraLand") p.landsPerTurn += num(s.st.n ?? s.st.amount ?? 1) || 1;
       else if (t === "noMaxHand") p.noMaxHand = true;
-      else if (t === "playerProtection") p.protection = true;
+      else if (t === "playerProtection") { p.protection = true; if (s.st.lifeLocked) p.lifeLocked = true; }
+      else if (t === "lifeCantChange") p.lifeLocked = true;
       else if (t === "castAsFlash" || t === "flashSorceries") p.flashSorceries = true;
     }
   },
@@ -311,6 +347,9 @@ export const charMethods = {
     if (f.isCommander != null && !!o.isCommander !== !!f.isCommander) return false;
     if (f.ringBearer != null && this.isRingBearer(o) !== !!f.ringBearer) return false;
     if (f.counters && typeof f.counters === "object" && !((o.counters?.[f.counters.kind] | 0) > 0)) return false;
+    if (f.chosenType && !(src && src.chosen && src.chosen.creatureType && hasSub(c, src.chosen.creatureType))) return false;
+    if (f.sharesTypeWithCommander && !this.sharesTypeWithCommander(o, you)) return false;
+    if (f.faceDown != null && !!o.faceDown !== !!f.faceDown) return false;
     if (f.not && this.matches(o, f.not, ctx, "*")) return false;
     if (f.anyOf && Array.isArray(f.anyOf) && f.anyOf.length && !f.anyOf.some((x) => this.matches(o, x, ctx, "*"))) return false;
     return true;
@@ -351,6 +390,27 @@ export const charMethods = {
     return true;
   },
 
+  /** Creature types of an object's characteristics ("all" for changelings). */
+  creatureTypesOf(c) {
+    if (!c) return [];
+    if (c.allCreatureTypes) return "all";
+    return (c.subtypes || []).filter((t) => CREATURE_TYPE_SET.has(t));
+  },
+  /** Does `o` share a creature type with a commander of player p? */
+  sharesTypeWithCommander(o, p) {
+    const pl = this.state.players[p];
+    if (!pl || !o || !o.c) return false;
+    const mine = this.creatureTypesOf(o.c);
+    if (mine !== "all" && !mine.length) return false;
+    for (const id of pl.commanders) {
+      const cm = this.state.objects[id];
+      const theirs = this.creatureTypesOf(cm && cm.c);
+      if (theirs !== "all" && !theirs.length) continue;
+      if (mine === "all" || theirs === "all" || mine.some((t) => theirs.includes(t))) return true;
+    }
+    return false;
+  },
+
   isAttacking(o) {
     const cb = this.state.combat;
     return !!cb && cb.attackers.some((a) => a.obj === o.id);
@@ -384,6 +444,17 @@ export const charMethods = {
     return out;
   },
 };
+
+const CREATURE_TYPE_SET = new Set(CREATURE_TYPES);
+const PT_DEP = new WeakMap();
+const PT_RE = /"(?:powerOf|toughnessOf|greatestPower|totalPower|sum|greatest)"|"(?:power|toughness)":\{"op"/;
+/** Does a static / condition read power or toughness of objects (so its result can depend on other statics)? */
+function readsPT(x) {
+  if (!x || typeof x !== "object") return false;
+  let v = PT_DEP.get(x);
+  if (v == null) { let j = ""; try { j = JSON.stringify(x); } catch { j = ""; } v = PT_RE.test(j); PT_DEP.set(x, v); }
+  return v;
+}
 
 const KW_COUNTERS = new Set(["flying", "first strike", "double strike", "deathtouch", "hexproof", "indestructible", "lifelink", "menace", "reach", "trample", "vigilance", "haste", "shroud"]);
 

@@ -315,6 +315,8 @@ export function parseCond(text, ctx = {}) {
   }
   if ((m = t.match(/^the sacrificed (?:creature|permanent|artifact) was (?:an? )?(.+)$/i))) { if (ctx.flags) ctx.flags.usesSacrificed = true; return { type: "sacrificed", filter: parseFilter(m[1]) }; }
   if ((m = t.match(/^you reveal an? (.+?) card from your hand$/i))) return { type: "hasInHand", filter: parseFilter(m[1] + " card") };
+  if ((m = t.match(/^this is the (first|second|third|fourth|fifth) time this ability has resolved this turn$/i))) return { type: "resolvedCount", op: "==", n: { first: 1, second: 2, third: 3, fourth: 4, fifth: 5 }[m[1].toLowerCase()] };
+  if (/^it isn't a mana ability$/i.test(t)) return { type: "event", key: "isMana", value: false };
   fail("condition: " + text);
 }
 
@@ -322,8 +324,14 @@ export function parseCond(text, ctx = {}) {
 // mana
 
 export function parseManaBody(body, ctx) {
-  const t = body.trim().replace(/[.]$/, "");
+  const t = body.trim().replace(/[.]$/, "").replace(/^an additional /i, "").replace(/^additional /i, "");
   let m;
+  if ((m = t.match(/^one mana of any color that a land (an opponent|you) controls? could produce$/i))) return { landColors: /opponent/i.test(m[1]) ? "opponent" : "you", n: 1 };
+  if ((m = t.match(/^\{([WUBRG])\}\{([WUBRG])\}, \{([WUBRG])\}\{([WUBRG])\},? or \{([WUBRG])\}\{([WUBRG])\}$/))) { // filter lands: every pair of two colours = two units of either colour
+    const cols = [...new Set(m.slice(1, 7))];
+    const pairs = new Set([m[1] + m[2], m[3] + m[4], m[5] + m[6]].map((x) => x.split("").sort().join("")));
+    if (cols.length === 2 && pairs.size === 3) return { anyOf: cols, n: 2, split: true };
+  }
   if (/^(?:\{[WUBRGC]\})+$/.test(t)) return t;
   if ((m = t.match(/^((?:\{[WUBRG]\})(?: or \{[WUBRG]\})+)$/))) return { anyOf: [...m[1].matchAll(/\{([WUBRG])\}/g)].map((x) => x[1]), n: 1 };
   if ((m = t.match(/^((?:\{[WUBRG]\}, )+\{[WUBRG]\},? or \{[WUBRG]\})$/))) return { anyOf: [...m[1].matchAll(/\{([WUBRG])\}/g)].map((x) => x[1]), n: 1 };
@@ -399,9 +407,9 @@ function parseOneToken(p, ctx, who) {
   if (/^a number of$/i.test(m[1])) { if (!amountExpr) fail("a number of w/o expr"); n = amountExpr; }
   else n = amt(m[1], ctx);
   if (!m[3] && !(m[5])) fail("token without P/T");
-  if (!m[3]) fail("token without P/T: " + p);
-  const pw = /^x$/i.test(m[3]) ? ctx.xAmount ?? "x" : /^\d+$/.test(m[3]) ? +m[3] : fail("token power");
-  const tg = /^x$/i.test(m[4]) ? ctx.xAmount ?? "x" : /^\d+$/.test(m[4]) ? +m[4] : fail("token toughness");
+  const noPT = !m[3];
+  const pw = noPT ? undefined : /^x$/i.test(m[3]) ? ctx.xAmount ?? "x" : /^\d+$/.test(m[3]) ? +m[3] : fail("token power");
+  const tg = noPT ? undefined : /^x$/i.test(m[4]) ? ctx.xAmount ?? "x" : /^\d+$/.test(m[4]) ? +m[4] : fail("token toughness");
   const words = m[5].split(/\s+/).filter(Boolean);
   const colors = [], types = [], subtypes = [], nameParts = [];
   let colorless = false;
@@ -415,7 +423,9 @@ function parseOneToken(p, ctx, who) {
     else fail("token word " + w);
   }
   if (!types.includes("creature") && !types.length) fail("token types");
-  const tok = { name: m[6] ? m[6].trim() : nameParts.join(" "), types, subtypes, colors, power: pw, toughness: tg };
+  if (noPT && types.includes("creature")) fail("creature token without P/T: " + p);
+  const tok = { name: m[6] ? m[6].trim() : nameParts.join(" "), types, subtypes, colors };
+  if (!noPT) { tok.power = pw; tok.toughness = tg; }
   if (!tok.name) fail("token name");
   if (m[7]) parseTokenKeywordsAndAbilities(unmask(m[7]), ctx, tok);
   const e = { op: "createToken", who, token: tok, amount: mulAmt(n, ctx) };
@@ -479,7 +489,39 @@ export function parseEffects(text, ctx) {
         (tk.abilities ||= []).push(...ctx.parseAbility(m[1].slice(1, -1)));
         continue;
       }
-      if (/^damage can't be prevented this turn$/i.test(s)) continue;
+      if (/^damage can't be prevented this turn$/i.test(s)) { const e = { op: "until", until: "endOfTurn", static: { type: "cantPrevent", affects: "you" } }; out.push(e); lastGroup = [e]; continue; }
+      // "Until your next turn, your life total can't change and you gain protection from everything." (Teferi's Protection)
+      if ((m = s.match(/^until your next turn, (.+)$/i)) && /life total can't change|protection from everything/i.test(m[1])) {
+        const parts = splitTop(m[1], /\s+and\s+/i);
+        const effs = parts.map((pt) => {
+          if (/^your life total can't change$/i.test(pt.trim())) return { op: "until", until: "yourNextTurn", static: { type: "lifeCantChange", affects: "you" } };
+          if (/^you gain protection from everything$/i.test(pt.trim())) return { op: "until", until: "yourNextTurn", static: { type: "playerProtection", affects: "you", from: "everything" } };
+          return fail("until your next turn: " + pt);
+        });
+        out.push(...effs); lastGroup = effs; continue;
+      }
+      // phasing
+      if ((m = s.match(/^(.+?) phases? out$/i))) {
+        const t = m[1].trim();
+        const what = /^all /i.test(t) ? { ref: "all", filter: parseFilter(t.replace(/^all /i, "")) } : objRef(t, ctx);
+        const e = { op: "phaseOut", what };
+        out.push(e); lastGroup = [e]; continue;
+      }
+      // "You may choose new targets for the copy." after a copy effect
+      if (/^you may choose new targets for (?:the|that) cop(?:y|ies)$/i.test(s) && out.length) {
+        let last = out[out.length - 1];
+        if (last.op === "may" && Array.isArray(last.effects) && last.effects.length) last = last.effects[last.effects.length - 1];
+        if (last.op === "copyAbility" || last.op === "copySpell") { last.newTargets = true; continue; }
+      }
+      // impulse: "Until the end of your next turn, you may play those cards." / "You may play that card this turn." after exiling the top of your library
+      if (((m = s.match(/^(until the end of your next turn|until end of turn|until end of your next turn), you may (play|cast) (?:those cards|that card|them|it|the exiled cards?)$/i)) ||
+          (m = s.match(/^you may (play|cast) (?:those cards|that card|them|it|the exiled cards?) (this turn|until end of turn|until the end of your next turn)$/i))) && out.length && out[out.length - 1].op === "exileTop") {
+        const when = /next turn/i.test(m[1] + " " + (m[2] || "")) ? "endOfYourNextTurn" : "endOfTurn";
+        const e = out[out.length - 1];
+        e.mayPlay = true; e.until = when;
+        if (/cast/i.test(m[0].replace(/^until[^,]*, /i, "").slice(0, 12))) e.castOnly = true;
+        continue;
+      }
       // "Each player who can't discards a card." after an edict (Plaguecrafter)
       if (/^each player who can't (?:sacrifices? .*?)?discards (?:a|one) card$/i.test(s) && out.length && out[out.length - 1].op === "sacrifice") {
         out[out.length - 1].ifCant = [{ op: "discard", who: "you", amount: 1 }];
@@ -719,9 +761,21 @@ function damageEffects(from, amount, tos, ctx) {
 function objectSubjectRules(c, ctx) {
   let m;
   // --- damage
+  if (/ damage divided as you choose/i.test(c)) {
+    const dm = c.match(/^(.+?) deals? (\d+|x) damage divided as you choose among (one or two|one, two, or three|any number of|up to (\w+)) targets$/i);
+    if (!dm) fail("divided damage");
+    const from = /^(?:it|~)$/i.test(dm[1].trim()) ? (dm[1].trim() === "~" ? "self" : ctx.last || "self") : objRef(dm[1], ctx);
+    const amount = amt(dm[2], ctx);
+    const max = /three/i.test(dm[3]) ? 3 : /^one or two$/i.test(dm[3]) ? 2 : dm[4] ? num(dm[4]) : typeof amount === "number" ? amount : 20;
+    ctx.targets.push({ what: "any", min: 1, max, text: "divided" });
+    const r = { ref: "target", i: ctx.targets.length - 1 };
+    const e = { op: "damage", amount, to: r, divided: true };
+    if (from !== "self") e.from = from;
+    ctx.hasPrev = true;
+    return [e];
+    }
   if ((m = c.match(/^(.+?) deals? (\d+|x|that much|twice that much) damage to (.+)$/i)) || (m = c.match(/^(.+?) deals? damage equal to (.+?) to (.+)$/i))) {
     const isEq = /deals? damage equal to/i.test(c) && !/^\d/.test(m[2]);
-    if (/divided as you choose/i.test(c)) fail("divided damage");
     const srcText = m[1];
     if (/^(?:it|~|that creature|that permanent|enchanted creature|equipped creature)$/i.test(srcText) || /^(?:up to \w+ )?target /i.test(srcText) || /^(?:each|all) /i.test(srcText)) {
       const from = objRef(srcText, ctx);
@@ -956,6 +1010,14 @@ function imperativeRules(c, ctx) {
     const what = objRef(m[1], ctx);
     return [{ op: "destroy", what }];
   }
+  // impulse exile from the top of a library (the next sentence may grant "you may play those cards")
+  if ((m = c.match(new RegExp(`^exile the top (${NUM_RE} cards?|card) of (your|each player's|target player's|that player's) library$`, "i")))) {
+    const n = /^card$/i.test(m[1]) ? 1 : num(m[1].split(" ")[0]);
+    const who = /^your$/i.test(m[2]) ? "you" : /^each player's$/i.test(m[2]) ? "eachPlayer" : /^target/i.test(m[2]) ? addTarget(m[2].replace(/'s$/, ""), ctx) : ctx.player || fail("whose library");
+    ctx.last = { ref: "it" };
+    return [{ op: "exileTop", who, amount: n, mayPlay: false }];
+  }
+  if (/^copy (?:that|this|the triggering) ability$/i.test(c)) return [{ op: "copyAbility", what: { ref: "event", what: "ability" } }];
   // exile
   if ((m = c.match(/^exile (.+?)(?: until (~|this \w+) leaves the battlefield)?$/i))) {
     if (/^the top/i.test(m[1]) || /graveyard$/i.test(m[1]) && /^target player's/i.test(m[1])) fail("exile library/graveyard");

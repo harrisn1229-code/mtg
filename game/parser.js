@@ -44,11 +44,11 @@ function selfify(text, names) {
 
 const SIMPLE_KW = new Set(["flying", "first strike", "double strike", "deathtouch", "defender", "haste", "hexproof", "indestructible", "lifelink", "menace", "reach",
   "trample", "vigilance", "flash", "fear", "intimidate", "skulk", "shadow", "infect", "wither", "persist", "undying", "changeling", "devoid", "prowess", "shroud",
-  "horsemanship", "exploit", "delve", "partner", "split second", "cascade", "storm", "convoke", "rebound", "myriad", "evolve", "riot", "dethrone", "afterlife 1"]);
+  "horsemanship", "exploit", "delve", "partner", "split second", "cascade", "storm", "convoke", "rebound", "myriad", "evolve", "riot", "dethrone", "afterlife 1", "increment"]);
 const IGNORED_KW = new Set(["partner"]);
 // accepted but inert in the engine unless it implements them
-const KW_ACCEPT = new Set([...KEYWORD_SET, "exploit", "delve", "partner"]);
-const UNSUPPORTED_KW_RE = /^(?:mutate|morph|megamorph|disguise|hideaway|increment|craft|spectacle|storm|cascade|convoke|affinity|bestow|crew|saddle|banding|phasing|ninjutsu|suspend|madness|buyback|surge|emerge|prototype|read ahead|level up|boast|foretell|daybound|nightbound|ravenous|casualty|squad|offspring|more than meets|living weapon|rebound|soulbond|fabricate|dash|evoke|unearth|embalm|eternalize|miracle|replicate|retrace|jump-start|aftermath|multikicker|entwine|escalate|champion|fading|vanishing|cumulative upkeep|devour|modular|sunburst|graft|bloodthirst|haunt|amplify|hexproof from|protection from (?!(?:white|blue|black|red|green)))/i;
+const KW_ACCEPT = new Set([...KEYWORD_SET, "exploit", "delve", "partner", "increment"]);
+const UNSUPPORTED_KW_RE = /^(?:disguise|hideaway|storm|cascade|convoke|affinity|bestow|crew|saddle|banding|phasing|ninjutsu|suspend|madness|buyback|surge|emerge|prototype|read ahead|level up|boast|foretell|daybound|nightbound|ravenous|casualty|squad|offspring|more than meets|living weapon|rebound|soulbond|fabricate|dash|evoke|unearth|embalm|eternalize|miracle|replicate|retrace|jump-start|aftermath|multikicker|entwine|escalate|champion|fading|vanishing|cumulative upkeep|devour|modular|sunburst|graft|bloodthirst|haunt|amplify|hexproof from|protection from (?!(?:white|blue|black|red|green)))/i;
 
 function kwItem(item, kws) {
   const t = item.trim().replace(/[.]$/, "");
@@ -64,6 +64,18 @@ function kwItem(item, kws) {
   if ((m = t.match(/^(equip|cycling|flashback|kicker|echo|overload) ((?:\{[^}]+\})+)$/i))) { kws[m[1].toLowerCase()] = m[2]; return true; }
   if ((m = t.match(/^(annihilator|toxic) (\d+)$/i))) { kws[m[1].toLowerCase()] = +m[2]; return true; }
   if ((m = t.match(/^escape-((?:\{[^}]+\})+), exile (\w+) other cards? from your graveyard$/i))) { kws.escape = m[1]; kws.escapeExile = num(m[2]); return true; }
+  if ((m = t.match(/^(mutate|morph|megamorph|spectacle) ((?:\{[^}]+\})+)$/i))) { kws[m[1].toLowerCase()] = m[2]; return true; }
+  if ((m = t.match(/^craft with (.+?) ((?:\{[^}]+\})+)$/i))) {
+    let w = m[1].trim(), n = 1;
+    const mm = w.match(new RegExp(`^(${NUM_RE}) (?:or more )?(.+)$`, "i"));
+    if (mm && !/^an?$/i.test(mm[1])) { n = num(mm[1]); w = mm[2]; }
+    else if (mm) w = mm[2];
+    let f;
+    try { f = parseFilter(w.replace(/s$/, "")); } catch (e) { if (e instanceof Fail) return false; throw e; }
+    delete f.controller; delete f.zone;
+    kws.craft = { cost: m[2], with: f, n, text: m[1].trim() };
+    return true;
+  }
   return false;
 }
 function tryKeywordLine(L) {
@@ -71,7 +83,7 @@ function tryKeywordLine(L) {
   const items = splitTop(L, /,\s+/);
   const kws = {};
   // looks like a keyword line only if the first item is (or begins like) a keyword
-  const startsKw = items.length && (SIMPLE_KW.has(items[0].trim().toLowerCase()) || /^(?:ward|protection from|equip|cycling|flashback|kicker|echo|overload|annihilator|toxic|escape-)\b/i.test(items[0]) || UNSUPPORTED_KW_RE.test(items[0].trim()));
+  const startsKw = items.length && (SIMPLE_KW.has(items[0].trim().toLowerCase()) || /^(?:ward|protection from|equip|cycling|flashback|kicker|echo|overload|annihilator|toxic|escape-|mutate|morph|megamorph|spectacle|craft with)\b/i.test(items[0]) || UNSUPPORTED_KW_RE.test(items[0].trim()));
   if (!startsKw) return null;
   for (const it of items) {
     if (!kwItem(it, kws)) {
@@ -114,8 +126,10 @@ function parseActivated(L, text, mkCtx) {
   } else {
     try { cost = parseCost(costTxt); } catch (e) { if (e instanceof Fail) return null; throw e; }
   }
-  // mana riders we deliberately drop (spend restrictions / "when that mana is spent" bonuses): the mana is still produced
-  let effTxt = effTxt0.replace(/\s*(?:Spend this mana only [^.]*\.?|When that mana is spent [^.]*\.?)/gi, "").trim();
+  // mana riders: spend restrictions and "when that mana is spent …" bonuses are attached to the addMana effects
+  let restrict = null, onSpend = null;
+  let effTxt = effTxt0.replace(/\s*Spend this mana only ([^.]*)\.?/i, (all, r) => { restrict = parseSpendRestriction(r); return ""; });
+  effTxt = effTxt.replace(/\s*When that mana is spent to cast (.+?), ([^.]*)\.?$/i, (all, f, eff) => { onSpend = { spell: spendSpellFilter(f), effects: parseEffects(eff, mkCtx({})), text: "When that mana is spent to cast " + f + ", " + eff + "." }; return ""; }).trim();
   const ab = { kind: "activated", cost };
   let am = effTxt.match(EFFECT_EXTRACT_ACTIVATE_ONLY);
   let cond = null;
@@ -132,6 +146,11 @@ function parseActivated(L, text, mkCtx) {
   const ctx = mkCtx({ last: "self" });
   if (cost.sac || cost.sacSelf) ctx.sacrificed = !!cost.sac;
   const effects = parseEffects(effTxt, ctx);
+  if (restrict || onSpend) {
+    const adds = effects.filter((e) => e.op === "addMana");
+    if (!adds.length) fail("mana rider without mana");
+    for (const e of adds) { if (restrict) e.restrict = restrict; if (onSpend) e.onSpend = onSpend; }
+  }
   if (ctx.targets.length) ab.targets = ctx.targets;
   ab.effects = effects;
   if (cond) ab.condition = cond;
@@ -139,6 +158,37 @@ function parseActivated(L, text, mkCtx) {
   if (hasAddMana(effects) && !ctx.targets.length && !loyalty && effects.every((e) => MANA_RIDER_OPS.has(e.op))) ab.mana = true;
   ab.text = text;
   return { ability: ab, partial: ctx.partial };
+}
+
+/** "to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type" */
+function parseSpendRestriction(r) {
+  const t = r.trim().replace(/[.]$/, "");
+  const m = t.match(/^to cast (.+?)(?: or (?:to )?activate an ability of (.+))?$/i);
+  if (!m || !/spells?(?: of the chosen type| that shares a creature type with your commander)?$/i.test(m[1])) fail("spend restriction: " + r);
+  const out = { spell: spendSpellFilter(m[1]), text: "Spend this mana only " + t + "." };
+  if (m[2]) {
+    let a = m[2].trim().replace(/^(?:an?|one) /i, "");
+    const chosen = / of the chosen type$/i.test(a);
+    a = a.replace(/ of the chosen type$/i, "");
+    if (!/ source$/i.test(a)) fail("spend restriction source: " + r);
+    const f = parseFilter(a.replace(/ source$/i, ""));
+    delete f._spell;
+    if (chosen) f.chosenType = true;
+    out.ability = f;
+  }
+  return out;
+}
+function spendSpellFilter(txt) {
+  let t = txt.trim().replace(/^(?:an?|one) /i, "");
+  let chosen = false, shares = false;
+  if (/ of the chosen type$/i.test(t)) { chosen = true; t = t.replace(/ of the chosen type$/i, ""); }
+  if (/ that shares a creature type with your commander$/i.test(t)) { shares = true; t = t.replace(/ that shares a creature type with your commander$/i, ""); }
+  t = t.replace(/ spells?$/i, "");
+  const f = parseFilter(t);
+  delete f._spell;
+  if (chosen) f.chosenType = true;
+  if (shares) f.sharesTypeWithCommander = true;
+  return f;
 }
 
 // ----- triggers
@@ -167,6 +217,28 @@ function parseWhenText(text) {
   if (/^the ring tempts you$/i.test(t)) return one({ event: "ringTempts", who: "you" }, { subject: "player" });
   if (/^you choose a creature as your ring-bearer$/i.test(t)) return one({ event: "ringBearerChosen", who: "you" }, { subject: "object" });
   if (/^you cycle (?:~|this card)$/i.test(t)) return one({ event: "cycled", who: "self" }, { subject: "self" });
+  if (/^~ mutates$/i.test(t)) return one({ event: "mutates", who: "self" }, { subject: "self" });
+  if (/^~ is turned face up$/i.test(t)) return one({ event: "turnedFaceUp", who: "self" }, { subject: "self" });
+  if (/^you activate an ability$/i.test(t)) return one({ event: "abilityActivated", who: "you" }, { subject: "player" });
+  if ((m = t.match(/^an ability of (equipped creature|enchanted creature|~) is activated$/i))) return one({ event: "abilityActivated", who: /equipped/i.test(m[1]) ? "equipped" : /enchanted/i.test(m[1]) ? "enchanted" : "self" }, { subject: "object" });
+  if ((m = t.match(/^(enchanted land|~|.+?) is tapped for mana$/i))) return one({ event: "tapped", who: subjectFilter(m[1]), forMana: true }, { subject: "object" });
+  if ((m = t.match(/^(?:a|an) (.+?) card is put into a graveyard from anywhere other than the battlefield$/i))) {
+    const f = parseFilter(m[1] + " card"); delete f.zone;
+    return one({ event: "zoneChange", to: "graveyard", notFrom: "battlefield", filter: f }, { subject: "object" });
+  }
+  if ((m = t.match(/^(?:a|an) (.+?) card leaves your graveyard$/i))) {
+    const f = parseFilter(m[1] + " card"); delete f.zone;
+    return one({ event: "zoneChange", from: "graveyard", filter: { ...f, owner: "you" } }, { subject: "object" });
+  }
+  // "A, or B, or C" (Syr Konrad): one trigger per condition, same ability text
+  if (/, or /i.test(t)) {
+    const parts = t.split(/,? or (?=(?:an? |another |~ |one or more ))/i).map((x) => x.replace(/,$/, "").trim()).filter(Boolean);
+    if (parts.length > 1) {
+      const trigs = [];
+      for (const pt of parts) trigs.push(...parseWhenText(pt).triggers);
+      return { triggers: trigs, info: { subject: "object" } };
+    }
+  }
   if ((m = t.match(/^you cast (?:or copy )?(?:an? )?(.+?) spell$/i)) || /^you cast (?:or copy )?a spell$/i.test(t)) {
     const orCopy = /cast or copy/i.test(t);
     const tr = { event: "cast", who: "you" };
@@ -317,6 +389,8 @@ function parseTriggered(L, text, mkCtx) {
     const abilities = tr.triggers.map((on) => {
       const a = { kind: "triggered", on: clone(on), ...clone(ab.body) };
       if (cond) a.condition = clone(cond);
+      if (on.event === "tapped" && on.forMana && !a.targets && (a.effects || []).length && a.effects.every((e) => e.op === "addMana")) a.manaTrigger = true; // CR 605.1b
+      if (on.event === "abilityActivated" && cond && cond.type === "event" && cond.key === "isMana") { delete a.condition; a.on.nonMana = true; }
       a.text = text;
       return a;
     });
@@ -408,6 +482,21 @@ function parseStaticLine(L, text, def, mkCtx) {
   if (/^~ can't be countered$/i.test(s)) return [st({ type: "cantBeCountered" }, condition)];
   if (/^~ attacks each (?:combat|turn) if able$/i.test(s)) return [st({ type: "mustAttack", affects: "self" }, condition)];
   if (/^you have no maximum hand size$/i.test(s)) return [st({ type: "noMaxHand" })];
+  if ((m = s.match(/^you may activate abilities of (.+?) as though (?:those creatures|they|it) had haste$/i))) { const f = parseFilter(m[1]); delete f._spell; return [st({ type: "activateAsHaste", affects: f }, condition)]; }
+  if (/^as ~ enters(?: the battlefield)?, choose a creature type$/i.test(s)) return [st({ type: "asEntersChoose", choice: "creatureType" })];
+  if (/^as ~ enters(?: the battlefield)?, choose a color$/i.test(s)) return [st({ type: "asEntersChoose", choice: "color" })];
+  if ((m = s.match(/^you may have ~ enter(?: the battlefield)? as a copy of (?:an? |any )?(.+?)(?:, except (.+))?$/i))) {
+    const f = parseFilter(m[1]); delete f._spell;
+    const except = {};
+    if (m[2]) for (const part of m[2].split(/,\s*(?:and\s+)?(?=it )|\s+and\s+(?=it )/i).map((x) => x.trim()).filter(Boolean)) {
+      let mm;
+      if (/^it isn't legendary$/i.test(part)) except.nonLegendary = true;
+      else if ((mm = part.match(/^it enters with an additional (\+1\/\+1|loyalty) counter on it if it's an? (creature|planeswalker)$/i))) ((except.counters ||= {})[mm[2].toLowerCase()] ||= {})[mm[1].toLowerCase()] = 1;
+      else if ((mm = part.match(/^it's an? (\w+) in addition to its other types$/i))) (except.addTypes ||= []).push(mm[1].toLowerCase());
+      else fail("copy exception: " + part);
+    }
+    return [st({ type: "asEntersCopy", filter: f, optional: true, except })];
+  }
   if ((m = s.match(/^you may play an additional land on each of your turns$/i))) return [st({ type: "extraLand", n: 1 })];
   // cost modification
   if ((m = s.match(/^~ costs ((?:\{\d+\})) less to cast for each (.+)$/i))) {
@@ -633,6 +722,25 @@ function compileFace(d, o = {}) {
       if ((m = L.match(/^as an additional cost to cast (?:this spell|~), (.+?)\.?$/i))) {
         def.additionalCost = parseAdditionalCost(m[1]);
         spellCtx.sacrificed = !!(def.additionalCost.sac || (def.additionalCost.oneOf || []).some((c) => c.sac));
+        stats.parsed++;
+        continue;
+      }
+      // "As ~ enters, choose A or B." + "• A — ability" bullets (Sieges): a choice made as it enters, each ability conditional on it
+      if ((m = L.match(/^as ~ enters(?: the battlefield)?, choose (\w+) or (\w+)\.?\s*\n(.+)$/is))) {
+        const ids = [m[1].toLowerCase(), m[2].toLowerCase()];
+        const bullets = m[3].split("\n").map((x) => x.replace(/^•\s*/, "").trim()).filter(Boolean);
+        const abs = [];
+        const options = [];
+        for (const b of bullets) {
+          const bm = b.match(/^(\w+) — (.+)$/);
+          if (!bm || !ids.includes(bm[1].toLowerCase())) fail("choice bullet");
+          const r = parseAbilityLine(bm[2], text.split("\n").find((x) => x.includes(bm[2].slice(0, 20))) || bm[2], def, mkCtx);
+          if (r.partial) fail("partial choice bullet");
+          const cond = { type: "chosen", key: "mode", value: bm[1].toLowerCase() };
+          for (const a of r.abilities) { a.condition = a.condition ? { type: "and", all: [cond, a.condition] } : cond; a.text = bm[1] + " — " + bm[2].replace(/~/g, name); abs.push(a); }
+          options.push({ id: bm[1].toLowerCase(), label: bm[1] + " — " + bm[2].replace(/~/g, name) });
+        }
+        def.abilities.push({ kind: "static", effect: { type: "asEntersChoose", choice: "mode", options }, text: `As ${name} enters, choose ${m[1]} or ${m[2]}.` }, ...abs);
         stats.parsed++;
         continue;
       }

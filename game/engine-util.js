@@ -256,6 +256,28 @@ export function tokenDef(t) {
 }
 export const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 
+/** Characteristics of a face-down permanent or spell (CR 708.2): a nameless colourless 2/2 creature with no abilities. */
+export const FACE_DOWN_DEF = normalizeDef({
+  name: "Face-down creature", cost: "", cmc: 0, colors: [], identity: [], types: ["creature"], subtypes: [], supertypes: [],
+  power: 2, toughness: 2, keywords: {}, abilities: [], spell: null, unparsed: [], text: "", img: null, faces: null, faceDownDef: true,
+});
+
+/** Creature types (CR 205.3m) — used for "choose a creature type". */
+export const CREATURE_TYPES = ("advisor aetherborn alien ally angel antelope ape archer archon armadillo army artificer assassin assembly-worker astartes atog aurochs avatar azra " +
+  "badger balloon barbarian bard basilisk bat bear beast beaver beeble beholder berserker bird blinkmoth boar bringer brushwagg camarid camel capybara caribou carrier cat " +
+  "centaur child chimera citizen cleric clown cockatrice construct coward coyote crab crocodile c'tan custodes cyberman cyclops dalek dauthi demigod demon deserter detective " +
+  "devil dinosaur djinn doctor dog dragon drake dreadnought drone druid dryad dwarf efreet egg elder eldrazi elemental elephant elf elk employee eye faerie ferret fish " +
+  "flagbearer fox fractal frog fungus gamer gargoyle germ giant gith glimmer gnoll gnome goat goblin god golem gorgon graveborn gremlin griffin guest hag halfling hamster " +
+  "harpy hellion hippo hippogriff homarid homunculus horror horse human hydra hyena illusion imp incarnation inkling inquisitor insect jackal jellyfish juggernaut kangaroo " +
+  "kavu kirin kithkin knight kobold kor kraken llama lamia lammasu leech leviathan lhurgoyf licid lizard lobster manticore masticore mercenary merfolk metathran minion " +
+  "minotaur mite mole monger mongoose monk monkey moonfolk mount mouse mutant myr mystic nautilus necron nephilim nightmare nightstalker ninja noble noggle nomad nymph " +
+  "octopus ogre ooze orb orc orgg otter ouphe ox oyster pangolin peasant pegasus pentavite performer pest phelddagrif phoenix phyrexian pilot pincher pirate plant " +
+  "porcupine possum praetor primarch prism processor rabbit raccoon ranger rat rebel reflection rhino rigger robot rogue sable salamander samurai sand saproling satyr " +
+  "scarecrow scientist scion scorpion scout sculpture serf serpent servo shade shaman shapeshifter shark sheep siren skeleton skunk slith sliver sloth slug snail snake " +
+  "soldier soltari spawn specter spellshaper sphinx spider spike spirit splinter sponge squid squirrel starfish surrakar survivor synth tentacle tetravite thalakos thopter " +
+  "thrull tiefling time-lord toy treefolk trilobite triskelavite troll turtle tyranid unicorn vampire varmint vedalken volver wall walrus warlock warrior weasel weird " +
+  "werewolf whale wizard wolf wolverine wombat worm wraith wurm yeti zombie zubera").split(" ");
+
 /** Hash for loop detection. */
 export function hashStr(s) {
   let h = 2166136261;

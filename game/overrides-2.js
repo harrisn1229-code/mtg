@@ -122,30 +122,6 @@ export default {
   },
 
   // ------------------------------------------------------------------------------------------------ O
-  "Outpost Siege": {
-    // "As this enters, choose Khans or Dragons" is done by an enters trigger that puts a khans/dragons counter on the
-    // enchantment (the engine has no "as enters" choice); the matching ability only works with its marker counter.
-    patch(def) {
-      return out(def, { abilities: plus(def,
-        { kind: "triggered", on: { event: "enters", who: "self" }, text: "As this enchantment enters, choose Khans or Dragons.",
-          run: function* (g, ctx) {
-            const src = g.obj(ctx.source?.id);
-            if (!src || src.zone !== "battlefield") return;
-            const [pick] = yield* g.choose$(ctx.you, { prompt: "Outpost Siege: choose Khans or Dragons", min: 1, max: 1, reason: "mode", source: src.id,
-              options: [{ id: "khans", label: "Khans — At the beginning of your upkeep, exile the top card of your library. Until end of turn, you may play that card.", type: "mode" },
-                { id: "dragons", label: "Dragons — Whenever a creature you control leaves the battlefield, this enchantment deals 1 damage to any target.", type: "mode" }] });
-            g.addCounters(src, pick ? pick.id : "khans", 1);
-          } },
-        { kind: "triggered", on: { event: "beginStep", step: "upkeep", whose: "you" }, condition: { type: "counters", what: "self", kind: "khans", op: ">=", n: 1 },
-          effects: [{ op: "exileTop", who: "you", amount: 1, until: "endOfTurn" }],
-          text: "Khans — At the beginning of your upkeep, exile the top card of your library. Until end of turn, you may play that card." },
-        { kind: "triggered", on: { event: "leaves", who: { types: ["creature"], controller: "you" } }, condition: { type: "counters", what: "self", kind: "dragons", op: ">=", n: 1 },
-          targets: [{ what: "any" }], effects: [{ op: "damage", amount: 1, to: T(0) }],
-          text: "Dragons — Whenever a creature you control leaves the battlefield, this enchantment deals 1 damage to any target." },
-      ) });
-    },
-  },
-
   "Overwhelming Stampede": {
     patch(def) {
       return out(def, { spell: spellOf(def, { effects: [{ op: "pump", what: { ref: "all", filter: { types: ["creature"], controller: "you" } },
@@ -154,14 +130,6 @@ export default {
   },
 
   // ------------------------------------------------------------------------------------------------ P
-  "Path of Ancestry": {
-    // the colour-identity mana is exact; the "when that mana is spent ... scry 1" rider needs mana-spent tracking (not available)
-    patch(def) {
-      const abilities = def.abilities.map((ab) => (ab.kind === "activated" && (ab.effects || []).some((e) => e.op === "addMana") ? { ...ab, mana: true, effects: (ab.effects || []).filter((e) => e.op !== "manual") } : ab));
-      return out(def, { abilities }, def.unparsed);
-    },
-  },
-
   "Pawn of Ulamog": {
     patch(def) {
       const effects = [{ op: "may", text: "Create a 0/1 Eldrazi Spawn token?", effects: [{ op: "createToken", who: "you", token: "eldrazi spawn", amount: 1 }] }];
@@ -261,7 +229,6 @@ export default {
     },
   },
 
-  // Rings of Brighthearth: needs an "ability activated" event + ability copying -> no override (stays flagged).
 
   "Ringsight": {
     patch(def) {
@@ -282,24 +249,6 @@ export default {
           g.shuffle(p);
         } },
       ] }) });
-    },
-  },
-
-  "Rugged Prairie": {
-    patch(def) {
-      return out(def, { abilities: plus(def, {
-        kind: "activated", mana: true, cost: { mana: "{R/W}", tap: true },
-        text: "{R/W}, {T}: Add {R}{R}, {R}{W}, or {W}{W}.",
-        run: function* (g, ctx) {
-          let pick = ctx.manaChoice && ctx.manaChoice.length >= 2 ? ctx.manaChoice.slice(0, 2).sort().join("") : null;
-          if (pick !== "RR" && pick !== "RW" && pick !== "WW") {
-            const [c] = yield* g.choose$(ctx.you, { prompt: "Rugged Prairie: choose the mana to add", min: 1, max: 1, reason: "generic", source: ctx.source?.id,
-              options: [{ id: "RR", label: "{R}{R}", type: "color" }, { id: "RW", label: "{R}{W}", type: "color" }, { id: "WW", label: "{W}{W}", type: "color" }] });
-            pick = c ? c.id : "RW";
-          }
-          g.addMana(ctx.you, `{${pick[0]}}{${pick[1]}}`);
-        },
-      }) });
     },
   },
 
@@ -361,39 +310,8 @@ export default {
     },
   },
 
-  "Secluded Courtyard": {
-    // Spend restrictions aren't tracked: the parser now drops the "spend this mana only …" rider and the land simply makes
-    // any colour (agreed simplification). The "choose a creature type" line has no effect left and stays flagged.
-    patch(def) {
-      const abilities = def.abilities.filter((ab) => !(ab.kind === "activated" && (ab.effects || []).some((e) => e.op === "manual")));
-      return out(def, { abilities }, def.unparsed);
-    },
-  },
-
-  // Spark Double: needs an "enters as a copy" replacement effect -> no override (stays flagged).
-
-  "Syr Konrad, the Grim": {
-    // Only the "another creature dies" clause can be detected; the graveyard-movement clauses need a zone-change event.
-    patch(def) {
-      return out(def, { abilities: plus(def, {
-        kind: "triggered", on: { event: "dies", who: { types: ["creature"], other: true } },
-        effects: [{ op: "damage", amount: 1, to: "opponent" }],
-        text: "Whenever another creature dies, Syr Konrad deals 1 damage to each opponent.",
-      }) }, def.unparsed);
-    },
-  },
 
   // ------------------------------------------------------------------------------------------------ T
-  "Teferi's Protection": {
-    // Protection from everything + "life total can't change" are automated; phasing out your permanents is not (flagged).
-    patch(def) {
-      return out(def, { spell: spellOf(def, { effects: [
-        { op: "until", until: "yourNextTurn", static: { type: "playerProtection", affects: "you" } },
-        ...def.spell.effects,
-      ] }) }, def.unparsed);
-    },
-  },
-
   "Territory Culler": {
     patch(def) {
       return out(def, { abilities: plus(def, {
@@ -415,7 +333,6 @@ export default {
     },
   },
 
-  // Thousand-Year Elixir: needs "activate as though it had haste" -> no override (stays flagged).
 
   "Tibalt, Rakish Instigator": {
     patch(def) {
@@ -425,7 +342,6 @@ export default {
     },
   },
 
-  // Tithing Blade // Consuming Sepulcher (craft) and Topiary Lecturer (increment): not implemented -> stay flagged.
 
   // ------------------------------------------------------------------------------------------------ V
   "Villainous Wrath": {
@@ -501,7 +417,6 @@ export default {
     },
   },
 
-  // Wolfwillow Haven: the extra mana is a *triggered mana ability* (resolves immediately); the engine would stack it -> stays flagged.
 
   "Wrathful Raptors": {
     patch(def) {
