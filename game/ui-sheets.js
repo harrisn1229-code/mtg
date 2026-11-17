@@ -162,7 +162,7 @@ export const sheetMethods = {
   /* ---------- confirm / number ---------- */
   openConfirm(req) {
     const src = req.source ? this.obj(req.source) : null;
-    const html = '<h2>' + esc(req.prompt || "Are you sure?") + "</h2>" + (src ? '<div class="cfsrc"></div>' : "") + '<div class="sh-actions"><button class="mbtn" data-act="cfNo">No</button><button class="mbtn pri" data-act="cfYes">Yes</button></div>';
+    const html = '<h2>' + esc(req.prompt || "Are you sure?") + "</h2>" + (src && src.c ? '<p class="sub">' + esc(src.c.name) + '</p><div class="cfsrc"></div>' : "") + '<div class="sh-actions"><button class="mbtn" data-act="cfNo">No</button><button class="mbtn pri" data-act="cfYes">Yes</button></div>';
     const rec = this.sheetHtml(html, { cls: "small", dialog: true, label: req.prompt });
     if (src && src.c) { const s = rec.body.querySelector(".cfsrc"); s.appendChild(cardFromObj(src, "small")); }
   },

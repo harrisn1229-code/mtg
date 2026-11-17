@@ -299,6 +299,8 @@ html.mp-lock,html.mp-lock body{overflow:hidden;overscroll-behavior:none}
 .sx{position:absolute;right:8px;top:8px;width:44px;height:44px;display:grid;place-items:center;border-radius:50%;color:var(--mute);z-index:2}
 .sx svg{width:22px;height:22px}
 .sh-actions{display:flex;gap:10px;margin-top:16px;justify-content:flex-end;flex-wrap:wrap}
+/* source card shown in a confirm dialog: .card is absolutely positioned, so its holder must be a sized, positioned box */
+.cfsrc{position:relative;width:min(132px,36vw);aspect-ratio:5/7;margin:12px auto 0;flex:none}.cfsrc .card{border-radius:9px}
 .sh-actions .mbtn{flex:1 1 130px}.sh-actions.col{flex-direction:column}.sh-actions.col .mbtn{flex:none}
 .mbtn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 18px;border-radius:14px;background:#233245;border:1px solid #34465c;color:var(--ink);font-weight:600;font-size:15.5px;text-align:left}
 .mbtn:active:not(:disabled){filter:brightness(1.2)}
