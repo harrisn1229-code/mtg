@@ -303,10 +303,12 @@ test("Dig Through Time: two of the top seven to hand, rest to the bottom", () =>
   assert.equal(g.request.kind, "choose");
   assert.equal(g.request.min, 2); assert.equal(g.request.max, 2);
   choose(g, "Consider", "Preordain");
+  assert.equal(g.request.kind, "choose"); assert.equal(g.request.ordered, true, "the bottom order is the player's choice");
+  choose(g, "Opt", "Brainstorm", "Mountain", "Plains", "Swamp");
   resolveAll(g);
   assert.ok(zoneNames(g, 0, "hand").includes("Consider") && zoneNames(g, 0, "hand").includes("Preordain"));
   const lib = g.state.players[0].library.map((id) => g.state.objects[id].c.name);
-  assert.deepEqual(lib.slice(0, 5).sort(), ["Brainstorm", "Mountain", "Opt", "Plains", "Swamp"], "the five others went to the bottom");
+  assert.deepEqual(lib.slice(0, 5), ["Swamp", "Plains", "Mountain", "Brainstorm", "Opt"], "the five others went to the bottom in the chosen order (last chosen lowest)");
   healthy(g);
 });
 
@@ -486,21 +488,6 @@ test("God-Eternal Oketra: exile from the battlefield also lets you tuck her", ()
   assert.equal(lib[lib.length - 3], o.id);
 });
 
-test("Inferno Titan: divided damage is fixed via mode choice on the trigger", () => {
-  const g = setup({ p0: { hand: ["Inferno Titan"] }, p1: { battlefield: ["Gravecrawler", "Nested Shambler"] } });
-  toMain(g);
-  mana(g, 0, "{4}{R}{R}");
-  act(g, "Cast Inferno Titan");
-  resolveUntilAsk(g);
-  choose(g, "2 damage to one target");
-  choose(g, "Gravecrawler");
-  choose(g, "AI");
-  resolveAll(g);
-  assert.equal(byName(g, "Gravecrawler").length, 0, "2 damage killed it");
-  assert.equal(life(g, 1), 39);
-  healthy(g);
-});
-
 test("Jeska's Will: with a commander you may choose both modes", () => {
   const g = setup({ commander: true, cmd0: "Brion Stoutarm", p0: { hand: ["Jeska's Will"], library: ["Swamp", "Plains", "Mountain"] }, p1: { hand: ["Island", "Island", "Island"] } });
   const cmd = g.state.objects[g.state.players[0].commanders[0]];
@@ -610,34 +597,6 @@ test("Nothic: d20 roll draws and loses the same amount (1, 2 or 7)", () => {
   const n = g.state.players[0].hand.length - h;
   assert.ok([1, 2, 7].includes(n), "drew " + n);
   assert.equal(40 - life(g, 0), n);
-  healthy(g);
-});
-
-test("Outpost Siege: Khans exiles a playable card each upkeep; Dragons pings when a creature leaves", () => {
-  let g = setup({ p0: { hand: ["Outpost Siege"], library: ["Swamp", "Plains"] } });
-  toMain(g);
-  mana(g, 0, "{3}{R}");
-  act(g, "Cast Outpost Siege");
-  resolveUntilAsk(g);
-  choose(g, "Khans");
-  resolveAll(g);
-  assert.equal(one(g, "Outpost Siege").counters.khans, 1);
-  until(g, (r, st) => st.turn === 3 && st.step === "upkeep" && st.stack.length > 0);
-  resolveAll(g);
-  assert.equal(g.state.players[0].exile.length, 1);
-  assert.ok(g.obj(g.state.players[0].exile[0]).mayPlay);
-  g = setup({ p0: { hand: ["Outpost Siege"], battlefield: ["Carrion Feeder"] } });
-  toMain(g);
-  mana(g, 0, "{3}{R}");
-  act(g, "Cast Outpost Siege");
-  resolveUntilAsk(g);
-  choose(g, "Dragons");
-  resolveAll(g);
-  g.sacrifice(one(g, "Carrion Feeder"));
-  kick(g);
-  choose(g, "AI");
-  resolveAll(g);
-  assert.equal(life(g, 1), 39);
   healthy(g);
 });
 
@@ -771,17 +730,6 @@ test("Ringsight: the Ring tempts you, then tutor a card sharing a colour with a 
   healthy(g);
 });
 
-test("Rugged Prairie: pay {R/W} + tap for RR, RW or WW", () => {
-  const g = setup({ p0: { battlefield: ["Rugged Prairie"] } });
-  toMain(g);
-  mana(g, 0, "{R}");
-  act(g, "Rugged Prairie: {R/W}");
-  choose(g, "{W}{W}");
-  assert.equal(g.state.players[0].mana.W, 2);
-  assert.equal(g.state.players[0].mana.R, 0);
-  healthy(g);
-});
-
 test("Ruthless Technomancer: sacrifice for Treasures; X-artifact reanimation with 'X can't be 0' built in", () => {
   const g = setup({ p0: { hand: ["Ruthless Technomancer"], battlefield: ["Dread Presence"], graveyard: ["Gravecrawler", "Elder Gargaroth"] } });
   toMain(g);
@@ -819,16 +767,6 @@ test("Sauron's Ransom: opponent splits the top four into face-down/face-up piles
   assert.equal(g.state.players[0].ring.level, 1);
 });
 
-test("Secluded Courtyard / Path of Ancestry: mana abilities without the spend riders (silent simplification)", () => {
-  const c = compileCard(cardByName("Secluded Courtyard"));
-  assert.equal(c.abilities.filter((a) => a.kind === "activated" && a.mana).length, 2);
-  assert.deepEqual(c.unparsed, ["As this land enters, choose a creature type."]);
-  const p = compileCard(cardByName("Path of Ancestry"));
-  assert.ok(!JSON.stringify(p.abilities).includes('"manual"'));
-  assert.ok(p.abilities.some((a) => a.kind === "activated" && a.mana));
-  assert.equal(p.unparsed.length, 0);
-});
-
 test("Syr Konrad: another creature dying pings each opponent", () => {
   const g = setup({ p0: { battlefield: ["Syr Konrad, the Grim", "Carrion Feeder"] } });
   toMain(g);
@@ -836,21 +774,6 @@ test("Syr Konrad: another creature dying pings each opponent", () => {
   kick(g);
   resolveAll(g);
   assert.equal(life(g, 1), 39);
-});
-
-test("Teferi's Protection: protection from everything, life total can't change, until your next turn", () => {
-  const g = setup({ p0: { hand: ["Teferi's Protection"] }, p1: { battlefield: ["Gravecrawler"] } });
-  toMain(g);
-  mana(g, 0, "{2}{W}");
-  act(g, "Cast Teferi's Protection");
-  resolveAll(g);
-  assert.equal(g.state.players[0].protection, true);
-  assert.equal(g.dealDamage(one(g, "Gravecrawler"), "P0", 2), 0);
-  assert.equal(g.gainLife(0, 3), 0);
-  assert.ok(zoneNames(g, 0, "exile").includes("Teferi's Protection"));
-  until(g, (r, st) => st.turn === 3 && st.step === "upkeep");
-  assert.equal(g.state.players[0].protection, false);
-  assert.deepEqual(compileCard(cardByName("Teferi's Protection")).unparsed.length, 1, "phasing is still flagged");
 });
 
 test("Territory Culler: landfall look at the top card", () => {

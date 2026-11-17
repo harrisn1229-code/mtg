@@ -173,6 +173,22 @@ html.mp-lock,html.mp-lock body{overflow:hidden;overscroll-behavior:none}
 .bds{position:absolute;right:1.5cqw;top:1.5cqw;display:flex;gap:1cqw}
 .bd{width:13cqw;height:13cqw;border-radius:50%;display:grid;place-items:center;font:700 8.5cqw/1 system-ui;background:rgb(10 8 6 / .85);color:#fff}
 .bd.warn{background:#f2b04e;color:#2a1a00}.bd.cmd{color:var(--brass2)}.bd.tk{color:#9ee}
+.bd.fd{color:#c9b6ff}.bd.mut{width:auto;padding:0 3cqw;border-radius:6cqw;color:#ffd38a}
+/* face-down permanents / spells: a card back (only their controller is told what they are) */
+.card.is-facedown .fr{background:repeating-linear-gradient(45deg,#2a2440 0 6%,#332b52 6% 12%);border-color:#6d5fa8}
+.card.is-facedown .f-name,.card.is-facedown .f-type,.card.is-facedown .f-text{color:#d8d0f5}
+.card.is-facedown .f-art{background:radial-gradient(circle at 50% 45%,#7c6bc4 0 18%,#3b315f 19% 100%)}
+.card.is-facedown .im{display:none}
+/* phased out: treated as though it doesn't exist */
+.tile.phased{opacity:.28;filter:grayscale(.8);pointer-events:none}
+.tile.phased::after{content:"phased out";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-12deg);font:700 10px/1 system-ui;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:rgb(0 0 0 / .7);padding:3px 5px;border-radius:5px;white-space:nowrap;z-index:5}
+/* spend-restricted / tracked mana in the pool */
+.rmana{position:relative;display:inline-grid;place-items:center;border-radius:50%;box-shadow:0 0 0 2px #e7c35a;margin:0 2px}
+.rmana.bonus{box-shadow:0 0 0 2px #7fd0ff}
+.rmana i{position:absolute;right:-6px;bottom:-5px;font-style:normal;font-size:9px;line-height:1}
+.zpile{display:flex;flex-direction:column;gap:4px;margin:8px 0 0;padding:8px 10px;border-radius:10px;background:rgb(255 255 255 / .05)}
+.zpile b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
+.zpile span{font-size:14px}
 .xn{position:absolute;left:1.5cqw;bottom:1.5cqw;padding:.5cqw 3cqw;border-radius:3cqw;background:rgb(10 8 6 / .92);border:.6cqw solid #fff3;font:700 15cqw/1.2 var(--serif);color:#fff}
 .ord{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);width:24cqw;height:24cqw;border-radius:50%;display:grid;place-items:center;background:var(--ember);color:#1a0a00;font:700 15cqw var(--serif);box-shadow:0 2px 8px #000a}
 .zz{position:absolute;left:1.5cqw;top:1.5cqw;width:11cqw;height:11cqw;border-radius:50%;display:grid;place-items:center;background:rgb(10 8 6 / .75);font:italic 700 8cqw system-ui;color:#9fb4d4}
@@ -310,6 +326,8 @@ html.mp-lock,html.mp-lock body{overflow:hidden;overscroll-behavior:none}
 .mbtn.round{width:56px;height:56px;border-radius:50%;padding:0;justify-content:center}.mbtn.round svg{width:24px;height:24px}
 .mbtn .gps{font-size:15px;margin-left:auto}
 .pmenu{display:flex;flex-direction:column;gap:8px}.pmenu .mbtn{justify-content:flex-start}
+.tgh{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:14px 0 6px;font-weight:600}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tgrid .mbtn.tool{justify-content:flex-start;text-align:left;min-height:44px;font-size:14px;line-height:1.2;white-space:normal}
 .msheet.small{width:min(430px,100%)}
 .msheet.tall{max-height:92%}
 /* zoom */

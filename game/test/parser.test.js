@@ -125,7 +125,8 @@ test("Adventure and transform layouts", () => {
   assert.equal(b.layout, "adventure");
   assert.equal(b.faces.length, 2);
   assert.deepEqual(b.faces[1].spell.targets, [{ what: "any" }]);
-  assert.equal(b.faces[1].spell.effects[0].amount, 2);
+  assert.deepEqual(b.faces[1].spell.effects[0], { op: "until", until: "endOfTurn", static: { type: "cantPrevent", affects: "you" } });
+  assert.equal(b.faces[1].spell.effects[1].amount, 2);
   const w = def("Westvale Abbey");
   assert.equal(w.layout, "transform");
   assert.equal(w.faces[1].keywords.lifelink, true);
@@ -144,7 +145,7 @@ test("Conditionals: instead, kicker, Ilysian Caryatid", () => {
 
 test("Never guess: unsupported text lands in unparsed", () => {
   assert.ok(def("Mosswort Bridge").unparsed.length >= 1);
-  assert.ok(def("Everquill Phoenix").unparsed.some((l) => /Mutate/.test(l)));
+  assert.ok(compileCard({ name: "Banding Guy", mana_cost: "{W}", type_line: "Creature — Human", pt: "1/1", oracle_text: "Banding" }).unparsed.includes("Banding"));
   assert.ok(def("Witch-king, Bringer of Ruin").unparsed.length === 1);
 });
 

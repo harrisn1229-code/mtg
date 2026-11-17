@@ -140,7 +140,9 @@ export const renderMethods = {
       s.gyB.setAttribute("aria-label", "Graveyard, " + P.graveyard.length + " cards");
       s.exB.setAttribute("aria-label", "Exile, " + P.exile.length + " cards");
       // mana pool
-      const pool = Object.keys(P.mana || {}).filter((k) => P.mana[k] > 0).map((k) => pip(k) + (P.mana[k] > 1 ? '<b class="pn">' + P.mana[k] + "</b>" : "")).join("");
+      let pool = Object.keys(P.mana || {}).filter((k) => P.mana[k] > 0).map((k) => pip(k) + (P.mana[k] > 1 ? '<b class="pn">' + P.mana[k] + "</b>" : "")).join("");
+      // spend-restricted / tracked mana (Secluded Courtyard, Path of Ancestry) is shown separately, ringed
+      pool += (P.manaX || []).map((u) => '<span class="rmana' + (u.restrict ? " lock" : " bonus") + '" title="' + esc((u.srcName ? u.srcName + ": " : "") + (u.restrict ? (u.restrict.text || "Spend only as restricted") : u.onSpend ? (u.onSpend.text || "Bonus when spent") : "")) + '">' + pip(u.c) + "<i>" + (u.restrict ? "🔒" : "★") + "</i></span>").join("");
       if (s._pool !== pool) { s._pool = pool; s.pool.innerHTML = pool; s.pool.hidden = !pool; }
       // tags: poison, commander damage, ring
       const tags = [];
@@ -211,13 +213,15 @@ export const renderMethods = {
     const f = [ctx.glow.has(o.id) ? "g" : "", ctx.opt.has(o.id) ? "o" : "", ctx.selIds.has(o.id) ? "s" : "", ctx.cand.has(o.id) ? "c" : "", ctx.atkSel.has(o.id) ? "a" + ctx.atkSel.get(o.id) : "",
       ctx.blkCand.has(o.id) ? "b" : "", ctx.assign.has(o.id) ? "x" + ctx.assign.get(o.id) : "", ctx.atkTargets.has(o.id) ? "t" : "", ctx.pickBlk === o.id ? "p" : ""].join("");
     const c = o.c;
-    return [landish ? "L" : "T", c.name, o.tapped ? 1 : 0, o.sick ? 1 : 0, o.damage || 0, JSON.stringify(o.counters || {}), c.power, c.toughness, (c.unparsed || []).length, role, f, o.controller].join("|");
+    return [landish ? "L" : "T", c.name, o.zone, o.tapped ? 1 : 0, o.sick ? 1 : 0, o.damage || 0, JSON.stringify(o.counters || {}), c.power, c.toughness, (c.unparsed || []).length, role, f, o.controller].join("|");
   },
 
   renderBF(p, seen) {
     const S = this.S, ctx = this.ctx;
     const s = this["s" + p];
     const objs = S.battlefield.map((id) => S.objects[id]).filter((o) => o && o.controller === p && !(this.hostMap.has(o.id) === false && false));
+    // phased-out permanents are treated as though they don't exist: shown ghosted, in place, until they phase in
+    for (const id of S.phased || []) { const o = S.objects[id]; if (o && o.phasedController === p && !o.phasedIndirect) objs.push(o); }
     const gmap = new Map(), glist = [];
     objs.forEach((o) => {
       if (o.attachedTo && S.objects[oid(o.attachedTo)] && S.objects[oid(o.attachedTo)].zone === "battlefield") return; // tucked behind its host
@@ -271,7 +275,7 @@ export const renderMethods = {
     const rep = g.members[0], n = g.members.length;
     fillCard(el._card, viewOfObj(rep), (this._cw || 60) > 104 ? "normal" : "small");
     const order = ctx.order.get(rep.id) || 0;
-    setLive(el._card, rep, { n, order, attcount: (this.hostMap.get(rep.id) || []).length });
+    setLive(el._card, rep, { n, order, attcount: (this.hostMap.get(rep.id) || []).length, mine: rep.controller === this.me });
     const id = rep.id;
     let attacking = false, blocking = false;
     const cb = S.combat && S.combat.attackers ? S.combat.attackers : [];
@@ -296,12 +300,14 @@ export const renderMethods = {
     if (n > 1) cls.push(n > 3 ? "st3" : "st2");
     if (has(rep, "land") && !has(rep, "creature")) cls.push("land");
     if (rep.controller === this.opp) cls.push("theirs");
+    if (rep.zone === "phased") cls.push("phased");
+    if (rep.faceDown) cls.push("fdown");
     const cs = cls.join(" ");
     if (el._cls !== cs) { el._cls = cs; el.className = cs; }
     const ids = g.members.map((o) => o.id);
     el._ids = ids;
     el.dataset.cid = ids.join(",");
-    const lbl = rep.c.name + (n > 1 ? " ×" + n : "") + (rep.tapped ? ", tapped" : "") + (rep.c.power != null && has(rep, "creature") ? ", " + rep.c.power + "/" + rep.c.toughness : "") + (ctx.glow.has(id) ? ", has actions" : "");
+    const lbl = (rep.faceDown ? (rep.controller === this.me ? "Face-down " + rep.def.name : "Face-down creature") : rep.c.name) + (rep.zone === "phased" ? " (phased out)" : "") + (n > 1 ? " ×" + n : "") + (rep.tapped ? ", tapped" : "") + (rep.c.power != null && has(rep, "creature") ? ", " + rep.c.power + "/" + rep.c.toughness : "") + (ctx.glow.has(id) ? ", has actions" : "");
     if (el._lbl !== lbl) { el._lbl = lbl; el.setAttribute("aria-label", lbl); }
     // attachments
     const atts = this.hostMap.get(id) || [];
@@ -415,7 +421,8 @@ export const renderMethods = {
     if (!o.isAbility) return viewOfObj(o);
     const src = this.obj(o.sourceId);
     const c = src ? src.c : { name: o.c.name };
-    return { name: c.name, cost: "", type: "Ability", text: o.text || (o.c && o.c.text) || "", pt: "", img: "", frame: frameFor(c), token: false, types: ["ability"], art: src ? src.c.img : "" };
+    const hidden = src && src.faceDown && src.controller !== this.me;
+    return { name: hidden ? "Face-down creature" : c.name, cost: "", type: o.isCopy ? "Ability — copy" : "Ability", text: o.text || (o.c && o.c.text) || "", pt: "", img: "", frame: frameFor(c), token: false, types: ["ability"], art: src && !hidden ? src.c.img : "" };
   },
   renderStack() {
     const S = this.S, box = this.el.stackbox;

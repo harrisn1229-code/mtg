@@ -5,6 +5,8 @@
 import { esc, oid, cap } from "./ui-card.js";
 import { createSound } from "./ui-sound.js";
 import { writeSave, clearSave, recordResult } from "./ui-store.js";
+/** Bump when engine changes make old saved answers replay differently (saved matches carry it as `ev`). */
+export const SAVE_EV = 2;
 import { CANCEL, SPEED, PHASES, SVGNS, IC, isMeaningful } from "./ui-shared.js";
 import { sheetMethods } from "./ui-sheets.js";
 import { renderMethods } from "./ui-render.js";
@@ -67,12 +69,14 @@ export class Match {
       this.g = this.factory(this.setup, this.seed);
       this.g.start();
       this.who = [];
+      if (restoring && this.o.ev !== SAVE_EV) throw Object.assign(new Error("saved by an older version"), { oldSave: true });
       if (this.o.answers && this.o.answers.length) this.replay(this.o.answers.slice());
+      if (restoring && this.g.error) throw Object.assign(new Error(this.g.error.message || "replay error"), { oldSave: true });
     } catch (e) {
       console.error(e);
       this.root.classList.remove("loading");
-      if (restoring) clearSave();
-      this.fatal("The match could not be " + (restoring ? "restored" : "started") + ": " + (e && e.message ? e.message : e));
+      if (restoring) { this.oldSave(e); return; }
+      this.fatal("The match could not be started: " + (e && e.message ? e.message : e));
       return;
     }
     this.syncDisp();
@@ -97,6 +101,14 @@ export class Match {
     }
     this.g.drainEvents();
   }
+
+  /** A saved match that doesn't replay on this engine (older version, illegal answer, replay error): offer to discard it. */
+  oldSave(e) {
+    const why = e && e.oldSave ? "" : '<p class="sub">(' + esc(e && e.message ? e.message : String(e)) + ")</p>";
+    this.sheetHtml('<h2>This saved match is from an older version</h2><p class="sub">The game rules were updated since this match was saved, so it can\u2019t be resumed exactly. Discard it and start a new match.</p>' + why +
+      '<div class="sh-actions"><button class="mbtn" data-act="quit">Keep it for now</button><button class="mbtn pri" data-act="discardOld">Discard saved match</button></div>', { modal: true, cls: "small", label: "Old saved match" });
+  }
+  act_discardOld() { clearSave(); this.close("lobby"); }
 
   fatal(msg) {
     this.sheetHtml('<h2>Something went wrong</h2><p class="msg">' + esc(msg) + '</p><div class="sh-actions"><button class="mbtn pri" data-act="quit">Back to lobby</button></div>', { modal: true, cls: "small" });
@@ -417,7 +429,7 @@ export class Match {
   }
   persist() {
     if (this.g && !this.g.over) {
-      writeSave({ setup: this.setup, seed: this.seed, answers: this.g.answers.slice(), turn: this.S.turn, ts: Date.now(), life: [this.S.players[0].life, this.S.players[1].life], v: 1 });
+      writeSave({ setup: this.setup, seed: this.seed, answers: this.g.answers.slice(), turn: this.S.turn, ts: Date.now(), life: [this.S.players[0].life, this.S.players[1].life], v: 1, ev: SAVE_EV });
     }
   }
   noteMarks(evs) {

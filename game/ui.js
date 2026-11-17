@@ -74,7 +74,7 @@ async function openMatch(ctx, o) {
   const settings = loadSettings();
   const factory = makeFactory(ctx.be, o.snap);
   const m = new Match({
-    factory, decide: ctx.be.decide, setup: o.setup, seed: o.seed, answers: o.answers || [], settings, saveSettings,
+    factory, decide: ctx.be.decide, setup: o.setup, seed: o.seed, answers: o.answers || [], ev: o.ev, settings, saveSettings,
     onExit: (reason) => { ctx.onExit && ctx.onExit(reason); },
   });
   ctx.match = m;
@@ -268,7 +268,7 @@ async function resume(L, btn) {
       const yb = L.be.buildDeck(L.app.state, save.setup.deckId), ob = L.be.buildDeck(L.app.state, save.setup.oppDeckId);
       snap = { you: trimDeck(yb), opp: trimDeck(ob) };
     }
-    await launch(L, { setup: save.setup, seed: save.seed, snap, answers: save.answers, restoring: true });
+    await launch(L, { setup: save.setup, seed: save.seed, snap, answers: save.answers, ev: save.ev, restoring: true });
   } catch (e) {
     console.error(e);
     clearSave();

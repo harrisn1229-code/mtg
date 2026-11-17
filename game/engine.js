@@ -27,6 +27,7 @@ import { manaMethods } from "./engine-mana.js";
 import { effectMethods, describeCost } from "./engine-effects.js";
 import { actionMethods } from "./engine-actions.js";
 import { combatMethods } from "./engine-combat.js";
+import { extMethods } from "./engine-ext.js";
 
 export { STEPS, parseManaCost, costToString, costCmc, TOKENS, makeRng, describeCost, hasType };
 
@@ -35,6 +36,7 @@ const pid = (i) => "P" + i;
 const ZONES = ["library", "hand", "graveyard", "exile", "command"];
 const SELF_EVENTS = new Set(["dies", "leaves", "cycled", "discard", "cast", "sacrifice", "exploits"]);
 const LOOKBACK_EVENTS = new Set(["dies", "leaves", "sacrifice"]);
+const PLAYER_STATICS = new Set(["playerProtection", "lifeCantChange", "cantPrevent", "cantGainLife", "noMaxHand", "extraLand", "castAsFlash"]);
 const MAX_SBA_LOOPS = 300, MAX_TRIGGER_ROUNDS = 400, MAX_RESOLVES_NO_ACTION = 2500, MAX_REQUESTS_PER_TURN = 20000;
 
 export function isPermanentCard(def) { return !!def && (def.types || []).some((t) => PERMANENT_TYPES.includes(t)); }
@@ -50,8 +52,8 @@ export function spellCostFor(game, p, objId, variant) {
   try { return game.spellCost(p, o, variant || "normal"); } catch { return null; }
 }
 export function manaAvailable(game, p) {
-  let n = poolTotal(game.state.players[p].mana);
-  for (const s of game.manaSources(p)) n += Math.max(...s.opts.map((o) => o.units.length - o.input));
+  let n = poolTotal(game.state.players[p].mana) + (game.state.players[p].manaX || []).length;
+  for (const s of game.manaSources(p)) n += Math.max(0, ...s.opts.map((o) => o.net ?? o.units.length - o.input));
   return n;
 }
 
@@ -84,16 +86,17 @@ export class Game {
       turn: 0, active: 0, step: "untap", priority: null,
       players: [], battlefield: [], stack: [], objects: {}, combat: null,
       effects: [], controlEffects: [], delayed: [], links: [], pendingTriggers: [],
-      extraTurns: [], extraCombats: 0, spellsThisTurn: 0, ts: 0, nextId: 1, requestsThisTurn: 0,
+      extraTurns: [], extraCombats: 0, spellsThisTurn: 0, ts: 0, nextId: 1, requestsThisTurn: 0, phased: [], resolutions: {},
     };
+    this._manaTrig = [];
     const st = this.state;
     players.forEach((pd, i) => {
       st.players.push({
         idx: i, id: pid(i), name: pd?.name || `Player ${i + 1}`, ai: !!pd?.ai, life: this.options.startingLife, poison: 0,
-        mana: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }, landsPlayed: 0, landsPerTurn: 1,
+        mana: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }, manaX: [], landsPlayed: 0, landsPerTurn: 1,
         library: [], hand: [], graveyard: [], exile: [], command: [], commanders: [], commanderCasts: {}, commanderDamage: {},
         ring: { level: 0, bearer: null }, lost: false, drewFromEmpty: false, counters: {}, lifeLostThisTurn: 0, lifeGainedThisTurn: 0,
-        noMaxHand: false, protection: false, flashSorceries: false,
+        noMaxHand: false, protection: false, flashSorceries: false, lifeLocked: false,
       });
     });
     players.forEach((pd, i) => {
@@ -370,6 +373,7 @@ export class Game {
     const rm = (arr) => { const i = arr.indexOf(o.id); if (i >= 0) arr.splice(i, 1); };
     if (z === "battlefield") rm(st.battlefield);
     else if (z === "stack") rm(st.stack);
+    else if (z === "phased") rm(st.phased);
     else if (ZONES.includes(z)) for (const p of st.players) rm(p[z]);
   }
   removeFromStack(o) {
@@ -381,22 +385,33 @@ export class Game {
     return {
       id: o.id, owner: o.owner, controller: o.controller, zone: "battlefield", c: o.c, counters: { ...o.counters }, token: o.token,
       isCommander: o.isCommander, tapped: o.tapped, damage: o.damage, def: o.def, face: o.face, attachedTo: o.attachedTo, lki: true, ts: o.ts,
+      copyDef: o.copyDef || null, mergeDef: o.mergeDef || null, faceDown: !!o.faceDown, pile: o.pile ? [...o.pile] : null, chosen: o.chosen || null,
     };
   }
 
   beginBatch() { this._batchLeft = []; }
 
-  /** Core zone change. opts: {controller, tapped, position, counters, quiet, attachTo, cause}. Returns true if moved. */
+  /** Core zone change. opts: {controller, tapped, position, counters, quiet, attachTo, cause, entry, cmdAsked}. Returns true if moved.
+   *  Generator callers should prefer the enter / zoneMove generators (engine-ext.js), which make "as enters" and commander choices first. */
   moveObj(o, to, opts = {}) {
     const st = this.state;
     if (!o || o.zone === "gone" || o.isAbility) return false;
     const from = o.zone;
     if (from === to && to !== "library" && to !== "battlefield") return false;
+    if (from === "battlefield" && to === "graveyard" && o.c?.types.includes("creature") && (st.effects.some((e) => e.static?.type === "exileInsteadOfDying" && e.objIds && e.objIds.includes(o.id)) ||
+        this._statics.some((s) => s.st.type === "exileInsteadOfDying" && !s.objIds && s.st.affects && this.matches(o, s.st.affects, { source: s.src, you: s.you })))) {
+      this.log(`${o.c.name} is exiled instead of dying`);
+      to = "exile";
+    }
+    if (from === "battlefield" && to !== "exile" && st.effects.some((e) => e.static?.type === "exileIfLeaves" && e.objIds && e.objIds.includes(o.id))) { this.log(`${o.c.name} is exiled instead`); to = "exile"; } // unearth
+    const preC = o.c;
     this.removeFromZone(o);
     let lki = null;
     const returning = [];
-    if (from === "battlefield") {
+    let wasFaceDown = false;
+    if (from === "battlefield" || from === "phased") {
       lki = this.snapshot(o);
+      lki.attachments = [...(o.attachments || [])];
       o.lki = lki;
       this._batchLeft.push(lki);
       if (o.attachedTo) { const h = st.objects[o.attachedTo]; if (h) h.attachments = h.attachments.filter((x) => x !== o.id); o.attachedTo = null; }
@@ -404,7 +419,7 @@ export class Game {
       o.attachments = [];
       st.controlEffects = st.controlEffects.filter((ce) => ce.objId !== o.id);
       for (const e of st.effects) if (e.objIds && e.objIds.includes(o.id)) e.objIds = e.objIds.filter((x) => x !== o.id);
-      st.effects = st.effects.filter((e) => !(e.objIds && e.objIds.length === 0 && e.static?.type !== "playerProtection") && !(e.until === "sourceLeaves" && e.sourceId === o.id));
+      st.effects = st.effects.filter((e) => !(e.objIds && e.objIds.length === 0 && !PLAYER_STATICS.has(e.static?.type)) && !(e.until === "sourceLeaves" && e.sourceId === o.id));
       for (const pl of st.players) if (pl.ring.bearer === o.id) pl.ring.bearer = null;
       if (st.combat) {
         st.combat.attackers = st.combat.attackers.filter((a) => a.obj !== o.id);
@@ -413,11 +428,17 @@ export class Game {
       for (let i = st.links.length - 1; i >= 0; i--) if (st.links[i].sourceId === o.id) { returning.push(st.links[i].objId); st.links.splice(i, 1); }
       o.tapped = false; o.damage = 0; o.deathtouched = false; o.counters = {}; o.sick = false; o.echoDue = false;
       o.controller = o.owner; o.baseController = o.owner; o.loyaltyUsed = null; o.activations = null;
+      if (o.pile && o.pile.length > 1) o._leftPile = o.pile.filter((id) => id !== o.id);
+      o.pile = null; o.mergeDef = null; o.chosen = null; o.phasedIndirect = false; o.phasedController = null;
       if (!o.token) o.copyDef = null;
+    }
+    if (o.faceDown && !(from === "stack" && to === "battlefield") && !(from === "exile" && to === "exile")) {
+      if (from === "battlefield" || from === "stack" || from === "phased") wasFaceDown = true;
+      o.faceDown = false;
     }
     if (from === "stack") { o.castVariant = o.castVariant || null; }
     o.zone = to;
-    if (o.token && from === "battlefield" && to !== "battlefield") {
+    if (o.token && (from === "battlefield" || from === "phased") && to !== "battlefield") {
       o.zone = "gone";
     } else if (o.isCopy && to !== "stack") {
       o.zone = "gone";
@@ -430,10 +451,13 @@ export class Game {
       o.damage = 0;
       o.ts = ++st.ts;
       if (from !== "stack") { o.kicked = false; o.x = null; }
+      const entry = opts.entry || this.defaultEntry(o, opts);
+      if (entry.copy && entry.copy.def) o.copyDef = entry.copy.def;
+      o.chosen = entry.chosen && Object.keys(entry.chosen).length ? { ...entry.chosen } : null;
       o.c = this.baseC(o);
       this.markDirty();
       this.refresh();
-      this.applyEntersReplacements(o, opts);
+      this.applyEntersReplacements(o, opts, entry);
     } else if (to === "stack") {
       st.stack.push(o.id);
     } else if (ZONES.includes(to)) {
@@ -451,11 +475,12 @@ export class Game {
       o.mayPlay = null;
       o.x = null; o.kicked = false; o.targets = []; o.castVariant = null;
       o.c = this.baseC(o);
-      if (o.isCommander && to !== "command") o.cmdPending = true;
+      if (o.isCommander && to !== "command" && !opts.cmdAsked) o.cmdPending = true;
     } else {
       o.zone = "gone";
     }
     if (to !== "command" && o.isCommander && from === "command") o.cmdPending = false;
+    if (to === "command") o.cmdPending = false;
     this.markDirty();
     const name = (lki || o).c?.name || o.c?.name;
     if (!opts.quiet) {
@@ -473,7 +498,8 @@ export class Game {
       if (o.token && to !== "battlefield") text = `${name} (token) ${to === "graveyard" ? (lki?.c.types.includes("creature") ? "dies" : "is put into the graveyard") : "leaves the battlefield"}`;
       this.emit({ t: "move", obj: o.id, from, to, player: o.owner, text });
     }
-    if (from === "battlefield") {
+    if (wasFaceDown) this.emit({ t: "reveal", objs: [o.id], player: o.owner, text: `(The face-down card was ${o.def?.name || "?"})` });
+    if (from === "battlefield" || from === "phased") {
       if (to === "graveyard" && lki.c.types.includes("creature")) { this.emit({ t: "dies", obj: o.id, text: `${name} died` , silent: true }); this.fireTrigger({ type: "dies", obj: lki, player: lki.controller }); }
       this.fireTrigger({ type: "leaves", obj: lki, to, player: lki.controller });
     }
@@ -481,26 +507,40 @@ export class Game {
       if (opts.attachTo) { const h = st.objects[opts.attachTo]; if (h && h.zone === "battlefield") this.attach(o, h, true); }
       this.fireTrigger({ type: "enters", obj: o, from, player: o.controller });
     }
+    // a card (not a token, not a copy of a spell) changed zones: "a creature card is put into a graveyard from anywhere",
+    // "a card leaves your graveyard" (Syr Konrad). Pile cards of a merged permanent come from the battlefield.
+    if (!o.token && !o.isCopy && o.def) {
+      const f = from === "merged" || from === "phased" ? "battlefield" : from;
+      const lc = f === "graveyard" ? preC : o.c;
+      this.fireTrigger({ type: "zoneChange", obj: { id: o.id, owner: o.owner, controller: o.owner, zone: f === "graveyard" ? "graveyard" : o.zone, c: lc || o.c, token: false, def: o.def, lki: true }, from: f, to: o.zone === "gone" ? to : o.zone, player: o.owner });
+    }
+    if (o._leftPile) this.splitPile(o, to, opts);
     for (const rid of returning) { const r = st.objects[rid]; if (r && r.zone === "exile") this.moveObj(r, "battlefield", { controller: r.owner }); }
     return true;
   }
 
-  applyEntersReplacements(o, opts) {
+  applyEntersReplacements(o, opts, entry) {
     const d = this.faceDef(o);
     const ctx = { source: o, you: o.controller, quiet: true };
     if (o.c.types.includes("planeswalker")) o.counters.loyalty = (o.counters.loyalty | 0) + (+d.loyalty || 0);
     if (opts.counters) for (const [k, n] of Object.entries(opts.counters)) o.counters[k] = (o.counters[k] | 0) + (n | 0);
+    if (entry && entry.copy) { // "except it enters with an additional +1/+1 counter if it's a creature / loyalty counter if it's a planeswalker"
+      const ex = entry.copy.except || {};
+      const add = (m) => { for (const [k, n] of Object.entries(m || {})) o.counters[k] = (o.counters[k] | 0) + (n | 0); };
+      if (o.c.types.includes("creature")) add(ex.counters?.creature);
+      if (o.c.types.includes("planeswalker")) add(ex.counters?.planeswalker);
+      this.log(`${this.pname(o.controller)}'s ${o.def.name} enters as a copy of ${entry.copy.def?._copyOf || "a permanent"}`);
+    }
     for (const ab of this.baseAbilities(o)) {
       if (ab.kind !== "static" || !ab.effect) continue;
       const e = ab.effect;
       if (e.type === "entersTapped" && (e.affects == null || e.affects === "self")) {
-        let unless = false;
-        if (e.unless) { try { unless = this.evalCond(e.unless, ctx); } catch { unless = false; } }
-        if (!unless) {
-          o.tapped = true;
-          if (e.unlessPay) this.pendInternal(o, o.controller, { kind: "triggered", text: `Pay ${describeCost(e.unlessPay)} to untap ${o.c.name}?`,
-            effects: [{ op: "may", cost: e.unlessPay, text: `Pay ${describeCost(e.unlessPay)} so ${o.c.name} is untapped?`, effects: [{ op: "untap", what: "self" }] }] }, { type: "enters", obj: o });
-        }
+        let tapped;
+        if (e.unlessPay) tapped = !(entry && entry.untapped);
+        else if (e.unless && e.unless.type === "hasInHand" && entry && entry.done && !entry.fallback) tapped = !entry.untapped;
+        else if (e.unless) { let unless = false; try { unless = this.evalCond(e.unless, ctx); } catch { unless = false; } tapped = !unless; }
+        else tapped = true;
+        if (tapped) o.tapped = true;
       } else if (e.type === "entersWithCounters" && (e.affects == null || e.affects === "self")) {
         const n = this.amount(e.amount ?? 1, { ...ctx, x: o.x | 0, kicked: o.kicked });
         if (n > 0) o.counters[e.kind || "+1/+1"] = (o.counters[e.kind || "+1/+1"] | 0) + n;
@@ -537,6 +577,23 @@ export class Game {
     }
     return k;
   }
+  /** Draw with the commander replacement (CR 903.9b): a commander that would be drawn may go to the command zone instead. */
+  *drawCards$(p, n = 1) {
+    const pl = this.state.players[p];
+    if (!pl || pl.lost) return 0;
+    let k = 0;
+    for (let i = 0; i < n; i++) {
+      const top = pl.library.length ? this.state.objects[pl.library[pl.library.length - 1]] : null;
+      if (top && top.isCommander) {
+        if (yield* this.confirm$(p, `Put ${top.c.name} into the command zone instead of drawing it?`, top.id, { kind: "commander" })) { this.moveObj(top, "command"); continue; }
+      }
+      const got = this.draw(p, 1);
+      if (top && top.isCommander && top.zone === "hand") top.cmdPending = false; // already declined
+      if (!got) break;
+      k += got;
+    }
+    return k;
+  }
   mill(p, n = 1) {
     const pl = this.state.players[p];
     const out = [];
@@ -557,7 +614,8 @@ export class Game {
   gainLife(p, n) {
     const pl = this.state.players[p];
     n = Math.floor(n);
-    if (!pl || pl.lost || !(n > 0) || pl.protection) return 0;
+    if (!pl || pl.lost || !(n > 0)) return 0;
+    if (pl.lifeLocked) { this.log(`${pl.name}'s life total can't change`); return 0; }
     if (this._statics.some((s) => s.st.type === "cantGainLife" && ((s.st.who ?? "opponent") === "opponent" ? s.you !== p : s.st.who === "you" ? s.you === p : true))) { this.log(`${pl.name} can't gain life`); return 0; }
     pl.life += n;
     pl.lifeGainedThisTurn += n;
@@ -569,7 +627,7 @@ export class Game {
     const pl = this.state.players[p];
     n = Math.floor(n);
     if (!pl || pl.lost || !(n > 0)) return 0;
-    if (pl.protection && !opts.cost) return 0;
+    if (pl.lifeLocked) { if (!opts.silent) this.log(`${pl.name}'s life total can't change`); return 0; }
     pl.life -= n;
     pl.lifeLostThisTurn += n;
     if (!opts.silent) this.emit({ t: "life", player: p, delta: -n, life: pl.life, text: `${pl.name} ${opts.cost ? "pays" : "loses"} ${n} life (${pl.life})` });
@@ -593,8 +651,7 @@ export class Game {
   }
   *moveTo$(o, zone, opts = {}) {
     if (!o) return false;
-    if (o.zone === "stack") this.removeFromStack(o);
-    return this.moveObj(o, zone, opts);
+    return yield* this.zoneMove$(o, zone, opts);
   }
   addCounters(o, kind, n) {
     if (!o || !n || (o.zone !== "battlefield" && !o.isAbility)) return 0;
@@ -645,8 +702,7 @@ export class Game {
     let def;
     if (t && typeof t === "object" && t.copyOf) {
       const src = t.copyOf;
-      def = src.copyDef || src.def;
-      if (src.face && def.faces && def.faces[src.face]) def = def.faces[src.face];
+      def = this.copiableDef(src);
       if (opts.nonLegendary) def = normalizeDef({ ...def, supertypes: def.supertypes.filter((s) => s !== "legendary"), faces: null });
     } else def = tokenDef(t);
     if (opts.power != null || opts.toughness != null) def = normalizeDef({ ...def, power: opts.power ?? def.power, toughness: opts.toughness ?? def.toughness, faces: null });
@@ -720,16 +776,20 @@ export class Game {
     if (isPid(targetId)) {
       const p = +targetId.slice(1);
       const pl = st.players[p];
-      if (!pl || pl.lost || pl.protection) return 0;
+      if (!pl || pl.lost) return 0;
+      if (pl.protection && !this._noPrevent) { this.log(`Damage to ${pl.name} is prevented (protection)`); return 0; }
       if (this.hasKw(src, "infect")) {
         this.emit({ t: "damage", source: src.id, target: targetId, amount: n, combat: !!opts.combat, text: `${srcName} deals ${n} damage to ${pl.name}` });
         this.addPlayerCounters(p, "poison", n);
       } else {
         this.emit({ t: "damage", source: src.id, target: targetId, amount: n, combat: !!opts.combat, text: `${srcName} deals ${n} damage to ${pl.name}` });
-        pl.life -= n;
-        pl.lifeLostThisTurn += n;
-        this.emit({ t: "life", player: p, delta: -n, life: pl.life, text: `${pl.name} loses ${n} life (${pl.life})` });
-        this.fireTrigger({ type: "loseLife", player: p, amount: n });
+        if (pl.lifeLocked) this.log(`${pl.name}'s life total can't change`);
+        else {
+          pl.life -= n;
+          pl.lifeLostThisTurn += n;
+          this.emit({ t: "life", player: p, delta: -n, life: pl.life, text: `${pl.name} loses ${n} life (${pl.life})` });
+          this.fireTrigger({ type: "loseLife", player: p, amount: n });
+        }
       }
       if (opts.combat) {
         if (src.isCommander) pl.commanderDamage[src.id] = (pl.commanderDamage[src.id] | 0) + n;
@@ -739,7 +799,7 @@ export class Game {
     } else {
       const o = st.objects[targetId];
       if (!o || o.zone !== "battlefield") return 0;
-      if (this.protectedFrom(o, src)) { this.log(`Damage to ${o.c.name} is prevented (protection)`); return 0; }
+      if (this.protectedFrom(o, src) && !this._noPrevent) { this.log(`Damage to ${o.c.name} is prevented (protection)`); return 0; }
       this.emit({ t: "damage", source: src.id, target: targetId, amount: n, combat: !!opts.combat, text: `${srcName} deals ${n} damage to ${o.c.name}` });
       const isCre = o.c.types.includes("creature");
       if (o.c.types.includes("planeswalker")) this.addCounters(o, "loyalty", -n);
@@ -784,7 +844,7 @@ export class Game {
     const act = mods.filter(applies);
     for (const s of act) if (s.st.add) n += +s.st.add || 0;
     for (const s of act) if (s.st.mul) n *= +s.st.mul || 1;
-    for (const s of act) if (s.st.prevent === "half") n -= Math.ceil(n / 2); else if (s.st.prevent === "all") n = 0; else if (typeof s.st.prevent === "number") n -= s.st.prevent;
+    if (!this._noPrevent) for (const s of act) if (s.st.prevent === "half") n -= Math.ceil(n / 2); else if (s.st.prevent === "all") n = 0; else if (typeof s.st.prevent === "number") n -= s.st.prevent;
     return Math.max(0, Math.floor(n));
   }
 
@@ -829,6 +889,8 @@ export class Game {
         const times = 1 + this.triggerDoubling(evt, ctrl);
         const ev2 = this._evtOverride || evt;
         this._evtOverride = null;
+        // triggered mana abilities resolve immediately after the mana ability that triggered them (CR 605.4a)
+        if (ab.manaTrigger) { if (evt.forMana) for (let i = 0; i < times; i++) this._manaTrig.push({ source: s, ab, controller: ctrl, event: ev2 }); continue; }
         for (let i = 0; i < times; i++) st.pendingTriggers.push({ sourceId: s.id, source: s, ab, controller: ctrl, event: ev2 });
       }
     };
@@ -904,7 +966,8 @@ export class Game {
       if (who === "you") return o.controller === ctrl;
       if (who === "opponent") return o.controller !== ctrl;
       if (who === "other" || who === "another") return o.id !== s.id;
-      if (who === "equipped" || who === "enchanted" || who === "attached") return !!s.attachedTo && o.id === s.attachedTo;
+      if (who === "equipped" || who === "enchanted" || who === "attached") return (!!s.attachedTo && o.id === s.attachedTo) || (!!o.lki && (o.attachments || []).includes(s.id)); // leaves-the-battlefield look-back
+
       if (typeof who === "object") return this.matches(o, who, ctx, "*");
       if (typeof who === "string") return this.matches(o, who, ctx, "*");
       return false;
@@ -922,6 +985,7 @@ export class Game {
       case "enters":
         if (!whoObj(on.who, evt.obj)) return false;
         if (on.from && evt.from !== on.from) return false;
+        if (on.fromYours && evt.obj && evt.obj.owner !== ctrl) return false;
         if (on.filter && !this.matches(evt.obj, on.filter, ctx, "*")) return false;
         return true;
       case "dies": case "leaves": case "attacks": case "blocks": case "becomesBlocked": case "dealtDamage": case "counterAdded": case "becomesTarget": case "tapped": case "tokenCreated": case "cycled": case "landPlayed": case "exploits": case "untapped":
@@ -970,7 +1034,21 @@ export class Game {
         else if (!whoPlayer(on.who, evt.player)) return false;
         if (on.filter && !this.matches(evt.obj, on.filter, ctx, "*")) return false;
         return true;
-      case "gainLife": case "loseLife": case "draw": case "discard": case "ringTempts": case "ringBearerChosen":
+      case "zoneChange":
+        if (on.from && evt.from !== on.from) return false;
+        if (on.to && evt.to !== on.to) return false;
+        if (on.notFrom && evt.from === on.notFrom) return false;
+        if (on.filter && !this.matches(evt.obj, on.filter, ctx, "*")) return false;
+        return true;
+      case "abilityActivated":
+        if (on.nonMana && evt.isMana) return false;
+        if (on.who == null || on.who === "you" || on.who === "opponent" || on.who === "each") { if (!whoPlayer(on.who ?? "each", evt.player)) return false; }
+        else if (!whoObj(on.who, evt.obj)) return false;
+        if (on.filter && !this.matches(evt.obj, on.filter, ctx, "*")) return false;
+        return true;
+      case "mutates": case "turnedFaceUp":
+        return whoObj(on.who ?? "self", evt.obj);
+      case "gainLife": case "loseLife": case "draw": case "discard": case "ringTempts": case "ringBearerChosen": case "scry":
         if (!whoPlayer(on.who, evt.player)) return false;
         if (on.filter && evt.obj && !this.matches(evt.obj, on.filter, ctx, "*")) return false;
         if (evt.type === "draw" && on.nth && evt.nth !== on.nth) return false;
@@ -1014,6 +1092,7 @@ export class Game {
       const r = yield* this.chooseTargets$(t.controller, ab.targets, source, ctx, ab.effects);
       if (!r) { this.log(`${srcName}'s triggered ability has no legal targets`); return; }
       targets = r;
+      ctx.division = yield* this.chooseDivision$(t.controller, ab.effects || [], targets, source, ctx);
     }
     const a = this.newAbilityObj(source, t.controller, ab, ctx, { trigger: true, targets, modes, modeTargets, specs: ab.targets || [] });
     const tgtText = a.targets.length ? ` targeting ${a.targets.map((id) => this.nameOf(id)).join(", ")}` : "";
@@ -1026,7 +1105,7 @@ export class Game {
     const id = "o" + st.nextId++;
     const srcName = source?.c?.name || "Ability";
     const a = {
-      id, owner: controller, controller, zone: "stack", isAbility: true, sourceId: source?.id ?? null, trigger, ab, ctx,
+      id, owner: controller, controller, zone: "stack", isAbility: true, sourceId: source?.id ?? null, sourceTs: source?.ts ?? null, trigger, ab, ctx,
       _targets: targets, _targetSpecs: specs, _modes: modes, _modeTargets: modeTargets,
       targets: [...targets.flat(), ...(modeTargets ? modeTargets.flat(2) : [])], text: ab.text || "", counters: {}, attachments: [], ts: ++st.ts,
       c: { name: `${srcName} ${trigger ? "trigger" : "ability"}`, types: [], subtypes: [], supertypes: [], colors: source?.c?.colors || [], keywords: {}, abilities: [], text: ab.text || "", img: source?.c?.img || null, cmc: 0, unparsed: [] },
@@ -1103,7 +1182,7 @@ export class Game {
         if (yes) { this.moveObj(o, "command"); acted = true; }
       }
       // ring-bearer validity
-      for (const pl of st.players) if (pl.ring.bearer) { const b = st.objects[pl.ring.bearer]; if (!b || b.zone !== "battlefield" || b.controller !== pl.idx || !b.c.types.includes("creature")) { pl.ring.bearer = null; this.markDirty(); } }
+      for (const pl of st.players) if (pl.ring.bearer) { const b = st.objects[pl.ring.bearer]; if (b && b.zone === "phased") continue; if (!b || b.zone !== "battlefield" || b.controller !== pl.idx || !b.c.types.includes("creature")) { pl.ring.bearer = null; this.markDirty(); } }
       if (!acted) return;
     }
     this.drawGame("state-based action loop");
@@ -1153,6 +1232,7 @@ export class Game {
   }
   endGame(winner, reason) {
     if (this.over) return;
+    try { this.revealFaceDown(); } catch { /* never block the end of the game */ }
     this.over = true;
     this.winner = winner;
     this.request = null;
@@ -1243,6 +1323,12 @@ export class Game {
       if (!yes) return;
     }
     this.emit({ t: "resolve", obj: a.id, text: `${name} resolves` });
+    if (usesResolvedCount(ab)) { // "if this is the second time this ability has resolved this turn" (per object, per ability)
+      const st = this.state, key = `${a.sourceId}:${a.sourceTs}:${ab.text || ""}`;
+      st.resolutions ||= {};
+      if (!st.resolutions[key] || st.resolutions[key].turn !== st.turn) st.resolutions[key] = { turn: st.turn, n: 0 };
+      ctx.resolvedCount = ++st.resolutions[key].n;
+    }
     if (typeof ab.run === "function") { yield* ab.run(this, ctx); return; }
     yield* this.runEffects$(ab.effects || [], ctx);
     if (a._modes) for (let i = 0; i < a._modes.length; i++) {
@@ -1253,6 +1339,7 @@ export class Game {
   }
 
   *resolveSpell$(o) {
+    if (o.castVariant === "mutate") { yield* this.resolveMutate$(o); return; }
     const d = this.faceDef(o);
     const ctx = this.spellCtx(o);
     if (!this.pruneTargets(o, ctx)) {
@@ -1267,7 +1354,7 @@ export class Game {
       const isAura = d.subtypes.includes("aura");
       const attachTo = isAura ? ctx.targets?.[0]?.[0] : null;
       if (o.isCopy) { o.isCopy = false; o.token = true; }
-      this.moveObj(o, "battlefield", { controller: o.controller, attachTo, keepCast: true, counters: o.castVariant === "escape" && d.keywords?.escapeCounters ? { "+1/+1": d.keywords.escapeCounters } : undefined });
+      yield* this.enter$(o, { controller: o.controller, attachTo, keepCast: true, counters: o.castVariant === "escape" && d.keywords?.escapeCounters ? { "+1/+1": d.keywords.escapeCounters } : undefined });
       return;
     }
     const spell = d.spell || {};
@@ -1294,6 +1381,7 @@ export class Game {
     return {
       source: o, you: o.controller, targets: o._targets || [], targetSpecs: o._targetSpecs || [], x: o.x | 0, kicked: !!o.kicked,
       modes: o._modes || [], sacrificed: o._sacrificed || [], overload: o.castVariant === "overload", overloadSpecs: this.faceDef(o).spell?.targets || [], it: [], prev: 0, event: null,
+      division: o._division || null, manaSpent: o.manaSpent | 0,
     };
   }
 
@@ -1458,7 +1546,7 @@ export class Game {
     st.priority = null;
     this.emit({ t: "step", step: name, text: stepLabel(name) });
   }
-  emptyPools() { for (const pl of this.state.players) pl.mana = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }; }
+  emptyPools() { for (const pl of this.state.players) { pl.mana = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }; pl.manaX = []; } }
 
   *turn$() {
     const st = this.state;
@@ -1474,6 +1562,7 @@ export class Game {
     // untap
     yield* this.step$("untap");
     this.expireEffects("yourNextTurn", a);
+    this.phaseIn(a);
     for (const id of st.battlefield) { const o = st.objects[id]; if (o.controller === a) { o.sick = false; if (o.tapped && !this.hasKw(o, "doesn't untap") && !o.c.doesntUntap) this.untap(o, true); } }
     this.markDirty();
     this.refresh();
@@ -1483,7 +1572,7 @@ export class Game {
     // draw
     yield* this.step$("draw");
     const skipDraw = st.turn === 1 && !this.options.commander && st.players.length === 2;
-    if (!skipDraw) this.draw(a, 1);
+    if (!skipDraw) yield* this.drawCards$(a, 1);
     this.fireTrigger({ type: "beginStep", step: "draw", player: a });
     yield* this.priorityRound$();
     this.emptyPools();
@@ -1524,11 +1613,23 @@ export class Game {
       }
       for (const id of st.battlefield) { const o = st.objects[id]; o.damage = 0; o.deathtouched = false; }
       this.expireEffects("endOfTurn");
+      this.expireMayPlay();
       this.markDirty();
       this.refresh();
       this.emptyPools();
       if (!st.pendingTriggers.length) break;
       yield* this.priorityRound$();
+    }
+  }
+
+  /** "You may play that card this turn / until the end of your next turn" permissions end in the cleanup step. */
+  expireMayPlay() {
+    const st = this.state;
+    for (const q of st.players) for (const id of q.exile) {
+      const o = st.objects[id];
+      const m = o && o.mayPlay;
+      if (!m) continue;
+      if (m.until === "endOfYourNextTurn" ? st.turn > m.turn && st.active === m.player : st.turn >= (m.untilTurn ?? m.turn)) o.mayPlay = null;
     }
   }
 
@@ -1544,7 +1645,7 @@ export class Game {
 }
 
 // mixins
-Object.assign(Game.prototype, charMethods, manaMethods, effectMethods, actionMethods, combatMethods);
+Object.assign(Game.prototype, charMethods, manaMethods, effectMethods, actionMethods, combatMethods, extMethods);
 
 export function publicAction(a) {
   const o = { type: a.type, obj: a.obj, label: a.label, zone: a.zone };
@@ -1552,6 +1653,7 @@ export function publicAction(a) {
   if (a.ability != null) o.ability = a.ability;
   if (a.mana) o.mana = true;
   if (a.variant) o.variant = a.variant;
+  if (a.sacForMana) o.sacForMana = a.sacForMana;
   return o;
 }
 
@@ -1562,6 +1664,13 @@ function stepLabel(s) {
 /** Attach AI context to a request as a non-enumerable `_hint` (invisible to JSON / the UI). */
 function setHint(req, hint) {
   if (hint) Object.defineProperty(req, "_hint", { value: hint, enumerable: false, writable: true, configurable: true });
+}
+const RC = new WeakMap();
+function usesResolvedCount(ab) {
+  if (!ab || typeof ab !== "object") return false;
+  let v = RC.get(ab);
+  if (v == null) { try { v = JSON.stringify(ab.effects || []).includes('"resolvedCount"'); } catch { v = false; } RC.set(ab, v); }
+  return v;
 }
 function shorten(t, n = 70) { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; }
 export { shorten, stepLabel };

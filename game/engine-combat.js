@@ -89,6 +89,8 @@ export const combatMethods = {
       if (!this.matches(b, ex, { source: a, you: a.controller })) return false;
     }
     if (this.protectedFrom(a, b)) return false;
+    for (const t of ["plains", "island", "swamp", "mountain", "forest"]) // landwalk
+      if (this.hasKw(a, t + "walk") && this.state.battlefield.some((id) => { const l = this.state.objects[id]; return l.controller === b.controller && l.c.types.includes("land") && l.c.subtypes.includes(t); })) return false;
     const art = b.c.types.includes("artifact");
     if (this.hasKw(a, "intimidate") && !art && !b.c.colors.some((c) => a.c.colors.includes(c))) return false;
     if (this.hasKw(a, "fear") && !art && !b.c.colors.includes("B")) return false;

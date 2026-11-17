@@ -57,6 +57,7 @@ export const effectMethods = {
         if (w === "source") return ev.source ? [ev.source.id] : [];
         if (w === "target") return ev.target ? [ev.target] : [];
         if (w === "controller") return ev.obj ? [pid(ev.obj.controller)] : [];
+        if (w === "ability") return ev.ability ? [ev.ability] : [];
         return ev.obj ? [ev.obj.id] : ev.objs ? ev.objs.map((o) => o.id) : [];
       }
       case "it": return [...(ctx.it || [])];
@@ -97,7 +98,7 @@ export const effectMethods = {
         const objs = this.find(ref.filter ?? {}, ref.chooser ? cctx : ctx);
         const min = Math.min(this.amount(ref.min ?? 1, ctx), objs.length);
         const max = Math.min(this.amount(ref.max ?? ref.min ?? 1, ctx), objs.length);
-        const picked = yield* this.chooseObjects$(chooser, objs, { prompt: ref.prompt || "Choose", min, max, reason: ref.reason || "generic", source: ctx.source?.id, hint: { kind: "choose", effects: this._curEffect ? [this._curEffect] : [], ref } });
+        const picked = yield* this.chooseObjects$(chooser, objs, { prompt: ref.prompt || "Choose", min, max, reason: ref.reason || (ref.ordered ? "order" : "generic"), ordered: !!ref.ordered && max > 1, source: ctx.source?.id, hint: { kind: "choose", effects: this._curEffect ? [this._curEffect] : [], ref } });
         out.push(...picked.map((o) => o.id));
       }
       return out;
@@ -228,6 +229,8 @@ export const effectMethods = {
       case "hasInHand": { const pl = this.state.players[ctx.you]; return !!pl && pl.hand.some((id) => id !== ctx.source?.id && this.matches(this.state.objects[id], C.filter, ctx, "*")); }
       case "ringBearer": return !!this.state.players[ctx.you]?.ring.bearer;
       case "compare": return cmp(this.amount(C.a, ctx), C.op || ">=", this.amount(C.b, ctx));
+      case "resolvedCount": return cmp(ctx.resolvedCount | 0, C.op || "==", this.amount(C.n ?? 1, ctx));
+      case "chosen": { const s = ctx.source && (this.state.objects[ctx.source.id] || ctx.source); return !!s && !!s.chosen && s.chosen[C.key || "mode"] === C.value; }
       default:
         if (!ctx.quiet) this.manualOnce(ctx.source, `Condition not automated (${t}); treated as false`);
         return false;
@@ -268,6 +271,11 @@ export const effectMethods = {
     } finally { this._curEffect = prevEff; }
   },
 
+  /** "In any order": the player orders cards going to the top/bottom of their library (the last chosen ends up on top / at the very bottom). */
+  *orderCards$(p, cards, where, ctx) {
+    if (!cards || cards.length < 2) return cards || [];
+    return yield* this.chooseObjects$(p, cards, { prompt: `Order the cards going on the ${where} of your library — choose them in order (the last one chosen ends up ${where === "top" ? "on top" : "at the very bottom"})`, min: cards.length, max: cards.length, ordered: true, reason: "order", source: ctx?.source?.id });
+  },
   /** Players named by `who` (default you), APNAP ordered. */
   *whoPlayers$(who, ctx) {
     const ids = yield* this.refs$(who ?? "you", ctx);
@@ -283,7 +291,9 @@ const OPS = {
     if (e.from != null) { const ids = yield* this.refs$(e.from, ctx); const o = ids.length ? this.lkiOf(ids[0], ctx) : null; if (o) src = o; else return; }
     const ids = yield* this.refs$(e.to ?? { ref: "target", i: 0 }, ctx);
     let total = 0;
-    if (e.divided && ids.length > 1) {
+    const div = e.divided && ctx.division && e.to && e.to.ref === "target" ? ctx.division[e.to.i | 0] : null;
+    if (div) for (const id of ids) total += this.dealDamage(src, id, div[id] | 0); // CR 601.2d: the split was chosen on casting
+    else if (e.divided && ids.length > 1) {
       const per = Math.floor(n / ids.length);
       let rem = n - per * ids.length;
       for (const id of ids) { total += this.dealDamage(src, id, per + (rem > 0 ? 1 : 0)); rem--; }
@@ -294,7 +304,7 @@ const OPS = {
     const ps = yield* this.whoPlayers$(e.who, ctx);
     const n = this.amount(e.amount ?? 1, ctx);
     let total = 0;
-    for (const p of ps) total += this.draw(p, n);
+    for (const p of ps) total += yield* this.drawCards$(p, n);
     ctx.prev = total;
   },
   *discard$(e, ctx) {
@@ -362,7 +372,7 @@ const OPS = {
   *bounce$(e, ctx) {
     const objs = this.objsOf(yield* this.refs$(e.what ?? { ref: "target", i: 0 }, ctx));
     const out = [];
-    for (const o of objs) { if (o.zone === "stack") this.removeFromStack(o); if (this.moveObj(o, "hand")) out.push(o.id); }
+    for (const o of objs) { if (yield* this.zoneMove$(o, "hand", {})) out.push(o.id); }
     ctx.it = out; ctx.prev = out.length;
   },
   *sacrifice$(e, ctx) {
@@ -393,11 +403,13 @@ const OPS = {
     const out = [];
     const to = e.to || "graveyard";
     for (const o of objs) {
-      if (o.zone === "stack") this.removeFromStack(o);
       const opts = { position: e.position, tapped: !!e.tapped };
       if (to === "battlefield") opts.controller = e.control === "you" ? ctx.you : e.control === "owner" || e.control == null ? o.owner : ctx.you;
       if (e.counters) opts.counters = e.counters;
-      if (this.moveObj(o, to, opts)) out.push(o.id);
+      const from = o.zone, pileLeft = o.pileLeft;
+      if (yield* this.zoneMove$(o, to, opts)) out.push(o.id);
+      // the other cards of an exiled merged permanent come back with it, as separate permanents
+      if (to === "battlefield" && from === "exile" && pileLeft) for (const id of pileLeft) { const c = this.state.objects[id]; if (c && c.zone === "exile" && (yield* this.zoneMove$(c, to, { ...opts }))) out.push(c.id); }
     }
     ctx.it = out; ctx.prev = out.length;
   },
@@ -416,14 +428,15 @@ const OPS = {
       const picked = max > 0 ? yield* this.chooseObjects$(p, cands, { prompt: `Search your library for ${describeFilter(f)}`, min, max, reason: "search", source: ctx.source?.id }) : [];
       const tos = asArr(e.to || "hand");
       if (e.reveal && picked.length) this.emit({ t: "reveal", objs: picked.map((o) => o.id), player: p, text: `${this.pname(p)} reveals ${picked.map((o) => o.c.name).join(", ")}` });
-      picked.forEach((o, i) => {
+      for (let i = 0; i < picked.length; i++) {
+        const o = picked[i];
         const to = tos[Math.min(i, tos.length - 1)];
         const opts = { tapped: !!(Array.isArray(e.tapped) ? e.tapped[Math.min(i, e.tapped.length - 1)] : e.tapped) };
         if (to === "battlefield") opts.controller = p;
         if (to === "library") opts.position = e.position || "top";
-        this.moveObj(o, to, opts);
+        yield* this.zoneMove$(o, to, opts);
         out.push(o.id);
-      });
+      }
       if (e.shuffle !== false) this.shuffle(p);
     }
     ctx.it = out; ctx.prev = out.length;
@@ -435,9 +448,15 @@ const OPS = {
       const n = Math.min(this.amount(e.amount ?? 1, ctx), pl.library.length);
       if (n <= 0) continue;
       const top = pl.library.slice(-n).reverse().map((id) => this.state.objects[id]);
-      const bottom = yield* this.chooseObjects$(p, top, { prompt: `Scry ${n}: choose cards to put on the bottom`, min: 0, max: n, reason: "scry", source: ctx.source?.id });
-      for (const o of bottom) { pl.library.splice(pl.library.indexOf(o.id), 1); pl.library.unshift(o.id); }
+      let bottom = yield* this.chooseObjects$(p, top, { prompt: `Scry ${n}: choose cards to put on the bottom`, min: 0, max: n, reason: "scry", source: ctx.source?.id });
+      let keep = top.filter((o) => !bottom.includes(o));
+      bottom = yield* this.orderCards$(p, bottom, "bottom", ctx);
+      keep = yield* this.orderCards$(p, keep, "top", ctx);
+      for (const o of [...bottom, ...keep]) pl.library.splice(pl.library.indexOf(o.id), 1);
+      for (const o of bottom) pl.library.unshift(o.id);
+      for (const o of keep) pl.library.push(o.id);
       this.log(`${this.pname(p)} scries ${n}${bottom.length ? ` (${bottom.length} to the bottom)` : ""}`);
+      this.fireTrigger({ type: "scry", player: p, amount: n });
     }
   },
   *surveil$(e, ctx) {
@@ -448,6 +467,9 @@ const OPS = {
       if (n <= 0) continue;
       const top = pl.library.slice(-n).reverse().map((id) => this.state.objects[id]);
       const gy = yield* this.chooseObjects$(p, top, { prompt: `Surveil ${n}: choose cards to put into your graveyard`, min: 0, max: n, reason: "scry", source: ctx.source?.id });
+      let keep = top.filter((o) => !gy.includes(o));
+      keep = yield* this.orderCards$(p, keep, "top", ctx);
+      for (const o of keep) { pl.library.splice(pl.library.indexOf(o.id), 1); pl.library.push(o.id); }
       for (const o of gy) this.moveObj(o, "graveyard");
       this.log(`${this.pname(p)} surveils ${n}${gy.length ? ` (${gy.length} to the graveyard)` : ""}`);
     }
@@ -487,7 +509,9 @@ const OPS = {
   *addCounters$(e, ctx) {
     const ids = yield* this.refs$(e.what ?? "self", ctx);
     const n = this.amount(e.amount ?? 1, ctx);
+    const div = e.divided && ctx.division && e.what && e.what.ref === "target" ? ctx.division[e.what.i | 0] : null;
     for (const id of ids) {
+      if (div) { const o = this.state.objects[id]; if (o && o.zone === "battlefield") this.addCounters(o, e.kind || "+1/+1", div[id] | 0); continue; }
       if (isPid(id)) this.addPlayerCounters(pidx(id), e.kind || "poison", n);
       else { const o = this.state.objects[id]; if (o && o.zone === "battlefield") this.addCounters(o, e.kind || "+1/+1", n); }
     }
@@ -554,11 +578,25 @@ const OPS = {
         if (typeof m === "string") { const q = manaStringToPool(m); for (const k of MANA_KEYS) add[k] += q[k]; }
         else if (m && typeof m === "object") {
           let cols, n;
-          if (m.anyOf) { cols = m.anyOf.map(colorLetter).filter(Boolean); n = this.amount(m.n ?? 1, ctx); }
+          if (m.chosenColor) { const src = ctx.source && (this.state.objects[ctx.source.id] || ctx.source); cols = [...new Set([...(m.anyOf || []).map(colorLetter), src?.chosen?.color].filter(Boolean))]; n = this.amount(m.n ?? 1, ctx); if (!cols.length) continue; }
+          else if (m.anyOf) { cols = m.anyOf.map(colorLetter).filter(Boolean); n = this.amount(m.n ?? 1, ctx); }
           else if (m.identity != null) { cols = this.identityOf(p); if (!cols.length) cols = ["C"]; n = this.amount(m.identity, ctx) || 1; }
           else if (m.any != null) { cols = ALL5; n = this.amount(m.any, ctx) || 1; }
           else if (m.color) { cols = [colorLetter(m.color)]; n = this.amount(m.n ?? 1, ctx); }
+          else if (m.landColors) {
+            cols = ALL5.filter((c) => this.landColors(m.landColors === "opponent" ? this.opponentsOf(p) : m.landColors === "you" ? [p] : this.alivePlayers()).has(c));
+            n = this.amount(m.n ?? 1, ctx);
+            if (!cols.length) { this.log(`${ctx.source?.c?.name || "That"} can't produce mana: no land ${m.landColors === "opponent" ? "an opponent controls " : ""}could produce a color`); continue; }
+          }
           else continue;
+          if (m.split && cols.length > 1 && n > 1) { // "{R}{R}, {R}{W}, or {W}{W}": each unit is chosen separately
+            for (let i = 0; i < n; i++) {
+              let c = ctx.manaChoice && ctx.manaChoice[i] && cols.includes(ctx.manaChoice[i]) ? ctx.manaChoice[i] : null;
+              if (!c) { const ch = yield* this.choose$(p, { prompt: `Choose a color of mana (${i + 1} of ${n})`, options: cols.map((x) => ({ id: x, label: cap(colorNameOf(x)), type: "color" })), min: 1, max: 1, reason: "generic", source: ctx.source?.id }); c = ch[0]?.id || cols[0]; }
+              add[c]++;
+            }
+            continue;
+          }
           let col = ctx.manaChoice && ctx.manaChoice.find((c) => cols.includes(c));
           if (!col) {
             if (cols.length === 1) col = cols[0];
@@ -571,7 +609,11 @@ const OPS = {
           else add[col] += n;
         }
       }
-      this.addManaPool(p, add, ctx.source, auto);
+      if (e.restrict || e.onSpend) {
+        const cols = [];
+        for (const k of MANA_KEYS) for (let i = 0; i < add[k]; i++) cols.push(k);
+        this.addManaUnits(p, cols, { restrict: this.resolveRestrict(e.restrict, ctx.source && (this.state.objects[ctx.source.id] || ctx.source)), onSpend: e.onSpend || null }, ctx.source, auto);
+      } else this.addManaPool(p, add, ctx.source, auto);
     }
   },
   *ringTempts$(e, ctx) { for (const p of yield* this.whoPlayers$(e.who ?? "you", ctx)) yield* this.ringTempts$(p); },
@@ -616,7 +658,7 @@ const OPS = {
     const costOk = !e.cost || this.canPayCost(p, e.cost, ctx.source, ctx);
     if (costOk) {
       const label = e.text || e.prompt || (e.cost ? `Pay ${describeCost(e.cost)}?` : `${ctx.source?.c?.name || "Effect"}: do it?`);
-      yes = yield* this.confirm$(p, label, ctx.source?.id, { kind: "may", effects: e.effects || [], cost: e.cost || null, else: e.else || null, who: p });
+      yes = yield* this.confirm$(p, label, ctx.source?.id, { kind: "may", effects: e.effects || [], cost: e.cost || null, else: e.else || null, who: p, event: ctx.event || null });
       if (yes && e.cost) {
         const pctx = { ...ctx, you: p, sacrificed: [] };
         yes = yield* this.payCost$(p, e.cost, pctx);
@@ -718,7 +760,9 @@ const OPS = {
       for (let i = 0; i < n; i++) {
         const o = this.state.objects[pl.library[pl.library.length - 1]];
         this.moveObj(o, "exile");
-        if (e.mayPlay !== false) o.mayPlay = { player: ctx.you, untilTurn: e.until === "nextTurn" || e.until === "yourNextTurn" ? this.state.turn + this.state.players.length : this.state.turn, free: !!e.free };
+        if (e.mayPlay !== false) o.mayPlay = e.until === "nextTurn" || e.until === "yourNextTurn" || e.until === "endOfYourNextTurn"
+          ? { player: ctx.you, until: "endOfYourNextTurn", turn: this.state.turn, free: !!e.free } // "until the end of your next turn"
+          : { player: ctx.you, until: "endOfTurn", untilTurn: this.state.turn, turn: this.state.turn, free: !!e.free };
         out.push(o.id);
       }
     }
@@ -732,8 +776,14 @@ const OPS = {
     const cands = e.filter ? top.filter((o) => this.matches(o, e.filter, ctx, "*")) : top;
     const take = Math.min(this.amount(e.take ?? 1, ctx), cands.length);
     const picked = yield* this.chooseObjects$(p, cands, { prompt: `Choose ${take} card${take === 1 ? "" : "s"} to put into your hand`, min: e.upTo ? 0 : take, max: take, reason: "generic", source: ctx.source?.id });
-    for (const o of picked) this.moveObj(o, e.to || "hand");
-    for (const o of top) if (!picked.includes(o)) this.moveObj(o, e.rest === "graveyard" ? "graveyard" : "library", { position: "bottom" });
+    for (const o of picked) yield* this.zoneMove$(o, e.to || "hand", {});
+    let rest = top.filter((o) => !picked.includes(o));
+    if (e.rest === "graveyard") { for (const o of rest) this.moveObj(o, "graveyard"); }
+    else {
+      if (e.restOrder === "random") { for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(this.rng() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; } }
+      else if (rest.length > 1) rest = yield* this.chooseObjects$(p, rest, { prompt: `Put these on the bottom of your library in any order — choose them in order (the last one chosen ends up at the very bottom)`, min: rest.length, max: rest.length, ordered: true, reason: "order", source: ctx.source?.id });
+      for (const o of rest) this.moveObj(o, "library", { position: "bottom", quiet: true });
+    }
     ctx.it = picked.map((o) => o.id); ctx.prev = picked.length;
   },
   *goad$(e, ctx) { this.manual(ctx.source, "Goad (not automated)"); },
@@ -744,7 +794,27 @@ const OPS = {
     const lk = ctx.event?.obj;
     if (!o || o.zone !== "graveyard" || o.token) return;
     if (lk && ((lk.counters || {})[e.unless] | 0) > 0) return;
-    this.moveObj(o, "battlefield", { controller: o.owner, counters: { [e.kind]: 1 } });
+    yield* this.enter$(o, { controller: o.owner, counters: { [e.kind]: 1 } });
+  },
+  *phaseOut$(e, ctx) {
+    const objs = this.objsOf(yield* this.refs$(e.what ?? "self", ctx)).filter((o) => o.zone === "battlefield");
+    ctx.it = this.phaseOut(objs); ctx.prev = ctx.it.length;
+  },
+  *copyAbility$(e, ctx) {
+    const ids = yield* this.refs$(e.what ?? { ref: "event", what: "ability" }, ctx);
+    const out = [];
+    for (const id of ids) { const a = this.state.objects[id]; const c = a && a.zone === "stack" && a.isAbility ? yield* this.copyAbility$(a, ctx.you, e.newTargets !== false) : null; if (c) out.push(c.id); }
+    if (!out.length) this.log("There is no ability on the stack to copy");
+    ctx.it = out; ctx.prev = out.length;
+  },
+  *_craftReturn$(e, ctx) { // "Return this card transformed under its owner's control" (craft)
+    const o = ctx.source && this.state.objects[ctx.source.id];
+    if (!o || o.zone !== "exile") return;
+    const d = o.def;
+    o.face = d.faces && d.faces[1] ? 1 : 0;
+    yield* this.enter$(o, { controller: o.owner });
+    if (o.zone === "battlefield") this.log(`${o.c.name} returns transformed`);
+    ctx.it = [o.id];
   },
   *_exploit$(e, ctx) {
     const p = ctx.you;
@@ -778,6 +848,38 @@ const OPS = {
       if (this.canPayMana(p, pc) && (yield* this.confirm$(p, `Pay ward ${cost} for ${ctx.source?.c?.name}?`, ctx.source?.id, { kind: "ward", obj: target.id })) && (yield* this.payMana$(p, pc))) return;
     }
     this.counterObj(target, ctx.source);
+  },
+  *_mutate$() {},
+  *chooseCreatureType$(e, ctx) { // "Choose a creature type." (the choice is linked to the source: "of the chosen type")
+    const src = ctx.source && (this.state.objects[ctx.source.id] || ctx.source);
+    const t = yield* this.chooseCreatureType$(ctx.you, src, src?.def);
+    if (src) src.chosen = { ...(src.chosen || {}), creatureType: t };
+  },
+  *_unearth$(e, ctx) {
+    const o = ctx.source && this.state.objects[ctx.source.id];
+    if (!o || o.zone !== "graveyard") return;
+    yield* this.enter$(o, { controller: ctx.you });
+    if (o.zone !== "battlefield") return;
+    this.addEffect({ type: "pump", power: 0, toughness: 0, keywords: ["haste"] }, { ...ctx, source: o }, { objIds: [o.id], until: null });
+    this.addEffect({ type: "exileIfLeaves" }, { ...ctx, source: o }, { objIds: [o.id], until: null });
+    this.addDelayed({ event: "beginStep", step: "end", whose: "each" }, [{ op: "exile", what: { ref: "it" } }], { ...ctx, source: o, it: [o.id] }, true);
+  },
+  *_cascade$(e, ctx) { // exile until a nonland card with lesser mana value; you may cast it free; the rest go to the bottom in a random order
+    const spell = ctx.source && this.state.objects[ctx.source.id];
+    const p = ctx.you, pl = this.state.players[p];
+    const mv = spell ? spell.c.cmc | 0 : 0;
+    const ex = [];
+    let hit = null;
+    while (pl.library.length) {
+      const o = this.state.objects[pl.library[pl.library.length - 1]];
+      this.moveObj(o, "exile");
+      ex.push(o);
+      if (!o.def.types.includes("land") && (o.def.cmc | 0) < mv) { hit = o; break; }
+    }
+    if (hit && (yield* this.confirm$(p, `Cascade: cast ${hit.c.name} without paying its mana cost?`, hit.id, { kind: "may", effects: [] }))) yield* this.castFree$(p, hit, {});
+    const rest = ex.filter((o) => o.zone === "exile");
+    for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(this.rng() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+    for (const o of rest) this.moveObj(o, "library", { position: "bottom", quiet: true });
   },
   *_sacrificeObjs$(e, ctx) {
     for (const id of e.ids || []) { const o = this.state.objects[id]; if (o && o.zone === "battlefield") this.sacrifice(o); }

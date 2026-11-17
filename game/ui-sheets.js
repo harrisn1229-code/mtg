@@ -50,8 +50,10 @@ export const sheetMethods = {
     if (!o || !o.c) return;
     if (o.zone === "library" || (o.zone === "hand" && o.owner !== this.me)) return; // never reveal hidden cards
     this.closeZoomOnly();
-    const c = o.c;
-    const v = o.isAbility ? this.stackView(o) : viewOfObj(o);
+    let c = o.c;
+    let v = o.isAbility ? this.stackView(o) : viewOfObj(o);
+    const fdMine = o.faceDown && (o.zone === "exile" ? o.owner : o.controller) === this.me;
+    if (fdMine && o.card) { v = viewOfData(o.card); c = { ...c, text: o.card.oracle_text || "", keywords: {}, unparsed: [] }; } // you may look at your own face-down cards (CR 708.6)
     const acts = this.actionsFor(ids);
     const m = this._wait ? this.mode : null;
     const optIdx = m && m.kind === "choose" && m.board ? ids.map((id) => (this.ctx.opt.has(id) ? this.ctx.opt.get(id) : null)).find((x) => x != null) : null;
@@ -59,6 +61,13 @@ export const sheetMethods = {
     if (o.tapped) chips.push("Tapped");
     if (o.sick && (c.types || []).indexOf("creature") >= 0) chips.push("Summoning sick");
     if (o.token) chips.push("Token");
+    if (o.faceDown) chips.push(fdMine ? (o.zone === "exile" ? "Exiled face down — only you can see it" : "Face down — your opponent sees a nameless 2/2") : "Face down — hidden");
+    if (o.zone === "phased") chips.push("Phased out — treated as though it doesn't exist; phases in at its controller's untap step");
+    if (o.chosen && o.chosen.creatureType) chips.push("Chosen type: " + cap(o.chosen.creatureType));
+    if (o.chosen && o.chosen.mode) chips.push("Chosen: " + cap(o.chosen.mode));
+    if (o.chosen && o.chosen.color) chips.push("Chosen color: " + o.chosen.color);
+    if (o.copyDef && o.copyDef._copyOf && !o.token) chips.push(o.def.name + " — a copy of " + o.copyDef._copyOf);
+    if (o.isCopy) chips.push("Copy");
     if (o.isCommander) { const P = this.player(o.owner); const tax = (P.commanderCasts[o.id] || 0) * 2; chips.push("Commander" + (tax ? " · tax {" + tax + "}" : "")); }
     if (o.damage) chips.push(o.damage + " damage");
     Object.keys(o.counters || {}).forEach((k) => { if (o.counters[k]) chips.push(o.counters[k] + " × " + k + " counter"); });
@@ -71,6 +80,7 @@ export const sheetMethods = {
       (c.text ? '<div class="ztext">' + textHtml(c.text) + "</div>" : o.isAbility ? '<div class="ztext">' + textHtml(o.text || "") + "</div>" : "") +
       (kw.length ? '<div class="zkw">' + kw.map((k) => '<span>' + esc(k) + "</span>").join("") + "</div>" : "") +
       (chips.length ? '<div class="zchips">' + chips.map((t) => "<span>" + textHtml(t).replace(/<\/?p>/g, "") + "</span>").join("") + "</div>" : "") +
+      (o.pile && o.pile.length > 1 ? '<div class="zpile"><b>Mutated — cards in this permanent, top first</b>' + o.pile.map((id, k) => { const x = this.obj(id); return "<span>" + (k === 0 ? "▲ " : "· ") + esc(x ? x.def.name : "?") + (x && x.def.power != null ? " (" + x.def.power + "/" + x.def.toughness + ")" : "") + (k > 0 && x && x.def.text ? ' — <i class="zpt">' + textHtml(String(x.def.text).replace(/\([^)]*\)/g, "").trim()).replace(/<\/?p>/g, " ") + "</i>" : "") + "</span>"; }).join("") + "</div>" : "") +
       (c.unparsed && c.unparsed.length ? '<div class="znote warn"><b>⚠ Partly automated.</b> The engine skips this text; use manual tools if it applies:<ul>' + c.unparsed.map((u) => "<li>" + esc(u) + "</li>").join("") + "</ul></div>" : "") +
       '<div class="zown">' + owner + " this" + (o.zone ? " · " + esc(o.zone) : "") + "</div></div>" +
       '<div class="zacts">' +
@@ -115,7 +125,7 @@ export const sheetMethods = {
       return '<button class="pk text' + (sel ? " sel" : "") + '" data-act="pickToggle" data-i="' + i + '" aria-pressed="' + sel + '"><span class="pl">' + textHtml(op.label).replace(/<\/?p>/g, "") + "</span></button>";
     }).join("");
     const range = req.min === req.max ? "" + req.min : req.min + "–" + req.max;
-    const html = '<h2>' + esc(req.prompt || "Choose") + '</h2><p class="sub">' + (req.reason ? cap(req.reason) + " · " : "") + 'Choose <b class="num">' + range + '</b></p>' +
+    const html = '<h2>' + esc(req.prompt || "Choose") + '</h2><p class="sub">' + (req.reason ? ({ creatureType: "Creature type", copy: "Copy", mutate: "Mutate", reveal: "Reveal", order: "Order", scry: "Scry", pay: "Pay", color: "Color" }[req.reason] || cap(req.reason)) + " · " : "") + 'Choose <b class="num">' + range + '</b></p>' +
       ((req.options || []).length > 14 ? '<input class="pfilter" type="search" placeholder="Filter by name" aria-label="Filter options">' : "") +
       '<div class="pgrid">' + items + '</div><div class="sh-actions"><button class="mbtn peekbtn" data-act="pickPeek">View board</button><button class="mbtn pri" data-act="pickGo"></button></div>';
     const rec = this.sheetHtml(html, { cls: "picker", dialog: true, label: req.prompt || "Choose" });
@@ -274,7 +284,7 @@ export const sheetMethods = {
       '<button class="mbtn" data-act="openSettings">Settings</button>' +
       (!over ? '<button class="mbtn" data-act="pauseUndo"' + (this.canUndo() ? "" : " disabled") + ">Undo last action</button>" : "") +
       (!over && this._wait ? '<button class="mbtn" data-act="pauseFallback">Show options as a list</button>' : "") +
-      '<button class="mbtn" data-act="pauseLog">Game log</button><button class="mbtn" data-act="pauseEmote">Emote</button>' +
+      '<button class="mbtn" data-act="pauseLog">Game log</button>' + (!over && this._wait && this.mode && this.mode.kind === "priority" ? '<button class="mbtn" data-act="pauseTools">Manual tools</button>' : "") + '<button class="mbtn" data-act="pauseEmote">Emote</button>' +
       (!over ? '<button class="mbtn danger" data-act="askConcede">Concede</button><button class="mbtn danger" data-act="askRestart">Restart match</button>' : "") +
       '<button class="mbtn" data-act="quit">Quit to lobby</button></div><p class="sub">Your match is saved automatically.</p>';
     this._pauseRec = this.sheetHtml(html, { cls: "small", label: "Paused" });
@@ -283,6 +293,7 @@ export const sheetMethods = {
   act_pauseUndo() { this.closeAllSheets(); this.undo(); },
   act_pauseEmote() { this.closeAllSheets(); this.openEmote(); },
   act_pauseLog() { this.closeAllSheets(); this.openLog(); },
+  act_pauseTools() { this.closeAllSheets(); this.openTools(); },
   act_quit() { this.close("lobby"); },
   act_askConcede() {
     const rec = this.sheetHtml('<h2>Concede this match?</h2><p class="sub">You will lose and the result is recorded.</p><div class="sh-actions"><button class="mbtn" data-act="close">Keep playing</button><button class="mbtn pri danger-fill" data-act="doConcede">Concede</button></div>', { cls: "small", label: "Concede" });
@@ -366,8 +377,19 @@ export const sheetMethods = {
   openTools() {
     const m = this.mode;
     const acts = m && m.kind === "priority" && this._wait ? (m.req.actions || []).map((a, i) => ({ a, i })).filter((x) => x.a.type === "special") : [];
-    const html = "<h2>Manual tools</h2>" + (acts.length ? '<p class="sub">For effects the engine could not automate. Each tool is recorded, so undo and resume still work.</p><div class="pmenu">' + acts.map((x) => '<button class="mbtn" data-act="toolGo" data-i="' + x.i + '">' + esc(x.a.label) + "</button>").join("") + "</div>" : '<p class="sub">Manual tools are available whenever you have priority.</p>');
-    this.sheetHtml(html, { cls: "small", label: "Manual tools" });
+    const GROUPS = [["Players", ["life", "cmdDamage", "mana", "draw", "discard", "mill", "shuffle"]], ["Permanents", ["tap", "counters", "token", "control", "sacrifice", "destroy"]], ["Cards & zones", ["exile", "bounce", "graveyard", "library", "move"]]];
+    const by = new Map(acts.map((x) => [x.a.variant, x]));
+    const used = new Set();
+    const btn = (x) => { used.add(x.a.variant); return '<button class="mbtn tool" data-act="toolGo" data-i="' + x.i + '">' + esc(cap(String(x.a.label).replace(/^Manual:\s*/, ""))) + "</button>"; };
+    let body = "";
+    GROUPS.forEach(([title, vs]) => {
+      const list = vs.map((v) => by.get(v)).filter(Boolean);
+      if (list.length) body += '<h3 class="tgh">' + esc(title) + '</h3><div class="tgrid">' + list.map(btn).join("") + "</div>";
+    });
+    const rest = acts.filter((x) => !used.has(x.a.variant));
+    if (rest.length) body += '<h3 class="tgh">Other</h3><div class="tgrid">' + rest.map(btn).join("") + "</div>";
+    const html = "<h2>Manual tools</h2>" + (acts.length ? '<p class="sub">A safety net: every card in your decks is automated, but you can still fix anything by hand. Each tool is recorded, so undo and resume still work.</p>' + body : '<p class="sub">Manual tools are available whenever you have priority.</p>');
+    this.sheetHtml(html, { cls: "tall tools", label: "Manual tools" });
   },
   act_toolGo(el) { this.closeAllSheets(); this.submit({ type: "act", index: +el.dataset.i }); },
   openEmote() {

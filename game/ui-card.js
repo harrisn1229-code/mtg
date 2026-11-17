@@ -81,6 +81,8 @@ export function typeLineOf(c) {
 export function viewOfObj(o) {
   const c = o.c || {};
   const pt = c.power != null && c.toughness != null && (c.types || []).indexOf("creature") >= 0 ? c.power + "/" + c.toughness : "";
+  if (o.faceDown && (o.zone === "battlefield" || o.zone === "stack" || o.zone === "phased" || o.zone === "exile"))
+    return { name: "Face-down", cost: "", type: o.zone === "exile" ? "Face-down card" : "Creature", text: o.zone === "exile" ? "" : "A face-down 2/2 creature with no name, colour or abilities.", pt: o.zone === "exile" ? "" : pt, img: "", frame: FR.N, token: false, types: o.zone === "exile" ? [] : ["creature"], faceDown: true };
   return {
     name: c.name || "Card", cost: c.cost || "", type: typeLineOf(c), text: c.text || "", pt, img: c.img || "",
     frame: frameFor(c), token: !!o.token, types: c.types || [],
@@ -124,7 +126,7 @@ function icoFor(types) {
 
 /* Fill the static face. `size` picks the Scryfall rendition: small | normal | large. */
 export function fillCard(el, v, size) {
-  const key = v.name + "|" + v.cost + "|" + v.type + "|" + v.text + "|" + v.pt + "|" + v.img + "|" + (size || "small") + "|" + (v.token ? 1 : 0);
+  const key = v.name + "|" + v.cost + "|" + v.type + "|" + v.text + "|" + v.pt + "|" + v.img + "|" + (size || "small") + "|" + (v.token ? 1 : 0) + "|" + (v.faceDown ? 1 : 0);
   if (el._fk === key) return;
   el._fk = key;
   const r = el._r;
@@ -138,6 +140,7 @@ export function fillCard(el, v, size) {
   el.style.setProperty("--fa", v.frame[0]);
   el.style.setProperty("--fb", v.frame[1]);
   el.classList.toggle("is-token", !!v.token);
+  el.classList.toggle("is-facedown", !!v.faceDown);
   el.setAttribute("data-name", v.name);
   const url = v.img ? imgSize(v.img, size || "small") : "";
   if (url) {
@@ -161,10 +164,10 @@ export function setLive(el, o, flags) {
   const isCre = types.indexOf("creature") >= 0;
   const isPW = types.indexOf("planeswalker") >= 0;
   const dmg = o.damage || 0;
-  const def = o.def || {};
+  const def = o.faceDown ? { power: 2, toughness: 2 } : o.mergeDef || o.copyDef || o.def || {};
   let basePow = def.power, baseTou = def.toughness;
   const counters = o.counters || {};
-  const sig = [c.power, c.toughness, dmg, isCre, isPW, JSON.stringify(counters), (c.unparsed || []).length, o.token ? 1 : 0, o.sick ? 1 : 0, flags.n || 0, flags.order || 0, flags.badge || "", c.loyalty, o.attachedTo ? 1 : 0, flags.attcount || 0, o.isCommander ? 1 : 0].join("|");
+  const sig = [c.power, c.toughness, dmg, isCre, isPW, JSON.stringify(counters), (c.unparsed || []).length, o.token ? 1 : 0, o.sick ? 1 : 0, flags.n || 0, flags.order || 0, flags.badge || "", c.loyalty, o.attachedTo ? 1 : 0, flags.attcount || 0, o.isCommander ? 1 : 0, o.faceDown ? 1 : 0, (o.pile || []).length, o.zone === "phased" ? 1 : 0, flags.mine ? 1 : 0].join("|");
   if (el._ls === sig) return;
   el._ls = sig;
   let h = "";
@@ -193,6 +196,8 @@ export function setLive(el, o, flags) {
   if (o.token) bd.push('<span class="bd tk" title="Token">T</span>');
   if (c.unparsed && c.unparsed.length) bd.push('<span class="bd warn" title="Partly automated">⚠</span>');
   if (o.isCommander) bd.push('<span class="bd cmd" title="Commander">★</span>');
+  if (o.faceDown && flags.mine) bd.push('<span class="bd fd" title="Face down — only you know what it is">◐</span>');
+  if (o.pile && o.pile.length > 1) bd.push('<span class="bd mut" title="Mutated: ' + o.pile.length + ' cards">⧉' + o.pile.length + "</span>");
   if (bd.length) h += '<span class="bds">' + bd.join("") + "</span>";
   if (flags.n > 1) h += '<span class="xn">×' + flags.n + "</span>";
   if (flags.order) h += '<span class="ord">' + flags.order + "</span>";

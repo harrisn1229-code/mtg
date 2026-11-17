@@ -100,6 +100,10 @@ function cmpOf(nTxt, dir) {
  * Returns the Filter; extra info on non-enumerable property `_plural`? no: keep pure data.
  */
 export function parseFilter(text, opts = {}) {
+  { // "creatures that aren't of the chosen type" / "creatures of the chosen type"
+    const mm = String(text).match(/^(.*?)\s+(?:that (?:aren't|are not)|not) of the chosen type$/i) || String(text).match(/^(.*?)\s+of the chosen type$/i);
+    if (mm) { const f = parseFilter(mm[1], opts); if (/aren't|are not|not of/i.test(text)) f.notChosenType = true; else f.chosenType = true; return f; }
+  }
   let s = " " + text.trim().replace(/[.]+$/, "") + " ";
   s = s.replace(/’/g, "'");
   const f = {};

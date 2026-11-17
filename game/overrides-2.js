@@ -71,7 +71,7 @@ export default {
               if (pl.landsPlayed >= pl.landsPerTurn) { g.log("Mosswort Bridge: you can't play another land this turn"); o.faceDown = true; return; }
               pl.landsPlayed++;
               g.emit({ t: "move", obj: o.id, from: "exile", to: "battlefield", player: ctx.you, text: `${pl.name} plays ${o.c.name}` });
-              g.moveObj(o, "battlefield", { controller: ctx.you, quiet: true });
+              yield* g.enter$(o, { controller: ctx.you, quiet: true });
               g.fireTrigger({ type: "landPlayed", obj: o, player: ctx.you });
               src.hidden = null;
             } else if (yield* castFree$(g, ctx.you, o)) src.hidden = null;
@@ -97,7 +97,7 @@ export default {
             const [second] = yield* g.chooseObjects$(p, share, { prompt: `Myriad Landscape: choose a second basic land that shares a land type with ${first.c.name}`, min: 0, max: 1, reason: "search", source: ctx.source?.id });
             if (second) got.push(second);
           }
-          for (const o of got) g.moveObj(o, "battlefield", { controller: p, tapped: true });
+          for (const o of got) yield* g.enter$(o, { controller: p, tapped: true });
           g.shuffle(p);
         },
       }) });
@@ -122,30 +122,6 @@ export default {
   },
 
   // ------------------------------------------------------------------------------------------------ O
-  "Outpost Siege": {
-    // "As this enters, choose Khans or Dragons" is done by an enters trigger that puts a khans/dragons counter on the
-    // enchantment (the engine has no "as enters" choice); the matching ability only works with its marker counter.
-    patch(def) {
-      return out(def, { abilities: plus(def,
-        { kind: "triggered", on: { event: "enters", who: "self" }, text: "As this enchantment enters, choose Khans or Dragons.",
-          run: function* (g, ctx) {
-            const src = g.obj(ctx.source?.id);
-            if (!src || src.zone !== "battlefield") return;
-            const [pick] = yield* g.choose$(ctx.you, { prompt: "Outpost Siege: choose Khans or Dragons", min: 1, max: 1, reason: "mode", source: src.id,
-              options: [{ id: "khans", label: "Khans — At the beginning of your upkeep, exile the top card of your library. Until end of turn, you may play that card.", type: "mode" },
-                { id: "dragons", label: "Dragons — Whenever a creature you control leaves the battlefield, this enchantment deals 1 damage to any target.", type: "mode" }] });
-            g.addCounters(src, pick ? pick.id : "khans", 1);
-          } },
-        { kind: "triggered", on: { event: "beginStep", step: "upkeep", whose: "you" }, condition: { type: "counters", what: "self", kind: "khans", op: ">=", n: 1 },
-          effects: [{ op: "exileTop", who: "you", amount: 1, until: "endOfTurn" }],
-          text: "Khans — At the beginning of your upkeep, exile the top card of your library. Until end of turn, you may play that card." },
-        { kind: "triggered", on: { event: "leaves", who: { types: ["creature"], controller: "you" } }, condition: { type: "counters", what: "self", kind: "dragons", op: ">=", n: 1 },
-          targets: [{ what: "any" }], effects: [{ op: "damage", amount: 1, to: T(0) }],
-          text: "Dragons — Whenever a creature you control leaves the battlefield, this enchantment deals 1 damage to any target." },
-      ) });
-    },
-  },
-
   "Overwhelming Stampede": {
     patch(def) {
       return out(def, { spell: spellOf(def, { effects: [{ op: "pump", what: { ref: "all", filter: { types: ["creature"], controller: "you" } },
@@ -154,14 +130,6 @@ export default {
   },
 
   // ------------------------------------------------------------------------------------------------ P
-  "Path of Ancestry": {
-    // the colour-identity mana is exact; the "when that mana is spent ... scry 1" rider needs mana-spent tracking (not available)
-    patch(def) {
-      const abilities = def.abilities.map((ab) => (ab.kind === "activated" && (ab.effects || []).some((e) => e.op === "addMana") ? { ...ab, mana: true, effects: (ab.effects || []).filter((e) => e.op !== "manual") } : ab));
-      return out(def, { abilities }, def.unparsed);
-    },
-  },
-
   "Pawn of Ulamog": {
     patch(def) {
       const effects = [{ op: "may", text: "Create a 0/1 Eldrazi Spawn token?", effects: [{ op: "createToken", who: "you", token: "eldrazi spawn", amount: 1 }] }];
@@ -220,7 +188,8 @@ export default {
           const power = Math.max(0, a.c.power | 0);
           if (!power) return;
           if (g.hasKw(a, "trample")) {
-            const lethal = g.hasKw(a, "deathtouch") ? Math.min(1, Math.max(0, b.c.toughness - b.damage)) : Math.max(0, b.c.toughness - b.damage);
+            const left = Math.max(0, g.lethalThreshold(b) - b.damage);
+            const lethal = g.hasKw(a, "deathtouch") ? Math.min(1, left) : left;
             const toCreature = Math.min(power, lethal), excess = power - toCreature;
             if (toCreature > 0) g.dealDamage(a, b.id, toCreature);
             if (excess > 0) g.dealDamage(a, "P" + b.controller, excess);
@@ -231,15 +200,12 @@ export default {
   },
 
   "Resplendent Angel": {
-    // The "if you gained 5 or more life this turn" check is made when the trigger resolves (no cond for it yet; see engine requests).
-    patch(def) {
+    patch(def) { // intervening "if": checked when the trigger would trigger and again on resolution
       return out(def, { abilities: plus(def, {
         kind: "triggered", on: { event: "beginStep", step: "end", whose: "each" },
+        condition: { type: "compare", a: { lifeGainedThisTurn: "you" }, op: ">=", b: 5 },
         text: "At the beginning of each end step, if you gained 5 or more life this turn, create a 4/4 white Angel creature token with flying and vigilance.",
-        run: function* (g, ctx) {
-          if ((g.state.players[ctx.you].lifeGainedThisTurn | 0) < 5) return;
-          g.createToken(ctx.you, { name: "Angel", types: ["creature"], subtypes: ["angel"], colors: ["W"], power: 4, toughness: 4, keywords: { flying: true, vigilance: true } }, 1, { source: ctx.source });
-        },
+        effects: [{ op: "createToken", who: "you", amount: 1, token: { name: "Angel", types: ["creature"], subtypes: ["angel"], colors: ["W"], power: 4, toughness: 4, keywords: { flying: true, vigilance: true } } }],
       }) });
     },
   },
@@ -251,17 +217,15 @@ export default {
   },
 
   "Righteous Valkyrie": {
-    // 47 = 40 (Commander starting life) + 7. Exact for Commander games; see engine requests for a format-independent version.
     patch(def) {
       return out(def, { abilities: plus(def, {
         kind: "static", effect: { type: "pump", affects: { types: ["creature"], controller: "you" }, power: 2, toughness: 2 },
-        condition: { type: "life", who: "you", op: ">=", n: 47 },
+        condition: { type: "compare", a: { lifeOf: "you" }, op: ">=", b: { add: [{ startingLife: true }, 7] } },
         text: "As long as you have at least 7 life more than your starting life total, creatures you control get +2/+2.",
       }) });
     },
   },
 
-  // Rings of Brighthearth: needs an "ability activated" event + ability copying -> no override (stays flagged).
 
   "Ringsight": {
     patch(def) {
@@ -276,30 +240,12 @@ export default {
             const [pick] = yield* g.chooseObjects$(p, cands, { prompt: "Ringsight: search your library for a card that shares a color with a legendary creature you control", min: 0, max: 1, reason: "search", source: ctx.source?.id });
             if (pick) {
               g.emit({ t: "reveal", objs: [pick.id], player: p, text: `${pl.name} reveals ${pick.c.name}` });
-              g.moveObj(pick, "hand");
+              yield* g.moveTo$(pick, "hand", {});
             }
           } else g.log("Ringsight: no legendary creature with a color — nothing to find");
           g.shuffle(p);
         } },
       ] }) });
-    },
-  },
-
-  "Rugged Prairie": {
-    patch(def) {
-      return out(def, { abilities: plus(def, {
-        kind: "activated", mana: true, cost: { mana: "{R/W}", tap: true },
-        text: "{R/W}, {T}: Add {R}{R}, {R}{W}, or {W}{W}.",
-        run: function* (g, ctx) {
-          let pick = ctx.manaChoice && ctx.manaChoice.length >= 2 ? ctx.manaChoice.slice(0, 2).sort().join("") : null;
-          if (pick !== "RR" && pick !== "RW" && pick !== "WW") {
-            const [c] = yield* g.choose$(ctx.you, { prompt: "Rugged Prairie: choose the mana to add", min: 1, max: 1, reason: "generic", source: ctx.source?.id,
-              options: [{ id: "RR", label: "{R}{R}", type: "color" }, { id: "RW", label: "{R}{W}", type: "color" }, { id: "WW", label: "{W}{W}", type: "color" }] });
-            pick = c ? c.id : "RW";
-          }
-          g.addMana(ctx.you, `{${pick[0]}}{${pick[1]}}`);
-        },
-      }) });
     },
   },
 
@@ -361,39 +307,8 @@ export default {
     },
   },
 
-  "Secluded Courtyard": {
-    // Spend restrictions aren't tracked: the parser now drops the "spend this mana only …" rider and the land simply makes
-    // any colour (agreed simplification). The "choose a creature type" line has no effect left and stays flagged.
-    patch(def) {
-      const abilities = def.abilities.filter((ab) => !(ab.kind === "activated" && (ab.effects || []).some((e) => e.op === "manual")));
-      return out(def, { abilities }, def.unparsed);
-    },
-  },
-
-  // Spark Double: needs an "enters as a copy" replacement effect -> no override (stays flagged).
-
-  "Syr Konrad, the Grim": {
-    // Only the "another creature dies" clause can be detected; the graveyard-movement clauses need a zone-change event.
-    patch(def) {
-      return out(def, { abilities: plus(def, {
-        kind: "triggered", on: { event: "dies", who: { types: ["creature"], other: true } },
-        effects: [{ op: "damage", amount: 1, to: "opponent" }],
-        text: "Whenever another creature dies, Syr Konrad deals 1 damage to each opponent.",
-      }) }, def.unparsed);
-    },
-  },
 
   // ------------------------------------------------------------------------------------------------ T
-  "Teferi's Protection": {
-    // Protection from everything + "life total can't change" are automated; phasing out your permanents is not (flagged).
-    patch(def) {
-      return out(def, { spell: spellOf(def, { effects: [
-        { op: "until", until: "yourNextTurn", static: { type: "playerProtection", affects: "you" } },
-        ...def.spell.effects,
-      ] }) }, def.unparsed);
-    },
-  },
-
   "Territory Culler": {
     patch(def) {
       return out(def, { abilities: plus(def, {
@@ -405,7 +320,7 @@ export default {
           if (top.c.types.includes("creature")) {
             if (yield* g.confirm$(ctx.you, `Territory Culler: reveal ${top.c.name} and put it into your hand?`, ctx.source?.id)) {
               g.emit({ t: "reveal", objs: [top.id], player: ctx.you, text: `${g.state.players[ctx.you].name} reveals ${top.c.name}` });
-              g.moveObj(top, "hand");
+              yield* g.moveTo$(top, "hand", {});
               return;
             }
           }
@@ -415,7 +330,6 @@ export default {
     },
   },
 
-  // Thousand-Year Elixir: needs "activate as though it had haste" -> no override (stays flagged).
 
   "Tibalt, Rakish Instigator": {
     patch(def) {
@@ -425,7 +339,6 @@ export default {
     },
   },
 
-  // Tithing Blade // Consuming Sepulcher (craft) and Topiary Lecturer (increment): not implemented -> stay flagged.
 
   // ------------------------------------------------------------------------------------------------ V
   "Villainous Wrath": {
@@ -501,7 +414,6 @@ export default {
     },
   },
 
-  // Wolfwillow Haven: the extra mana is a *triggered mana ability* (resolves immediately); the engine would stack it -> stays flagged.
 
   "Wrathful Raptors": {
     patch(def) {
@@ -534,7 +446,6 @@ export default {
   },
 
   "Zilortha, Strength Incarnate": {
-    // Lethal-damage-by-power needs an SBA/combat hook (engine request). The static below is ignored until the engine supports it.
     patch(def) {
       const line = "Lethal damage dealt to creatures you control is determined by their power rather than their toughness.";
       if (!CAPS.lethalByPower) return out(def, {}, [line]);

@@ -222,7 +222,7 @@ export class Brain {
     const d = o.def || {};
     const types = d.types || [];
     if (types.includes("land") && !(d.layout === "mdfc")) {
-      const have = this.landCount(o.owner) + this.hand(o.owner).filter((x) => x.def?.types?.includes("land")).length;
+      const have = this.landCount(o.owner) + (o.owner === this.p ? this.hand(o.owner).filter((x) => x.def?.types?.includes("land")).length : 1); // never peek at the opponent's hand
       return have < 6 ? 46 - have * 3 : 12;
     }
     let v = 22 + Math.min(num(d.cmc), 8) * 5;
@@ -557,6 +557,8 @@ export class Brain {
         else if (s.affects && typeof s.affects === "object") { try { ids = this.g.find(s.affects, { source: E.src, you: p }).map((o) => o.id); } catch { ids = []; } }
         else if (s.affects === "self" || s.affects == null) ids = E.src ? [E.src.id] : [];
         let v = 0;
+        if (s.type === "lifeCantChange" || s.type === "playerProtection") return this.threatened(p) ? 140 : -4; // Teferi's Protection: save it for lethal
+        if (s.type === "cantPrevent") return 0;
         for (const id of ids) {
           const o = this.O(id);
           if (!o || o.zone !== "battlefield") continue;
@@ -574,10 +576,38 @@ export class Brain {
       case "animate": return 3;
       case "transform": return 5;
       case "attach": return 0;
+      case "copyAbility": {
+        let v = 0;
+        for (const id of this.ids(e.what ?? { ref: "event", what: "ability" }, E)) { const a = this.O(id); if (a && a.zone === "stack") v += (a.controller === p ? 0.9 : -0.9) * this.stackValue(a); }
+        return v;
+      }
+      case "phaseOut": {
+        const mine = objsOf(e.what ?? "self").filter((o) => o.controller === p);
+        const tot = mine.reduce((n, o) => n + (this.isLand(o) ? 6 : this.objValue(o)), 0);
+        return this.threatened(p) ? tot * 0.25 : -tot * 0.15;
+      }
+      case "_craftReturn": {
+        const src = E.src;
+        const back = src?.def?.faces?.[1];
+        return back ? this.permSpellValue(src, back, { p }) + (src.zone === "battlefield" ? this.objValue(src) : 0) : 0; // the card itself comes back
+      }
       default: return 0;
     }
   }
   myTurnFor(p) { return this.st.active === p && (this.st.step === "main1" || this.st.step === "beginCombat"); }
+  /** Is player p facing lethal (or near-lethal) damage this turn from the creatures attacking them / able to? */
+  threatened(p) {
+    const pl = this.st.players[p];
+    if (!pl) return false;
+    const cb = this.st.combat;
+    let inc = 0;
+    if (cb && cb.attackers.length) {
+      for (const a of cb.attackers) { if (this.g.defenderPlayer(a.defender) !== p) continue; const o = this.O(a.obj); if (o && !(a.blockers || []).length) inc += Math.max(0, num(o.c.power)) * (this.kw(o, "double strike") ? 2 : 1); }
+    } else if (this.st.active !== p) {
+      for (const o of this.bf) if (o.controller === this.st.active && this.isCre(o) && !o.tapped && !this.kw(o, "defender")) inc += Math.max(0, num(o.c.power));
+    }
+    return inc >= pl.life || (pl.life <= 6 && inc >= pl.life - 1);
+  }
 
   /** Rough price of paying a Cost (non-mana parts weigh most; mana is cheap but not free). */
   costPenalty(cost, src, E = {}) {
@@ -599,6 +629,13 @@ export class Brain {
     if (cost.exileFromGraveyard) v += 2 * num(cost.exileFromGraveyard);
     if (cost.tapOther) v += 4 * (num(cost.tapOtherCount ?? 1) || 1);
     if (cost.removeCounters) v += 6;
+    if (cost.exileSelf && src && src.zone === "battlefield") v += this.objValue(src);
+    if (cost.craftWith) {
+      let c = [];
+      try { c = this.g.craftCands(this.p, cost.craftWith, src); } catch { c = []; }
+      const vals = c.map((o) => (o.zone === "battlefield" ? this.objValue(o) : this.cardValue(o) * 0.25)).sort((a, b) => a - b);
+      v += vals.length ? vals[0] : 999;
+    }
     if (Array.isArray(cost.oneOf)) v += Math.min(...cost.oneOf.map((c) => this.costPenalty(c, src, E)));
     return v;
   }
@@ -631,6 +668,7 @@ export class Brain {
           case "move": if (isT(e.what)) { if (e.to === "battlefield" || e.to === "hand") ben++; else harm++; } break;
           case "until": { const s = e.static || {}; if (isT(s.affects)) { if (s.type === "cantBlock" || s.type === "cantAttack") harm++; else ben++; } break; }
           case "_aura": break;
+          case "_mutate": if (i === 0) ben++; break;
           default: break;
         }
         if (e.then) walk(e.then);
@@ -805,6 +843,12 @@ export class Brain {
     const p = E0.p ?? this.p;
     const types = fd.types || [];
     let v = 0;
+    const copyAb = (fd.abilities || []).find((a) => a.kind === "static" && a.effect?.type === "asEntersCopy");
+    if (copyAb) { // "enter as a copy of …": worth the best thing it can copy
+      let best = -60;
+      try { for (const x of this.g.copyCandidates({ id: null }, copyAb.effect, p)) best = Math.max(best, this.objValue(x) + 8); } catch { /* */ }
+      return best;
+    }
     if (types.includes("creature")) {
       let pw = fd.power, tg = fd.toughness;
       const sp = (fd.abilities || []).find((a) => a.kind === "static" && a.effect && (a.effect.type === "setPT" || a.effect.type === "setBasePT"));
@@ -828,6 +872,8 @@ export class Brain {
         let ev = bt.value;
         if (ab.modes && ab.modes.modes) ev += Math.max(0, ...ab.modes.modes.map((m) => this.bestTargetsFor(m.targets || [], m.effects || [], E).value));
         v += ab.optional ? Math.max(0, ev) : ev;
+      } else if (ab.kind === "triggered" && ab.on && ab.on.event === "beginStep" && !ab.condition) { // recurring value (upkeep drains etc.)
+        v += Math.max(0, this.evalEffects(ab.effects || [], { p, src: o })) * 2.5;
       } else if (ab.kind === "static" && ab.effect) {
         const s = ab.effect;
         if (s.type === "pump" && s.affects && typeof s.affects === "object") {
@@ -864,6 +910,16 @@ export class Brain {
       const cd = this.castDef(a);
       if (!cd) return null;
       const { o, fd } = cd;
+      if (a.variant === "mutate") return this.mutateScore(a, i, o, fd);
+      if (a.variant === "morph") {
+        if (!main) return null;
+        const v = this.cValue({ power: 2, toughness: 2, keywords: {}, abilities: [] }) + 6 - (a.sacForMana ? 200 : 0);
+        return v > 0 ? { a, i, score: v * 0.7 * noise } : null; // usually below casting it face up
+      }
+      if (/lifeCantChange|playerProtection/.test(JSON.stringify(fd.spell?.effects || []))) { // Teferi's Protection: only when facing lethal
+        if (!this.threatened(this.p)) return null;
+        return { a, i, score: 500 };
+      }
       const inst = this.instantSpeed(fd);
       const perm = this.isPermDef(fd) && a.variant !== "adventure";
       const cmc = num(fd.cmc);
@@ -928,8 +984,17 @@ export class Brain {
         score -= cmc * 1.5; // card cost
         score += Math.min(cmc, 6);
       }
+      if (a.sacForMana) score -= this.sacForManaPenalty(a.sacForMana);
       if (score <= 0) return null;
       return { a, i, score: score * noise, intent };
+    }
+    if (a.type === "activate" && a.variant === "faceUp") {
+      const o = this.O(a.obj);
+      if (!o || !o.faceDown) return null;
+      const up = this.permSpellValue(o, o.def, { p: this.p }) - this.cValue({ power: 2, toughness: 2, keywords: {}, abilities: [] });
+      if (up <= 0) return null;
+      if (!(main || (!myTurn && step === "end") || (step === "declareBlockers"))) return null;
+      return { a, i, score: 20 + up * 0.5 };
     }
     if (a.type === "activate") {
       const o = this.O(a.obj);
@@ -978,6 +1043,38 @@ export class Brain {
       return { a, i, score: v * 0.8 * noise, intent };
     }
     return null;
+  }
+
+  /** Penalty for spending n creatures through sacrifice-for-mana sources. */
+  sacForManaPenalty(n) {
+    const vals = this.ctrlBf(this.p).filter((o) => this.isCre(o)).map((o) => this.objValue(o)).sort((a, b) => a - b);
+    return vals.slice(0, n).reduce((x, y) => x + y, 0) + 10 * n;
+  }
+  /** Characteristics value of a merged permanent: top card's stats, keywords/abilities of both. */
+  mergedValue(topDef, topC, under) {
+    const kw = { ...(under.keywords || {}), ...(topC.keywords || {}) };
+    return this.cValue({ power: topC.power, toughness: topC.toughness, keywords: kw, abilities: [...(topC.abilities || []), ...(under.abilities || [])] });
+  }
+  mutateScore(a, i, o, fd) {
+    if (!this.isMain() || !this.myTurn()) return null;
+    let hosts = [];
+    try { hosts = this.g.targetCandidates({ what: { types: ["creature"], notSubtypes: ["human"], owner: "you" } }, o, this.p, { source: o, you: this.p }).map((id) => this.O(id)).filter(Boolean); } catch { hosts = []; }
+    const sc = { power: num(fd.power), toughness: num(fd.toughness), keywords: fd.keywords || {}, abilities: fd.abilities || [] };
+    let best = null;
+    for (const h of hosts) {
+      if (h.controller !== this.p) continue;
+      const base = this.cValue(h.c);
+      const over = this.mergedValue(fd, sc, h.c), under = this.mergedValue(h.def, h.c, sc);
+      const gain = Math.max(over, under) - base;
+      if (!best || gain > best.gain) best = { h, gain };
+    }
+    if (!best) return null;
+    const trig = (fd.abilities || []).find((x) => x.kind === "triggered" && x.on?.event === "mutates");
+    let tv = 0;
+    if (trig) tv = Math.max(0, this.bestTargetsFor(trig.targets || [], trig.effects || [], { p: this.p, src: best.h }).value);
+    const score = best.gain * 0.8 + tv + num(fd.cmc) * 1.5 - (a.sacForMana ? this.sacForManaPenalty(a.sacForMana) : 0);
+    if (score <= 4) return null;
+    return { a, i, score, intent: { targets: [[best.h.id]] } };
   }
 
   bestModes(ms, E) {
@@ -1593,7 +1690,22 @@ export class Brain {
         }
         return pickTop(scores, r.min, r.max, Infinity);
       }
-      case "order": return { chosen: opts.map((_, i) => i).slice(0, Math.max(r.min, Math.min(r.max, n))) };
+      case "order": {
+        if (r.ordered && /on top/.test(r.prompt)) { // the last one chosen ends up on top: best card last
+          const sc = opts.map((o, i) => { const x = objOf(o); return { i, v: x ? (this.wantOnTop(x) ? 100 : 0) + this.cardValue(x) : 0 }; }).sort((a, b) => a.v - b.v || a.i - b.i);
+          return { chosen: sc.map((x) => x.i).slice(0, Math.max(r.min, Math.min(r.max, n))) };
+        }
+        return { chosen: opts.map((_, i) => i).slice(0, Math.max(r.min, Math.min(r.max, n))) };
+      }
+      case "mutate": {
+        const host = this.O(hint.host), sp = this.O(hint.spell);
+        if (!host || !sp) return { chosen: [0] };
+        const sd = sp.def, sc = { power: num(sd.power), toughness: num(sd.toughness), keywords: sd.keywords || {}, abilities: sd.abilities || [] };
+        const over = this.mergedValue(sd, sc, host.c), under = this.mergedValue(host.def, host.c, sc);
+        const want = over >= under ? "over" : "under";
+        const k = opts.findIndex((o) => o.id === want);
+        return { chosen: [k >= 0 ? k : 0] };
+      }
       default: return this.chooseGeneric(opts, r, hint);
     }
   }
@@ -1719,6 +1831,11 @@ export class Brain {
     if (h.kind === "ward") { const o = this.O(h.obj); return !o || this.stackValue(o) > 15; }
     if (h.kind === "echo") { const o = r.source ? this.O(r.source) : null; return !!o && this.objValue(o) > 35; }
     if (h.kind === "explore") { const c = this.O(h.card); return !!c && !this.wantOnTop(c); }
+    if (h.kind === "shock") { // pay life so the land enters untapped only when that mana is wanted now
+      const want = this.myTurn() && this.isMain() && this.hand().some((x) => !x.def?.types?.includes("land") && num(x.def?.cmc) === this.manaNow() + 1);
+      return want && this.me.life - num(h.life) > 12;
+    }
+    if (h.kind === "newTargets") return false;
     if (h.kind === "may") {
       const src = r.source ? this.O(r.source) : null;
       const E = { p: this.p, src };
@@ -1729,6 +1846,7 @@ export class Brain {
         const want = this.myTurn() && this.isMain() && this.hand().some((x) => !x.def?.types?.includes("land") && num(x.def?.cmc) === this.manaNow() + 1);
         return want && this.me.life - lifeCost > 12;
       }
+      if (h.event) E.event = h.event;
       let v = this.evalEffects(h.effects || [], E);
       const els = h.else ? this.evalEffects(h.else, E) : 0;
       const cost = h.cost ? this.costPenalty(h.cost, src, E) : 0;
@@ -1740,10 +1858,33 @@ export class Brain {
     return false;
   }
 
+  /** Split divided damage/counters: kill what can be killed (most valuable first), the rest to the best remaining target. */
+  divideNumber(r, h) {
+    const ids = h.ids || [], total = h.total | 0;
+    const plan = {};
+    let left = total;
+    const need = (id) => {
+      if (isPid(id) || h.op !== "damage") return Infinity;
+      const o = this.O(id);
+      if (!o || o.zone !== "battlefield") return Infinity;
+      if (this.isCre(o)) return Math.max(1, num(o.c.toughness) - (o.damage | 0));
+      if (o.c.types.includes("planeswalker")) return Math.max(1, o.counters?.loyalty | 0);
+      return Infinity;
+    };
+    for (const id of ids) plan[id] = 1;
+    left -= ids.length;
+    const order = ids.filter((id) => !isPid(id)).map((id) => ({ id, v: this.objValue(this.O(id)) * (this.O(id)?.controller === this.p ? -1 : 1) })).sort((a, b) => b.v - a.v);
+    for (const { id, v } of order) { if (v <= 0) continue; const extra = Math.max(0, need(id) - plan[id]); if (extra !== Infinity && extra <= left) { plan[id] += extra; left -= extra; } }
+    if (left > 0) { const pl = ids.find((id) => isPid(id) && pidx(id) !== this.p) || order[0]?.id || ids[ids.length - 1]; plan[pl] += left; }
+    const id = ids[h.index | 0];
+    return Math.max(r.min, Math.min(r.max, plan[id] | 0));
+  }
+
   number() {
     const r = this.req;
     const h = r._hint || {};
     const intent = this.memo.intent && this.memo.intent.src === r.source ? this.memo.intent : null;
+    if (h.kind === "divide") return this.divideNumber(r, h);
     if (h.kind === "x") {
       if (h.loyalty) return Math.max(r.min, Math.min(r.max, r.max - 1));
       if (intent && intent.x != null && intent.x >= r.min && intent.x <= r.max && intent.x > 0) return intent.x;

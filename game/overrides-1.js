@@ -118,13 +118,9 @@ export default {
         run: function* (g, ctx) {
           const hit = [];
           for (const o of g.find({ types: ["creature"] }, ctx)) if (g.dealDamage(ctx.source, o.id, 3) > 0) hit.push(o);
+          // "If a creature dealt damage this way would die this turn, exile it instead." — a replacement effect for the rest of the turn
+          if (hit.length) g.addEffect({ type: "exileInsteadOfDying" }, ctx, { objIds: hit.map((o) => o.id), until: "endOfTurn" });
           g.markDirty(); g.refresh();
-          // "If a creature dealt damage this way would die this turn, exile it instead."
-          for (const o of hit) {
-            if (o.zone !== "battlefield") continue;
-            const lethal = !g.hasKw(o, "indestructible") && (o.damage >= o.c.toughness || (o.deathtouched && o.damage > 0));
-            if (lethal || o.c.toughness <= 0) g.exile(o);
-          }
         },
       }) });
     },
@@ -249,13 +245,7 @@ export default {
       return out(def, { spell: spellOf(def, {
         effects: [],
         run: function* (g, ctx) {
-          const seen = new Set();
-          for (const o of g.find({ types: ["creature"] }, ctx)) for (const s of o.c.subtypes) seen.add(s);
-          const options = [...seen].sort().map((s) => ({ id: s, label: cap(s), type: "text" }));
-          options.push({ id: "__other__", label: "Another creature type (no creature here has it)", type: "text" });
-          const [pick] = yield* g.choose$(ctx.you, { prompt: "Crippling Fear: choose a creature type", options, min: 1, max: 1, reason: "generic", source: ctx.source?.id });
-          const type = pick ? pick.id : "__other__";
-          g.log(`${g.state.players[ctx.you].name} chooses ${type === "__other__" ? "a type none of the creatures has" : cap(type)}`);
+          const type = yield* g.chooseCreatureType$(ctx.you, ctx.source, ctx.source?.def);
           yield* g.runEffects$([{ op: "pump", what: { ref: "all", filter: { types: ["creature"], notSubtypes: [type] } }, power: -3, toughness: -3 }], ctx);
         },
       }) });
@@ -265,8 +255,7 @@ export default {
   // ------------------------------------------------------------------------------------------------ D
   "Dig Through Time": {
     patch(def) {
-      // (the bottom-of-library order is not asked for; "in any order" has no practical consequence)
-      return out(def, { spell: spellOf(def, { effects: [{ op: "lookTop", amount: 7, take: 2, rest: "bottom" }] }) });
+      return out(def, { spell: spellOf(def, { effects: [{ op: "lookTop", amount: 7, take: 2, rest: "bottom" }] }) }); // the bottom order is asked (any order)
     },
   },
 
@@ -292,23 +281,6 @@ export default {
   },
 
   // ------------------------------------------------------------------------------------------------ E
-  "Elrond, Lord of Rivendell": {
-    patch(def) {
-      const text = "Whenever Elrond or another creature you control enters, scry 1. If this is the second time this ability has resolved this turn, the Ring tempts you.";
-      return out(def, { abilities: [{
-        kind: "triggered", on: { event: "enters", who: { types: ["creature"], controller: "you" } }, text,
-        run: function* (g, ctx) {
-          yield* g.runEffects$([{ op: "scry", amount: 1 }], ctx);
-          const src = g.obj(ctx.source?.id) || ctx.source;
-          const turn = g.state.turn;
-          if (!src.elrondRes || src.elrondRes.turn !== turn) src.elrondRes = { turn, n: 0 };
-          src.elrondRes.n++;
-          if (src.elrondRes.n === 2) yield* g.ringTempts$(ctx.you);
-        },
-      }] });
-    },
-  },
-
   "Etali, Primal Storm": {
     patch(def) {
       return out(def, { abilities: plus(def, {
@@ -332,8 +304,6 @@ export default {
     },
   },
 
-  // Mutate is not implemented (the card is cast as a plain creature); both mutate lines stay flagged.
-  // "Everquill Phoenix" / "Gemrazer": intentionally no override.
 
   // ------------------------------------------------------------------------------------------------ F
   "Fact or Fiction": {
@@ -357,49 +327,6 @@ export default {
           const [toHand, toGy] = pick && pick.id === "p2" ? [pile2, pile1] : [pile1, pile2];
           for (const o of toHand) yield* g.moveTo$(o, "hand", {});
           for (const o of toGy) yield* g.moveTo$(o, "graveyard", {});
-        },
-      }) });
-    },
-  },
-
-  "Fellwar Stone": {
-    // The mana ability is exact but is a manual action (the auto-payment solver can't see its colours; see engine request).
-    patch(def) {
-      const colorsOf = (g, o) => {
-        const cols = new Set();
-        for (const ab of o.c.abilities || []) {
-          if (ab.kind !== "activated" || !ab.mana) continue;
-          const walk = (list) => {
-            for (const e of list || []) {
-              if (!e || e.op !== "addMana") { if (e && e.op === "if") { walk(e.then); walk(e.else); } continue; }
-              const m = e.mana;
-              if (typeof m === "string") { for (const k of "WUBRG") if (m.includes(`{${k}}`)) cols.add(k); }
-              else if (m && m.anyOf) for (const k of m.anyOf) cols.add(String(k).toUpperCase().slice(0, 1));
-              else if (m && m.any) for (const k of "WUBRG") cols.add(k);
-              else if (m && m.color) cols.add(String(m.color).toUpperCase().slice(0, 1));
-              else if (m && m.identity) for (const k of g.identityOf(o.controller)) cols.add(k);
-            }
-          };
-          walk(ab.effects);
-        }
-        return cols;
-      };
-      return out(def, { abilities: plus(def, {
-        kind: "activated", mana: true, cost: { tap: true },
-        text: "{T}: Add one mana of any color that a land an opponent controls could produce.",
-        run: function* (g, ctx) {
-          const cols = new Set();
-          for (const o of g.find({ types: ["land"] }, ctx)) if (o.controller !== ctx.you) for (const k of colorsOf(g, o)) cols.add(k);
-          const list = ["W", "U", "B", "R", "G"].filter((k) => cols.has(k));
-          if (!list.length) { g.log("Fellwar Stone: no opponent land can produce a color"); return; }
-          let col = list[0];
-          if (ctx.manaChoice) { const c = ctx.manaChoice.find((k) => list.includes(k)); if (c) col = c; }
-          else if (list.length > 1) {
-            const names = { W: "White", U: "Blue", B: "Black", R: "Red", G: "Green" };
-            const [pick] = yield* g.choose$(ctx.you, { prompt: "Fellwar Stone: choose a color of mana", options: list.map((k) => ({ id: k, label: names[k], type: "color" })), min: 1, max: 1, reason: "generic", source: ctx.source?.id });
-            if (pick) col = pick.id;
-          }
-          g.addMana(ctx.you, `{${col}}`);
         },
       }) });
     },
@@ -464,7 +391,6 @@ export default {
     patch(def) { return out(def, { abilities: plus(def, ...godEternalTuck("God-Eternal Oketra", "it")) }); },
   },
 
-  // Grim Haruspex: only "Morph {B}" is left unparsed (morph is not implemented) -> no override.
 
   // ------------------------------------------------------------------------------------------------ H
   "Heliod, Sun-Crowned": {
@@ -477,25 +403,6 @@ export default {
   },
 
   // ------------------------------------------------------------------------------------------------ I
-  // Illusionist's Bracers: needs an "ability activated" event + ability copying -> no override (stays flagged).
-
-  "Inferno Titan": {
-    patch(def) {
-      const mk = (event) => ({
-        kind: "triggered", on: { event, who: "self" }, effects: [],
-        text: "Whenever this creature enters or attacks, it deals 3 damage divided as you choose among one, two, or three targets.",
-        // the division is fixed when the trigger is put on the stack, exactly like the printed text
-        modes: { min: 1, max: 1, modes: [
-          { text: "3 damage to one target", targets: [{ what: "any" }], effects: [{ op: "damage", amount: 3, to: T(0) }] },
-          { text: "2 damage to one target and 1 damage to another target", targets: [{ what: "any" }, { what: "any" }],
-            effects: [{ op: "damage", amount: 2, to: T(0) }, { op: "damage", amount: 1, to: T(1) }] },
-          { text: "1 damage to each of three targets", targets: [{ what: "any" }, { what: "any" }, { what: "any" }],
-            effects: [{ op: "damage", amount: 1, to: T(0) }, { op: "damage", amount: 1, to: T(1) }, { op: "damage", amount: 1, to: T(2) }] },
-        ] },
-      });
-      return out(def, { abilities: plus(def, mk("enters"), mk("attacks")) });
-    },
-  },
 
   // ------------------------------------------------------------------------------------------------ J
   "Jeska's Will": {
@@ -530,13 +437,6 @@ export default {
   },
 
   // ------------------------------------------------------------------------------------------------ L
-  "Light Up the Stage": {
-    // Spectacle (alternative cost) is not implemented: the card is simply cast for {2}{R}; that line stays flagged.
-    patch(def) {
-      return out(def, { spell: spellOf(def, { effects: [{ op: "exileTop", who: "you", amount: 2, until: "nextTurn" }] }) }, ["Spectacle {R}"]);
-    },
-  },
-
   "Lord of the Nazgûl": {
     patch(def) {
       return out(def, { abilities: [

@@ -39,3 +39,15 @@ test("lint self-check", () => {
   assert.equal(findBareCalls("this.foo$(a);").length, 1);
   assert.equal(findBareCalls("g.choose$(p, {});").length, 1);
 });
+
+test("browser safety: engine/parser/AI/UI modules never touch Node-only globals unguarded", () => {
+  const all = readdirSync(dir).filter((f) => /\.js$/.test(f));
+  const bad = [];
+  for (const f of all) {
+    const src = readFileSync(dir + f, "utf8");
+    src.split("\n").forEach((line, i) => {
+      if (/\b(process|require|Buffer|__dirname)\b/.test(line.replace(/\/\/.*$/, "").replace(/(["'`])(?:\\.|(?!\1).)*\1/g, '""')) && !/typeof (process|require|Buffer)/.test(line)) bad.push(`${f}:${i + 1}: ${line.trim()}`);
+    });
+  }
+  assert.deepEqual(bad, []);
+});
