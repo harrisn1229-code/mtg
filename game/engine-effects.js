@@ -724,12 +724,13 @@ const OPS = {
   },
   *explore$(e, ctx) {
     const objs = this.objsOf(yield* this.refs$(e.what ?? "self", ctx));
-    for (const o of objs) {
+    for (const o of objs) for (let rep = this.exploreTimes(o); rep > 0; rep--) {
       const p = o.controller;
       const pl = this.state.players[p];
-      if (!pl.library.length) { if (o.zone === "battlefield") this.addCounters(o, "+1/+1", 1); continue; }
+      if (!pl.library.length) { if (o.zone === "battlefield") this.addCounters(o, "+1/+1", 1); this.fireTrigger({ type: "explores", obj: o, player: p, land: false }); continue; }
       const top = this.state.objects[pl.library[pl.library.length - 1]];
       this.emit({ t: "reveal", objs: [top.id], player: p, text: `${o.c.name} explores: ${this.pname(p)} reveals ${top.c.name}` });
+      this.fireTrigger({ type: "explores", obj: o, player: p, land: top.c.types.includes("land") });
       if (top.c.types.includes("land")) this.moveObj(top, "hand");
       else {
         if (o.zone === "battlefield") this.addCounters(o, "+1/+1", 1);

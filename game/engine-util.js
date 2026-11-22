@@ -262,6 +262,12 @@ export const FACE_DOWN_DEF = normalizeDef({
   power: 2, toughness: 2, keywords: {}, abilities: [], spell: null, unparsed: [], text: "", img: null, faces: null, faceDownDef: true,
 });
 
+/** A cloaked / disguised face-down permanent: a 2/2 with ward {2}. */
+export const FACE_DOWN_WARD_DEF = normalizeDef({
+  name: "Face-down creature", cost: "", cmc: 0, colors: [], identity: [], types: ["creature"], subtypes: [], supertypes: [],
+  power: 2, toughness: 2, keywords: { ward: "{2}" }, abilities: [], spell: null, unparsed: [], text: "", img: null, faces: null, faceDownDef: true,
+});
+
 /** Creature types (CR 205.3m) — used for "choose a creature type". */
 export const CREATURE_TYPES = ("advisor aetherborn alien ally angel antelope ape archer archon armadillo army artificer assassin assembly-worker astartes atog aurochs avatar azra " +
   "badger balloon barbarian bard basilisk bat bear beast beaver beeble beholder berserker bird blinkmoth boar bringer brushwagg camarid camel capybara caribou carrier cat " +

@@ -1,6 +1,6 @@
 // engine-chars.js — computed characteristics (simplified layer system), filter matching, ability lists.
 // Mixed into the Game prototype (methods use `this`).
-import { cmp, colorLetter, PERMANENT_TYPES, BASIC_LAND_MANA, parseManaCost, FACE_DOWN_DEF, CREATURE_TYPES } from "./engine-util.js";
+import { cmp, colorLetter, PERMANENT_TYPES, BASIC_LAND_MANA, parseManaCost, FACE_DOWN_DEF, FACE_DOWN_WARD_DEF, CREATURE_TYPES } from "./engine-util.js";
 
 const EMPTY_C = { name: "?", types: [], subtypes: [], supertypes: [], colors: [], keywords: {}, abilities: [], power: 0, toughness: 0, cmc: 0 };
 const LAND_SUBS = new Set(["plains", "island", "swamp", "mountain", "forest", "desert", "gate", "lair", "locus", "cave", "sphere", "mine", "tower", "power-plant", "urza's", "town"]);
@@ -110,7 +110,7 @@ export function manaColorsOf(effects) {
 export const charMethods = {
   /** The CardDef currently describing obj (face-aware, copy-aware). */
   faceDef(o) {
-    if (o.faceDown && (o.zone === "battlefield" || o.zone === "stack" || o.zone === "phased")) return FACE_DOWN_DEF;
+    if (o.faceDown && (o.zone === "battlefield" || o.zone === "stack" || o.zone === "phased")) return o.faceDownWard ? FACE_DOWN_WARD_DEF : FACE_DOWN_DEF;
     if (o.mergeDef) return o.mergeDef;
     const d = o.copyDef || o.def;
     if (o.face && d.faces && d.faces[o.face]) return d.faces[o.face];
@@ -119,7 +119,7 @@ export const charMethods = {
   /** Copiable values (CR 707.2): face-down 2/2, merged (mutate) values, a copy's copied values, or the current face. */
   copiableDef(o) {
     if (!o) return null;
-    if (o.faceDown && (o.zone === "battlefield" || o.zone === "stack" || o.zone === "phased" || o.lki)) return FACE_DOWN_DEF;
+    if (o.faceDown && (o.zone === "battlefield" || o.zone === "stack" || o.zone === "phased" || o.lki)) return o.faceDownWard ? FACE_DOWN_WARD_DEF : FACE_DOWN_DEF;
     if (o.mergeDef) return o.mergeDef;
     const d = o.copyDef || o.def;
     if (!o.copyDef && o.face && d.faces && d.faces[o.face]) return d.faces[o.face];

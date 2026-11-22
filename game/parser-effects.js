@@ -2,6 +2,7 @@
 // Everything here throws `Fail` when it cannot map text to the IR with confidence.
 
 import { Fail, fail, num, NUM_RE, COLORS, parseFilter, parseTargetPhrase, parseKeywordList, KEYWORD_SET, subtypeOf, manaSymbols } from "./parser-filters.js";
+import { m3Player, m3Cond, m3CostPart } from "./parser-m3.js";
 
 // ---------------------------------------------------------------------------------------------
 // context
@@ -231,6 +232,7 @@ export function parseCost(text) {
   if (!parts.length) fail("empty cost");
   for (const p of parts) {
     let m;
+    if (m3CostPart(p, cost)) continue;
     if (/^(?:\{[^}]+\})+$/.test(p) && p !== "{T}" && p !== "{Q}") {
       cost.mana = (cost.mana || "") + p;
       if (/\{X\}/i.test(p)) cost.x = true;
@@ -286,6 +288,7 @@ export function parseCost(text) {
 export function parseCond(text, ctx = {}) {
   const t = text.trim().replace(/’/g, "'").replace(/[.]$/, "");
   let m;
+  { const mc = m3Cond(t); if (mc) return mc; }
   if (/^you do$/i.test(t)) return { type: "did" };
   if (/^(?:you don't|the player doesn't|that player doesn't|they don't)$/i.test(t)) return { type: "not", c: { type: "did" } };
   if (/^it's your turn$/i.test(t) || /^it is your turn$/i.test(t)) return { type: "yourTurn" };
@@ -385,7 +388,7 @@ export function parseCreate(text, ctx, who) {
     return [e];
   }
   // several tokens joined by "and"
-  const parts = splitTop(t, /\s+and\s+(?=(?:an?|one|two|three|four|five|six|seven|eight|nine|ten|x|\d+)\s+(?:tapped\s+)?(?:\d+|x)\/)/i);
+  const parts = splitTop(t, /\s+and\s+(?=(?:an?|one|two|three|four|five|six|seven|eight|nine|ten|x|\d+)\s+(?:tapped\s+)?(?:(?:\d+|x)\/|(?:treasure|food|clue|blood|map) tokens?))/i);
   const out = [];
   for (const p of parts) out.push(parseOneToken(p, ctx, who));
   return out;
@@ -882,6 +885,7 @@ function playerRules(who, c, ctx, hadSubject) {
   let m;
   const wh = (e) => (who === "you" ? e : { ...e, who });
   const withWho = (e) => { e.who = who; return e; };
+  { const r3 = m3Player(who, c, ctx); if (r3) return r3; } // library batch m3: monarch, energy, rad, investigate, manifest, discover
 
   // draw
   if ((m = c.match(/^draw (.+?)(?: cards?)?$/i)) || false) {

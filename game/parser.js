@@ -3,6 +3,7 @@
 //   analyzeCard(cardData) -> { def, lines, parsed, partial:[...], unparsed:[...] }   (used by test/coverage.js)
 // Anything not understood goes to def.unparsed (raw line) — never a guess. Extensions beyond SPEC §5 are listed in SPEC-NOTES.md.
 
+import { m3When } from "./parser-m3.js";
 import { Fail, fail, num, NUM_RE, COLORS, BASIC_LAND_TYPES, parseFilter, parseKeywordList, cmcOfCost, colorsOfCost, subtypeOf, KEYWORD_SET } from "./parser-filters.js";
 import { createCtx, parseEffects, parseCost, parseCond, splitTop, splitSentences, attempt, countOf, expr, maskQuotes } from "./parser-effects.js";
 
@@ -79,6 +80,9 @@ function kwItem(item, kws) {
     return true;
   }
   if (/^cascade$/i.test(t)) { kws.cascade = true; return true; }
+  if (/^ascend$/i.test(t)) { kws.ascend = true; return true; }
+  if ((m = t.match(/^disguise ((?:\{[^}]+\})+)$/i))) { kws.disguise = m[1]; return true; }
+  if ((m = t.match(/^dredge (\d+)$/i))) { kws.dredge = +m[1]; return true; }
   if ((m = t.match(/^craft with (.+?) ((?:\{[^}]+\})+)$/i))) {
     let w = m[1].trim(), n = 1;
     const mm = w.match(new RegExp(`^(${NUM_RE}) (?:or more )?(.+)$`, "i"));
@@ -97,7 +101,7 @@ function tryKeywordLine(L) {
   const items = splitTop(L, /,\s+/);
   const kws = {};
   // looks like a keyword line only if the first item is (or begins like) a keyword
-  const startsKw = items.length && (SIMPLE_KW.has(items[0].trim().toLowerCase()) || /^(?:ward|protection from|equip|cycling|flashback|kicker|echo|overload|annihilator|toxic|escape-|mutate|morph|megamorph|spectacle|craft with|afterlife|unearth|cascade|basic landcycling|(?:plains|island|swamp|mountain|forest)(?:walk|cycling))\b/i.test(items[0]) || UNSUPPORTED_KW_RE.test(items[0].trim()));
+  const startsKw = items.length && (SIMPLE_KW.has(items[0].trim().toLowerCase()) || /^(?:ward|protection from|equip|cycling|flashback|kicker|echo|overload|annihilator|toxic|escape-|mutate|morph|megamorph|spectacle|craft with|afterlife|unearth|cascade|ascend|disguise|dredge|basic landcycling|(?:plains|island|swamp|mountain|forest)(?:walk|cycling))\b/i.test(items[0]) || UNSUPPORTED_KW_RE.test(items[0].trim()));
   if (/^flashback\s*[—-]/i.test(L)) { const kws2 = {}; return kwItem(L, kws2) ? { kws: kws2 } : { unparsed: true }; }
   if (!startsKw) return null;
   for (const it of items) {
@@ -227,6 +231,7 @@ function subjectFilter(t, ev) {
 function parseWhenText(text) {
   let t = text.trim().replace(/’/g, "'");
   let m;
+  { const mw = m3When(t); if (mw) return mw; } // library batch m3
   const info = { subject: "self" };
   const one = (trig, extra) => ({ triggers: [trig], info: { ...info, ...extra } });
   if (/^the ring tempts you$/i.test(t)) return one({ event: "ringTempts", who: "you" }, { subject: "player" });

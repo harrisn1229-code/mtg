@@ -229,7 +229,7 @@ export const extMethods = {
   faceUpCost(o) {
     if (!o || !o.faceDown) return null;
     const kw = o.def?.keywords || {};
-    const v = kw.morph ?? kw.megamorph;
+    const v = kw.morph ?? kw.megamorph ?? kw.disguise ?? o.fuCost; // manifested / cloaked creature cards turn up for their mana cost
     if (v == null || v === false) return null;
     return typeof v === "string" ? v : v.cost || "{0}";
   },

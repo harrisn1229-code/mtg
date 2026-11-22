@@ -86,7 +86,7 @@ export const actionMethods = {
     const out = [];
     const kw = d.keywords || {};
     if (kw.mutate) out.push({ variant: "mutate", face: 0 });
-    if (kw.morph != null || kw.megamorph != null) out.push({ variant: "morph", face: 0 });
+    if (kw.morph != null || kw.megamorph != null || kw.disguise != null) out.push({ variant: "morph", face: 0 });
     if (kw.spectacle && this.opponentsOf(p).some((q) => this.state.players[q].lifeLostThisTurn > 0)) out.push({ variant: "spectacle", face: 0 });
     return out;
   },
@@ -100,6 +100,7 @@ export const actionMethods = {
     const kw = d.keywords || {};
     const cs = (v) => (typeof v === "string" ? v : v && typeof v === "object" ? v.cost || v.mana || "" : null);
     if (zone === "hand") {
+      if (!castable(d) && d.types.includes("land") && (kw.morph != null || kw.megamorph != null || kw.disguise != null)) out.push({ variant: "morph", face: 0 }); // a land with morph / disguise can be cast face down
       if (castable(d)) {
         out.push({ variant: "normal", face: 0 });
         if (cs(kw.kicker)) out.push({ variant: "kicked", face: 0 });
@@ -562,6 +563,7 @@ export const actionMethods = {
     o.x = x; o.kicked = v.variant === "kicked";
     o.onAdventure = false; o.mayPlay = null; o.cmdPending = false;
     o.faceDown = v.variant === "morph";
+    o.faceDownWard = o.faceDown && o.def.keywords?.disguise != null;
     o.manaSpent = spent.n;
     o._division = division;
     o._targets = targets; o._targetSpecs = specs; o._modes = modes; o._modeTargets = modeTargets;

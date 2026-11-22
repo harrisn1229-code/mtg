@@ -28,6 +28,7 @@ import { effectMethods, describeCost } from "./engine-effects.js";
 import { actionMethods } from "./engine-actions.js";
 import { combatMethods } from "./engine-combat.js";
 import { extMethods } from "./engine-ext.js";
+import { installM3 } from "./engine-m3.js";
 
 export { STEPS, parseManaCost, costToString, costCmc, TOKENS, makeRng, describeCost, hasType };
 
@@ -432,7 +433,7 @@ export class Game {
       o.pile = null; o.mergeDef = null; o.chosen = null; o.phasedIndirect = false; o.phasedController = null;
       if (!o.token) o.copyDef = null;
     }
-    if (o.faceDown && !(from === "stack" && to === "battlefield") && !(from === "exile" && to === "exile")) {
+    if (o.faceDown && !opts.keepFaceDown && !(from === "stack" && to === "battlefield") && !(from === "exile" && to === "exile")) {
       if (from === "battlefield" || from === "stack" || from === "phased") wasFaceDown = true;
       o.faceDown = false;
     }
@@ -1646,6 +1647,7 @@ export class Game {
 
 // mixins
 Object.assign(Game.prototype, charMethods, manaMethods, effectMethods, actionMethods, combatMethods, extMethods);
+installM3(Game); // library batch m3 (energy, rad, monarch, voting, ...)
 
 export function publicAction(a) {
   const o = { type: a.type, obj: a.obj, label: a.label, zone: a.zone };
