@@ -377,6 +377,9 @@
   .dart img{width:100%;height:100%;object-fit:cover;display:block}
   .dart .pips{position:absolute;left:10px;bottom:10px;padding:3px 5px;border-radius:12px;background:rgb(10 10 12 / .6)}
   .dart .br{position:absolute;right:10px;top:10px;padding:2px 8px;border-radius:8px;background:rgb(10 10 12 / .7);color:#fff;font-size:12px;font-weight:700}
+  .dart .st{position:absolute;left:10px;top:10px;padding:2px 8px;border-radius:8px;font-size:12px;font-weight:700;color:#fff;background:rgb(10 10 12 / .7)}
+  .dart .st.owned{background:#1f8a4c}
+  .badge.owned{background:#1f8a4c;color:#fff}
   .dtile .body{padding:10px 14px 12px}
   .dtile .nm{font-weight:700;font-size:16px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .dtile .sub{font-size:13px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1516,18 +1519,24 @@
   /* ============================ decks: list screen ============================ */
   const decksScreen = {
     mount(){
-      const tiles = state.decks.slice().sort((a, b) => String(b.updated || "").localeCompare(String(a.updated || "")) || a.name.localeCompare(b.name)).map((d) => {
+      const tileOf = (d) => {
         const cmd = deckCommanders(d)[0];
         const art = cmd && cmd.img ? '<img src="' + esc(artCrop(cmd.img)) + '" alt="" loading="lazy" decoding="async">' : "";
-        return '<a class="dtile" href="#/deck/' + encodeURIComponent(d.id) + '"><div class="dart">' + art + pipsHtml(deckIdentity(d)) + (d.bracket ? '<span class="br">Bracket ' + esc(d.bracket) + "</span>" : "") + "</div>" +
+        return '<a class="dtile" href="#/deck/' + encodeURIComponent(d.id) + '"><div class="dart">' + art + pipsHtml(deckIdentity(d)) + (d.bracket ? '<span class="br">Bracket ' + esc(d.bracket) + "</span>" : "") + (DECK_STATUS[d.status] ? '<span class="st ' + esc(d.status) + '">' + DECK_STATUS[d.status] + "</span>" : "") + "</div>" +
           '<div class="body"><div class="nm">' + esc(d.name) + "</div>" + '<div class="sub">' + esc(cap(d.format || "")) + (d.commander ? " · " + esc(d.commander) : "") + "</div>" +
           '<div class="stats num"><span><b>' + deckCount(d) + "</b> cards</span><span><b>" + money(deckValue(d)) + "</b></span></div></div></a>";
-      }).join("");
+      };
+      const sorted = state.decks.slice().sort((a, b) => String(b.updated || "").localeCompare(String(a.updated || "")) || a.name.localeCompare(b.name));
+      const groups = [["owned", "Owned"], ["wishlist", "Wishlist"], ["", "Other decks"]].map((g) => [g[1], sorted.filter((d) => (DECK_STATUS[d.status] ? d.status : "") === g[0])]).filter((g) => g[1].length);
+      const tiles = groups.length > 1 || (groups[0] && groups[0][0] !== "Other decks")
+        ? groups.map((g) => '<div class="sect"><h2>' + esc(g[0]) + '</h2><span class="r">' + g[1].length + '</span></div><div class="decks">' + g[1].map(tileOf).join("") + "</div>").join("")
+        : '<div class="decks">' + sorted.map(tileOf).join("") + "</div>";
       $("screen").innerHTML = topbar({ title: "Decks", actions: '<button class="icon-btn tint" data-act="newDeck" aria-label="New deck">' + ICON.plus + "</button>" }) +
-        '<div class="page">' + (state.decks.length ? '<div class="decks">' + tiles + "</div>" : emptyHtml("No decks yet", "Start one from scratch or paste a list.", '<br><button class="btn pri" data-act="newDeck">New deck</button>')) + "</div>" +
+        '<div class="page">' + (state.decks.length ? tiles : emptyHtml("No decks yet", "Start one from scratch or paste a list.", '<br><button class="btn pri" data-act="newDeck">New deck</button>')) + "</div>" +
         '<button class="fab" data-act="newDeck">' + ICON.plus + "<span>New deck</span></button>";
     },
   };
+  const DECK_STATUS = { owned: "Owned", wishlist: "Wishlist" };
   const FORMATS = ["commander", "standard", "pioneer", "modern", "legacy", "vintage", "pauper", "brawl", "other"];
   function newDeckSheet(){
     openSheet(() => '<h2 id="sheetTitle">New deck</h2><form data-submit="newDeck">' +
@@ -1641,7 +1650,7 @@
       $("dHead").innerHTML = '<div class="dhead">' + (cmd[0] && cmd[0].img ? '<div class="art"><img src="' + esc(artCrop(cmd[0].img)) + '" alt=""></div>' : "") +
         '<div class="info"><div class="cmd">' + esc(cmd.length ? cmd.map(displayName).join(" + ") : (d.commander || "No commander")) + "</div>" +
         (d.archetype ? '<div class="arch">' + esc(d.archetype) + "</div>" : "") +
-        '<div class="line">' + pipsHtml(deckIdentity(d)) + (d.bracket ? '<span class="badge">Bracket ' + esc(d.bracket) + "</span>" : "") + '<span class="num">' + money(deckValue(d)) + "</span></div>" +
+        '<div class="line">' + pipsHtml(deckIdentity(d)) + (d.bracket ? '<span class="badge">Bracket ' + esc(d.bracket) + "</span>" : "") + (DECK_STATUS[d.status] ? '<span class="badge ' + esc(d.status) + '">' + DECK_STATUS[d.status] + "</span>" : "") + '<span class="num">' + money(deckValue(d)) + "</span></div>" +
         '<a class="btn pri sm playbtn" href="#/play/' + encodeURIComponent(d.id) + '">' + ICON.play + " Play</a></div></div>";
       $("dBody").innerHTML = '<div class="toolbar"><div class="seg" role="group" aria-label="Group by"><button data-act="dGroup" data-v="section" aria-pressed="' + (prefs.deckGroup !== "type") + '">Sections</button><button data-act="dGroup" data-v="type" aria-pressed="' + (prefs.deckGroup === "type") + '">Type</button></div>' +
         '<button class="icon-btn" data-act="dView" aria-label="' + (prefs.deckView === "grid" ? "Show as list" : "Show as cards") + '">' + (prefs.deckView === "grid" ? ICON.list : ICON.grid) + "</button>" +
@@ -1756,6 +1765,7 @@
     openSheet(() => '<h2 id="sheetTitle">Deck details</h2><form data-submit="deckDetails">' +
       '<label class="field"><span>Format</span><select class="inp" name="format">' + FORMATS.map((f) => '<option value="' + f + '"' + (d.format === f ? " selected" : "") + ">" + cap(f) + "</option>").join("") + "</select></label>" +
       '<label class="field"><span>Archetype</span><input class="inp" name="archetype" maxlength="120" value="' + esc(d.archetype || "") + '"></label>' +
+      '<label class="field"><span>Status</span><select class="inp" name="status"><option value="">—</option>' + Object.keys(DECK_STATUS).map((k) => '<option value="' + k + '"' + (d.status === k ? " selected" : "") + ">" + DECK_STATUS[k] + "</option>").join("") + "</select></label>" +
       '<label class="field"><span>Bracket</span><select class="inp" name="bracket"><option value="">—</option>' + [1, 2, 3, 4, 5].map((b) => '<option value="' + b + '"' + (String(d.bracket) === String(b) ? " selected" : "") + ">" + b + "</option>").join("") + "</select></label>" +
       '<div class="sheet-actions"><button type="button" class="btn" data-act="sheetClose">Cancel</button><button class="btn pri" type="submit">Save</button></div></form>');
   }
@@ -2169,6 +2179,7 @@
       const i = state.decks.findIndex((d) => d.id === sd.id);
       if (i < 0){ state.decks.push(sd); changed.push(sd.name); return; }
       const ld = state.decks[i];
+      if (sd.status && !ld.status){ ld.status = sd.status; changed.push(sd.name); }
       if ((ld.updated || "") > (sd.updated || "") && prev.has(ld.id)) return;
       if (JSON.stringify(ld.entries) !== JSON.stringify(sd.entries) || ld.name !== sd.name){ state.decks[i] = sd; changed.push(sd.name); }
     });
@@ -2645,6 +2656,7 @@
     deckDetails: (f) => {
       const d = deckById(dv.id); if (!d) return;
       d.format = f.elements.format.value; d.archetype = f.elements.archetype.value.trim(); d.bracket = f.elements.bracket.value ? +f.elements.bracket.value : null;
+      if (f.elements.status.value) d.status = f.elements.status.value; else delete d.status;
       deckTouched(d); closeSheet(); refresh();
     },
     importList: (f) => {

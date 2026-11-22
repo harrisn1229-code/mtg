@@ -132,6 +132,7 @@ async function readDecks() {
       commander: fm.commander || null,
       archetype: fm.archetype || null,
       bracket: fm.bracket ? Number(fm.bracket) : null,
+      ...(/^(owned|wishlist)$/i.test(fm.status || "") ? { status: fm.status.toLowerCase() } : {}),
       created: fm.created || null,
       updated: fm.updated || null,
       entries: parseDeckBlock(block[1]),
