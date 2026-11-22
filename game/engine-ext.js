@@ -58,6 +58,11 @@ export const extMethods = {
         else if (e.choice === "color") {
           const ch = yield* this.choose$(p, { prompt: `${d.name}: choose a color`, options: ALL5.filter((c) => c !== e.except).map((c) => ({ id: c, label: cap({ W: "white", U: "blue", B: "black", R: "red", G: "green" }[c]), type: "color" })), min: 1, max: 1, reason: "color", source: o.id, hint: { kind: "chooseColor" } });
           entry.chosen.color = ch[0]?.id || "W";
+        } else if (e.choice === "chapter") { // Read ahead
+          const n = e.max | 0 || 1;
+          const opts3 = Array.from({ length: n }, (_, i) => ({ id: String(i + 1), label: `Chapter ${["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"][i] || i + 1}`, type: "text" }));
+          const ch = yield* this.choose$(p, { prompt: `${d.name}: read ahead — choose a chapter to start on`, options: opts3, min: 1, max: 1, reason: "chapter", source: o.id, hint: { kind: "readAhead", max: n } });
+          entry.chosen.chapter = +(ch[0]?.id || 1);
         } else if (e.choice === "mode") {
           const opts2 = (e.options || []).map((m) => ({ id: m.id, label: m.label || m.id, type: "mode" }));
           const ch = yield* this.choose$(p, { prompt: `${d.name}: choose ${opts2.map((x) => x.id).map(cap).join(" or ")}`, options: opts2, min: 1, max: 1, reason: "mode", source: o.id, hint: { kind: "entryMode", options: e.options } });
@@ -100,6 +105,7 @@ export const extMethods = {
         if (e.choice === "creatureType") entry.chosen.creatureType = this.creatureTypeOptions(p)[0];
         else if (e.choice === "color") entry.chosen.color = ALL5.find((c) => c !== e.except);
         else if (e.choice === "mode") entry.chosen.mode = e.options?.[0]?.id;
+        else if (e.choice === "chapter") entry.chosen.chapter = 1;
       } else if (e.type === "entersTapped") entry.tapped = !(e.unless && this.evalCond(e.unless, { source: o, you: p, quiet: true }));
     }
     return entry;

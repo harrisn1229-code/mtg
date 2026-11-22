@@ -62,6 +62,8 @@ function synthAbilities(d) {
       effects: [{ op: "search", who: "you", filter: kw.typecycling.filter, min: 0, max: 1, to: "hand", reveal: true }], text: `${kw.typecycling.text}cycling ${kw.typecycling.cost}` });
   if (kw.unearth) // "{cost}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery."
     out.push({ kind: "activated", synthetic: "unearth", zone: "graveyard", sorcery: true, cost: { mana: costStr(kw.unearth) }, effects: [{ op: "_unearth" }], text: `Unearth ${costStr(kw.unearth)}` });
+  if (kw.levelUp) // "Level up {cost}": {cost}: put a level counter on this. Level up only as a sorcery.
+    out.push({ kind: "activated", synthetic: "levelUp", sorcery: true, cost: { mana: costStr(kw.levelUp) }, effects: [{ op: "addCounters", what: "self", kind: "level", amount: 1 }], text: `Level up ${costStr(kw.levelUp)}` });
   if (kw.cascade)
     out.push({ kind: "triggered", synthetic: "cascade", zone: "stack", on: { event: "cast", who: "self" }, effects: [{ op: "_cascade" }], text: "Cascade" });
   if (kw.increment) // "Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature."
@@ -186,6 +188,10 @@ export const charMethods = {
       for (const ab of this.baseAbilities(o)) if (ab.kind === "static" && ab.effect && typeof ab.effect === "object") statics.push({ src: o, st: ab.effect, cond: ab.condition, ts: o.ts, you: o.controller, own: true });
       if (o.c && o.c.abilities !== this.baseAbilities(o)) // granted static abilities (e.g. by equipment)
         for (const ab of o.c.abilities) if (ab.kind === "static" && ab.effect && ab._granted) statics.push({ src: o, st: ab.effect, cond: ab.condition, ts: o.ts + 0.5, you: o.controller, own: true });
+    }
+    if (st.emblems) for (const id of st.emblems) { // emblems' static abilities (library m4)
+      const o = st.objects[id];
+      if (o) for (const ab of this.baseAbilities(o)) if (ab.kind === "static" && ab.effect && typeof ab.effect === "object") statics.push({ src: o, st: ab.effect, cond: ab.condition, ts: o.ts, you: o.owner, own: true });
     }
     for (const e of st.effects) {
       const src = st.objects[e.sourceId] || e.sourceSnap || null;

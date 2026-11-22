@@ -632,7 +632,7 @@ function ptOf(v) {
 }
 
 function groupLines(raw) {
-  const lines = String(raw || "").split("\n").map((l) => stripReminder(normChars(l)));
+  const lines = String(raw || "").split("\n").map((l) => stripReminder(normChars(l)).replace(/^\[([+-]?(?:\d+|x))\]:\s*/i, "$1: "));
   const groups = [];
   for (const l of lines) {
     if (!l) continue;
@@ -679,6 +679,20 @@ function parseAbilityLine(L, text, def, mkCtx, o = {}) {
   return { abilities: s, partial: false };
 }
 
+const ROMANS = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10 };
+const CHAPTER_RE = /^((?:I|II|III|IV|V|VI|VII|VIII|IX|X)(?:, (?:I|II|III|IV|V|VI|VII|VIII|IX|X))*) — (.+)$/s;
+/** Saga chapter line "I, II — effect" -> triggered abilities on the `chapter` event (fired as lore counters are added). */
+function parseChapterLine(nums, body, text, mkCtx) {
+  const chapters = nums.split(", ").map((x) => ROMANS[x]);
+  const ctx = mkCtx({});
+  ctx.last = "self";
+  let eff = body;
+  const lm = eff.match(/^([A-Z][A-Za-z']+(?: [A-Z][A-Za-z']+){0,2}) — (?!\n)(.+)$/s); // Summon: "Lightning — This creature deals ..."
+  if (lm && !/^choose\b/i.test(lm[1])) eff = lm[2];
+  const { body: b } = buildTriggeredBody(eff, ctx);
+  return { abilities: [{ kind: "triggered", on: { event: "chapter", who: "self", chapters }, ...clone(b), text }], partial: ctx.partial };
+}
+
 function compileFace(d, o = {}) {
   const name = d.name || "";
   const tl = splitTypeLine(d.type_line);
@@ -695,7 +709,7 @@ function compileFace(d, o = {}) {
   const pt = d.pt ? String(d.pt).split("/") : null;
   if (pt && pt.length === 2) { def.power = ptOf(pt[0]); def.toughness = ptOf(pt[1]); }
   else if (d.power != null && d.toughness != null) { def.power = ptOf(d.power); def.toughness = ptOf(d.toughness); }
-  if (d.loyalty != null && d.loyalty !== "") def.loyalty = /^\d+$/.test(String(d.loyalty)) ? +d.loyalty : "*";
+  if (d.loyalty != null && d.loyalty !== "") def.loyalty = /^\d+$/.test(String(d.loyalty)) ? +d.loyalty : /^x$/i.test(String(d.loyalty)) ? "x" : "*";
 
   const isSpellCard = def.types.includes("instant") || def.types.includes("sorcery");
   const isBasic = def.supertypes.includes("basic");
@@ -709,6 +723,8 @@ function compileFace(d, o = {}) {
   let spellEffects = [];
   let spellModes = null;
   let spellLinesParsed = 0;
+  const isSaga = def.subtypes.includes("saga"), isClass = def.subtypes.includes("class");
+  let gate = null, gateKind = null, gateLevel = 0; // condition gating the abilities of the lines that follow (Class level / Level up tier)
 
   for (const g of groups) {
     const raw = g;
@@ -718,10 +734,46 @@ function compileFace(d, o = {}) {
     stats.lines++;
     const bad = (why) => { def.unparsed.push(raw); stats.unparsed.push(raw); };
     try {
+      let m;
+      if (/^~ can be your commander$/i.test(L)) { stats.parsed++; continue; } // deck-building permission only
+      // Sagas (chapter abilities, read ahead), Classes (level-up lines + gated abilities), Level up creatures (LEVEL blocks)
+      if (isSaga && /^read ahead$/i.test(L.replace(/[.]$/, ""))) { def.keywords.readAhead = true; stats.parsed++; continue; }
+      if (isSaga && (m = L.match(CHAPTER_RE))) {
+        const r = parseChapterLine(m[1], m[2], text, mkCtx);
+        def.abilities.push(...r.abilities);
+        if (r.partial) { stats.partial.push(raw); def.unparsed.push(raw); } else stats.parsed++;
+        continue;
+      }
+      if ((m = L.match(/^level up (\{[^:]+\})$/i))) { def.keywords.levelUp = m[1]; stats.parsed++; continue; }
+      if (def.types.includes("creature") && (m = L.match(/^level (\d+)(?:-(\d+)|\+)$/i))) {
+        gate = { type: "and", all: [{ type: "counters", what: "self", kind: "level", op: ">=", n: +m[1] }, ...(m[2] ? [{ type: "counters", what: "self", kind: "level", op: "<=", n: +m[2] }] : [])] };
+        gateKind = "level"; stats.parsed++; continue;
+      }
+      if (gateKind === "level" && (m = L.match(/^(\d+)\/(\d+)$/))) {
+        def.abilities.push({ kind: "static", effect: { type: "setPT", affects: "self", power: +m[1], toughness: +m[2] }, condition: gate, text: L });
+        stats.parsed++; continue;
+      }
+      if (isClass && (m = L.match(/^(\{.+\}): level (\d+)$/i))) {
+        const lv = +m[2];
+        def.abilities.push({ kind: "activated", cost: parseCost(m[1]), sorcery: true, classLevel: lv, condition: { type: "counters", what: "self", kind: "level", op: "==", n: lv - 1 }, effects: [{ op: "addCounters", what: "self", kind: "level", amount: 1 }], text: raw });
+        gate = { type: "counters", what: "self", kind: "level", op: ">=", n: lv }; gateKind = "class"; gateLevel = lv;
+        stats.parsed++; continue;
+      }
+      if (isClass && (m = L.match(/^when ~ becomes level (\d+), (.+)$/i))) {
+        const ctxL = mkCtx({}); ctxL.last = "self";
+        const { body } = buildTriggeredBody(m[2], ctxL);
+        def.abilities.push({ kind: "triggered", on: { event: "counterAdded", who: "self", kind: "level" }, condition: { type: "counters", what: "self", kind: "level", op: "==", n: +m[1] }, ...body, text });
+        if (ctxL.partial) { stats.partial.push(raw); def.unparsed.push(raw); } else stats.parsed++;
+        continue;
+      }
       // 1. keyword line
       const kl = tryKeywordLine(L.replace(/[.]$/, ""));
       if (kl) {
         if (kl.unparsed) { bad(); continue; }
+        if (gate && kl.kws) { // keywords granted only at a Class level / Level up tier
+          def.abilities.push({ kind: "static", effect: { type: "pump", affects: "self", power: 0, toughness: 0, keywords: Object.keys(kl.kws) }, condition: gate, text });
+          stats.parsed++; continue;
+        }
         for (const [k, v] of Object.entries(kl.kws)) {
           if (k === "protection") def.keywords.protection = [...new Set([...(def.keywords.protection || []), ...v])];
           else def.keywords[k] = v;
@@ -729,7 +781,6 @@ function compileFace(d, o = {}) {
         stats.parsed++;
         continue;
       }
-      let m;
       // enchant
       if ((m = L.match(/^enchant (.+)$/i)) && def.subtypes.includes("aura")) {
         def.enchant = parseFilter(m[1]);
@@ -793,6 +844,7 @@ function compileFace(d, o = {}) {
       }
       // abilities
       const r = parseAbilityLine(L, textNoLabel, def, mkCtx);
+      if (gate) for (const a of r.abilities) { a.condition = a.condition ? { type: "and", all: [gate, a.condition] } : gate; if (gateLevel) a.level = gateLevel; }
       def.abilities.push(...r.abilities);
       if (r.partial) { stats.partial.push(raw); def.unparsed.push(raw); } else stats.parsed++;
     } catch (e) {
@@ -801,6 +853,14 @@ function compileFace(d, o = {}) {
       if (typeof process !== "undefined" && process.env && process.env.PARSER_DEBUG) console.error(`[${name}] ${raw.replace(/\n/g, " / ")} -> ${e.message}`);
     }
   }
+  if (isSaga) {
+    const ch = def.abilities.filter((a) => a.on && a.on.event === "chapter").flatMap((a) => a.on.chapters);
+    if (ch.length) {
+      def.finalChapter = Math.max(...ch);
+      if (def.keywords.readAhead) def.abilities.unshift({ kind: "static", effect: { type: "asEntersChoose", choice: "chapter", max: def.finalChapter }, text: "Read ahead" });
+    }
+  }
+  if (isClass) def.abilities.unshift({ kind: "static", effect: { type: "entersWithCounters", kind: "level", amount: 1 }, text: "Level 1" });
   // finish spell
   if (isSpellCard) {
     if (spellModes) def.spell = { effects: spellEffects, modes: spellModes };

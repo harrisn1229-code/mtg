@@ -182,6 +182,7 @@ export function parseFilter(text, opts = {}) {
       continue;
     }
     if (COLORS[w]) { (cur.f.colors ||= []).push(COLORS[w]); continue; }
+    if (w === "colorless") { (cur.f.colors ||= []).push("colorless"); continue; }
     const tw = TYPE_WORDS[w] || TYPE_WORDS[w.replace(/s$/, "")] || (w === "sorceries" ? "sorcery" : null);
     if (tw) { (cur.types ||= []).push(tw); continue; }
     if (w === "permanent" || w === "permanents") { cur.permanent = true; continue; }

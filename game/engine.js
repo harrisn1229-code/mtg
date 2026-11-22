@@ -28,6 +28,7 @@ import { effectMethods, describeCost } from "./engine-effects.js";
 import { actionMethods } from "./engine-actions.js";
 import { combatMethods } from "./engine-combat.js";
 import { extMethods } from "./engine-ext.js";
+import { m4Methods } from "./engine-m4.js";
 
 export { STEPS, parseManaCost, costToString, costCmc, TOKENS, makeRng, describeCost, hasType };
 
@@ -522,7 +523,7 @@ export class Game {
   applyEntersReplacements(o, opts, entry) {
     const d = this.faceDef(o);
     const ctx = { source: o, you: o.controller, quiet: true };
-    if (o.c.types.includes("planeswalker")) o.counters.loyalty = (o.counters.loyalty | 0) + (+d.loyalty || 0);
+    if (o.c.types.includes("planeswalker")) o.counters.loyalty = (o.counters.loyalty | 0) + (d.loyalty === "x" ? o.x | 0 : +d.loyalty || 0); // printed loyalty X = the X paid
     if (opts.counters) for (const [k, n] of Object.entries(opts.counters)) o.counters[k] = (o.counters[k] | 0) + (n | 0);
     if (entry && entry.copy) { // "except it enters with an additional +1/+1 counter if it's a creature / loyalty counter if it's a planeswalker"
       const ex = entry.copy.except || {};
@@ -553,6 +554,15 @@ export class Game {
     if (this.keywordOf(o, "echo")) o.echoDue = true;
     this.markDirty();
     this.refresh();
+    // Sagas: "as this Saga enters, add a lore counter" (Read ahead: the chosen chapter; only that chapter's ability triggers)
+    if (o.c.subtypes.includes("saga") && this.finalChapter(o)) {
+      const n = Math.max(1, Math.min(this.finalChapter(o), (entry && entry.chosen && entry.chosen.chapter) | 0 || 1));
+      o.counters.lore = (o.counters.lore | 0) + n;
+      this.emit({ t: "counters", obj: o.id, kind: "lore", delta: n, text: `${n} lore counter${n > 1 ? "s" : ""} put on ${o.c.name}` });
+      this.markDirty();
+      this.refresh();
+      this.sagaChapters(o, n, n);
+    }
   }
   keywordOf(o, k) { const v = o.c?.keywords?.[k]; return v == null || v === false ? null : v; }
 
@@ -664,6 +674,7 @@ export class Game {
     this.markDirty();
     this.emit({ t: "counters", obj: o.id, kind, delta: d, text: d > 0 ? `${d} ${kind} counter${d > 1 ? "s" : ""} put on ${o.c.name}` : `${-d} ${kind} counter${d < -1 ? "s" : ""} removed from ${o.c.name}` });
     if (d > 0) this.fireTrigger({ type: "counterAdded", obj: o, kind, amount: d, player: o.controller });
+    if (d > 0 && kind === "lore") this.sagaChapters(o, nv - d + 1, nv);
     return d;
   }
   addPlayerCounters(p, kind, n) {
@@ -684,6 +695,7 @@ export class Game {
   }
   untap(o, silent) {
     if (!o || o.zone !== "battlefield" || !o.tapped) return false;
+    if (o.counters.stun > 0) { this.addCounters(o, "stun", -1); this.log(`${o.c.name} doesn't untap (a stun counter is removed instead)`); return false; } // CR 122.1g
     o.tapped = false;
     this.markDirty();
     this.emit({ t: "untap", obj: o.id, text: `${o.c.name} untaps`, ...(silent ? { silent: true } : {}) });
@@ -770,7 +782,7 @@ export class Game {
     if (!src) return 0;
     const st = this.state;
     const srcCtrl = src.controller ?? src.owner ?? 0;
-    n = this.modifyDamage(src, targetId, n);
+    n = this.modifyDamage(src, targetId, n, !!opts.combat);
     if (n <= 0) return 0;
     const srcName = src.c?.name || "Something";
     if (isPid(targetId)) {
@@ -793,6 +805,7 @@ export class Game {
       }
       if (opts.combat) {
         if (src.isCommander) pl.commanderDamage[src.id] = (pl.commanderDamage[src.id] | 0) + n;
+        this.monarchHit(src, p);
         const tox = this.keywordOf(src, "toxic");
         if (tox) this.addPlayerCounters(p, "poison", +tox || 1);
       }
@@ -817,7 +830,7 @@ export class Game {
     return n;
   }
 
-  modifyDamage(src, targetId, n) {
+  modifyDamage(src, targetId, n, combat) {
     const mods = this._statics.filter((s) => s.st.type === "damageMod");
     if (!mods.length) return n;
     const tgtPlayer = isPid(targetId) ? +targetId.slice(1) : null;
@@ -826,6 +839,8 @@ export class Game {
       const ctx = { source: s.src, you: s.you };
       if (s.st.source && !this.matches(src, s.st.source, ctx, "*")) return false;
       if (s.st.sourceController === "you" && (src.controller ?? src.owner) !== s.you) return false;
+      if (s.st.combat != null && combat != null && !!s.st.combat !== !!combat) return false; // combat:false = noncombat damage only
+      if (s.st.exceptSelf && tgtObj && s.src && tgtObj.id === s.src.id) return false;
       const to = s.st.to ?? "any";
       const opp = (p) => p != null && p !== s.you;
       switch (to) {
@@ -836,6 +851,7 @@ export class Game {
         case "yourPermanent": return !!tgtObj && tgtObj.controller === s.you;
         case "opponentOrPermanent": return opp(tgtPlayer) || (!!tgtObj && opp(tgtObj.controller));
         case "youOrPermanent": return tgtPlayer === s.you || (!!tgtObj && tgtObj.controller === s.you);
+        case "youOrPlaneswalker": return tgtPlayer === s.you || (!!tgtObj && tgtObj.controller === s.you && tgtObj.c.types.includes("planeswalker"));
         case "creature": return !!tgtObj && tgtObj.c.types.includes("creature");
         case "player": return tgtPlayer != null;
         default: return typeof to === "object" ? this.matches(targetId, to, ctx) : false;
@@ -844,7 +860,7 @@ export class Game {
     const act = mods.filter(applies);
     for (const s of act) if (s.st.add) n += +s.st.add || 0;
     for (const s of act) if (s.st.mul) n *= +s.st.mul || 1;
-    if (!this._noPrevent) for (const s of act) if (s.st.prevent === "half") n -= Math.ceil(n / 2); else if (s.st.prevent === "all") n = 0; else if (typeof s.st.prevent === "number") n -= s.st.prevent;
+    if (!this._noPrevent) for (const s of act) if (s.st.prevent === "half") n -= Math.ceil(n / 2); else if (s.st.prevent === "all") n = 0; else if (s.st.prevent === "allButOne") n = Math.min(n, 1); else if (typeof s.st.prevent === "number") n -= s.st.prevent;
     return Math.max(0, Math.floor(n));
   }
 
@@ -927,6 +943,7 @@ export class Game {
       const abs = this.baseAbilities(o).filter((a) => a.kind === "triggered" && a.zone === "stack");
       if (abs.length) { seen.add(id); consider(o, abs, o.controller, "stack"); }
     }
+    if (st.emblems) for (const id of st.emblems) { const o = st.objects[id]; if (o && !seen.has(id)) { seen.add(id); consider(o, o.c.abilities || [], o.owner, "emblem"); } }
     // internal ring triggers
     this.ringTriggers(evt);
     // delayed triggers
@@ -1046,6 +1063,9 @@ export class Game {
         else if (!whoObj(on.who, evt.obj)) return false;
         if (on.filter && !this.matches(evt.obj, on.filter, ctx, "*")) return false;
         return true;
+      case "chapter":
+        if (!whoObj(on.who ?? "self", evt.obj)) return false;
+        return !on.chapters || on.chapters.includes(evt.n);
       case "mutates": case "turnedFaceUp":
         return whoObj(on.who ?? "self", evt.obj);
       case "gainLife": case "loseLife": case "draw": case "discard": case "ringTempts": case "ringBearerChosen": case "scry":
@@ -1132,7 +1152,7 @@ export class Game {
         else if (this.options.commander) for (const [cid, n] of Object.entries(pl.commanderDamage)) if (n >= 21) { this.playerLoses(pl.idx, `21 combat damage from ${this.nameOf(cid)}`); break; }
       }
       if (this.over) return;
-      const toGy = [], toDestroy = [];
+      const toGy = [], toDestroy = [], toSac = [];
       for (const id of st.battlefield) {
         const o = st.objects[id];
         const c = o.c;
@@ -1141,6 +1161,7 @@ export class Game {
           if ((o.damage >= this.lethalThreshold(o) || (o.deathtouched && o.damage > 0)) && !this.hasKw(o, "indestructible")) { toDestroy.push(o); continue; }
         }
         if (c.types.includes("planeswalker") && (o.counters.loyalty | 0) <= 0) { toGy.push(o); continue; }
+        if (c.subtypes.includes("saga") && this.sagaDone(o)) { toSac.push(o); continue; }
         if (o.counters["+1/+1"] && o.counters["-1/-1"]) { const m = Math.min(o.counters["+1/+1"], o.counters["-1/-1"]); o.counters["+1/+1"] -= m; o.counters["-1/-1"] -= m; if (!o.counters["+1/+1"]) delete o.counters["+1/+1"]; if (!o.counters["-1/-1"]) delete o.counters["-1/-1"]; acted = true; this.markDirty(); }
         const isAura = c.subtypes.includes("aura");
         if (isAura) {
@@ -1156,6 +1177,7 @@ export class Game {
       }
       for (const o of toGy) { if (o.zone === "battlefield") { this.moveObj(o, "graveyard"); acted = true; } }
       for (const o of toDestroy) { if (o.zone === "battlefield") { this.moveObj(o, "graveyard", { cause: "destroy" }); acted = true; } }
+      for (const o of toSac) { if (o.zone === "battlefield" && this.sacrifice(o)) acted = true; }
       // legend rule
       const groups = new Map();
       for (const id of st.battlefield) {
@@ -1595,6 +1617,7 @@ export class Game {
 
   *beginStep$(name) {
     yield* this.step$(name);
+    this.m4StepStart(name); // Sagas get a lore counter, rad counters, the monarch (engine-m4.js)
     this.fireTrigger({ type: "beginStep", step: name, player: this.state.active, mainIndex: this.state.mainIndex });
     yield* this.priorityRound$();
     this.emptyPools();
@@ -1637,6 +1660,7 @@ export class Game {
     const st = this.state;
     const keep = (e) => !(e.until === kind && (player == null || e.you === player));
     st.effects = st.effects.filter(keep);
+    if (st.delayed.some((d) => d.until)) st.delayed = st.delayed.filter((d) => !(d.until === kind && (player == null || d.controller === player)));
     const before = st.controlEffects.length;
     st.controlEffects = st.controlEffects.filter(keep);
     if (before !== st.controlEffects.length) for (const id of st.battlefield) st.objects[id].sick = st.objects[id].sick; // controller recomputed in refresh
@@ -1646,6 +1670,7 @@ export class Game {
 
 // mixins
 Object.assign(Game.prototype, charMethods, manaMethods, effectMethods, actionMethods, combatMethods, extMethods);
+Object.assign(Game.prototype, m4Methods); // library batch m4: Sagas, Classes, Battles, emblems, ...
 
 export function publicAction(a) {
   const o = { type: a.type, obj: a.obj, label: a.label, zone: a.zone };
