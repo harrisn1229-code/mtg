@@ -25,6 +25,10 @@
 .lb .lb-opt{display:flex;flex-direction:column;gap:12px}
 .lb .lb-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .lb .lb-l{font-weight:600;font-size:15px}
+.lb .lb-pick{margin-top:10px}
+.lb label.lb-pick{display:flex;flex-direction:column;align-items:stretch;gap:6px}
+.lb label.lb-pick .lb-l{font-size:14px;color:var(--muted)}
+.lb .lb-opp1{margin-top:10px}
 .lb .seg button{min-height:40px;padding:0 12px}
 .lb .tg{position:relative;width:52px;height:32px;border-radius:16px;background:var(--surface-3);transition:background .2s;flex:none}
 .lb .tg i{position:absolute;left:3px;top:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgb(0 0 0 / .3);transition:transform .2s}

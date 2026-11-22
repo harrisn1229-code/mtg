@@ -4,6 +4,7 @@
 
 import { esc, pipsOfColors, cap, artCrop } from "./ui-card.js";
 import { loadLobby, saveLobby, loadSave, clearSave, loadStats, loadHistory, loadSettings, saveSettings, lsGet, lsSet, lsDel } from "./ui-store.js";
+import { loadLibrary, mergedState, isLibraryId } from "./library.js";
 
 /* ---------- backend loading (injectable so the dev harness can supply a mock) ---------- */
 let loader = async () => {
@@ -87,8 +88,10 @@ async function openMatch(ctx, o) {
 export async function mountLobby(screen, opts) {
   opts = opts || {};
   const app = opts.app;
-  const L = { screen, app, deckId: opts.deckId || "", be: null, decks: [], cov: new Map(), covToken: 0, open: false };
+  const L = { screen, app, deckId: opts.deckId || "", be: null, lib: null, decks: [], cov: new Map(), covToken: 0, open: false };
+  L.gs = () => mergedState(app.state, L.lib);
   screen._lobby = L;
+  const libP = loadLibrary().catch((e) => { console.warn("deck library unavailable", e); return null; });
   await loadCss();
   screen.innerHTML = topbar("Play", "Test your decks against the AI") + '<div class="page narrow lb"><div class="loading"><span class="spin"></span><p>Loading the game…</p></div></div>';
   try {
@@ -99,14 +102,18 @@ export async function mountLobby(screen, opts) {
     wire(screen);
     return L;
   }
-  L.refresh = () => { try { L.decks = L.be.listDecks(app.state); } catch (e) { L.decks = []; } if (!L.open && L.pref) draw(L); };
+  L.lib = await libP;
+  L.refresh = () => { try { L.decks = L.be.listDecks(L.gs()); } catch (e) { L.decks = []; } if (!L.open && L.pref) draw(L); };
   L.decks = [];
   L.refresh();
   const pref = loadLobby();
   L.pref = pref;
-  if (opts.deckId && L.decks.some((d) => d.id === opts.deckId)) pref.deckId = opts.deckId;
-  if (!L.decks.some((d) => d.id === pref.deckId && canPlay(d))) pref.deckId = (L.decks.find((d) => canPlay(d)) || {}).id || "";
-  if (pref.oppId !== "random" && !L.decks.some((d) => d.id === pref.oppId && canPlay(d))) pref.oppId = "random";
+  // #/play/<deckId> picks your deck; #/play/vs:<deckId> picks the opponent.
+  const arg = String(opts.deckId || "");
+  if (/^vs:/.test(arg)) { const id = arg.slice(3); if (L.decks.some((d) => d.id === id)) pref.oppId = id; }
+  else if (arg && L.decks.some((d) => d.id === arg)) pref.deckId = arg;
+  if (!L.decks.some((d) => d.id === pref.deckId && canPlay(d))) pref.deckId = (L.decks.find((d) => canPlay(d) && !isLibraryId(d.id)) || L.decks.find((d) => canPlay(d)) || {}).id || "";
+  if (!RANDOM[pref.oppId] && !L.decks.some((d) => d.id === pref.oppId && canPlay(d))) pref.oppId = "random";
   wire(screen);
   draw(L);
   return L;
@@ -116,10 +123,24 @@ function topbar(title, sub) {
   return '<header class="topbar"><div class="bar-in"><div class="bar-row"><h1 class="bar-title">' + esc(title) + (sub ? "<small>" + esc(sub) + "</small>" : "") + "</h1></div></div></header>";
 }
 
-function deckCard(d, app, selected, kind) {
-  const full = (app.state.decks || []).find((x) => x.id === d.id) || {};
+const RANDOM = { random: "Random deck from the library", "random-mine": "Random deck of mine" };
+function oppPool(L, id) {
+  const pool = L.decks.filter((d) => canPlay(d));
+  const lib = pool.filter((d) => isLibraryId(d.id)), mine = pool.filter((d) => !isLibraryId(d.id));
+  if (id === "random") return lib.length ? lib : pool;
+  if (id === "random-mine") return mine.length ? mine : pool;
+  return pool.filter((d) => d.id === id);
+}
+function libOptions(decks, cur, decksById) {
+  const groups = new Map();
+  decks.forEach((d) => { const p = (decksById.get(d.id) || {}).product || "Deck library"; if (!groups.has(p)) groups.set(p, []); groups.get(p).push(d); });
+  return Array.from(groups).map(([p, ds]) => '<optgroup label="' + esc(p) + '">' + ds.map((d) => '<option value="' + esc(d.id) + '"' + (d.id === cur ? " selected" : "") + ">" + esc(d.name + (d.commander ? " — " + d.commander : "")) + "</option>").join("") + "</optgroup>").join("");
+}
+
+function deckCard(d, app, selected, kind, all) {
+  const full = ((all || app.state).decks || []).find((x) => x.id === d.id) || {};
   const title = d.name || shortName(d);
-  const sub = d.commander || full.archetype || cap(d.format || "");
+  const sub = (full.library ? "Library · " : "") + (d.commander || full.archetype || cap(d.format || ""));
   const miss = typeof d.missing === "number" ? d.missing : (d.missing || []).length;
   const why = !canPlay(d) ? (d.count === 0 ? "This deck is empty." : miss + " cards couldn’t be loaded (open the app online once to fetch them).") : (miss ? miss + " cards couldn’t be loaded (open the app online once to fetch them). You can still play." : "");
   return '<button class="dk' + (selected ? " on" : "") + (canPlay(d) ? "" : " off") + '" data-lb="' + kind + '" data-id="' + esc(d.id) + '" aria-pressed="' + selected + '"' + (canPlay(d) ? "" : " disabled") + ">" +
@@ -142,10 +163,20 @@ function draw(L) {
       '<small class="muted">Turn ' + (save.turn || "?") + (save.life ? " · life " + save.life[0] + " – " + save.life[1] : "") + " · " + ago(save.ts || Date.now()) + '</small></div><div class="lb-res-b"><button class="btn pri" data-lb="resume">Resume</button><button class="btn" data-lb="discard" aria-label="Discard saved match">Discard</button></div></div>';
   }
   if (L.be.noAI) h += '<div class="lb-warn">The AI module isn’t installed, so your opponent will only pass.</div>';
+  const gs = L.gs();
+  const byId = new Map((gs.decks || []).map((d) => [d.id, d]));
+  const mine = L.decks.filter((d) => !isLibraryId(d.id)), libDecks = L.decks.filter((d) => isLibraryId(d.id) && canPlay(d));
+  const youLib = you && isLibraryId(you.id) ? you : null;
   h += '<div class="sect"><h2>Your deck</h2></div>';
-  h += playable.length || L.decks.length ? '<div class="lb-decks">' + L.decks.map((d) => deckCard(d, app, d.id === pref.deckId, "you")).join("") + "</div>" : '<div class="empty"><b>No decks yet</b>Build a deck first, then come back to play it.<br><a class="btn pri" href="#/decks">Go to decks</a></div>';
-  h += '<div class="sect"><h2>Opponent</h2></div><div class="chips scroll lb-opps"><button class="chip" data-lb="opp" data-id="random" aria-pressed="' + (pref.oppId === "random") + '">Random deck</button>' +
-    playable.map((d) => '<button class="chip" data-lb="opp" data-id="' + esc(d.id) + '" aria-pressed="' + (pref.oppId === d.id) + '">' + esc(d.name || shortName(d)) + "</button>").join("") + "</div>";
+  h += mine.length || youLib ? '<div class="lb-decks">' + (youLib ? deckCard(youLib, app, true, "you", gs) : "") + mine.map((d) => deckCard(d, app, d.id === pref.deckId, "you", gs)).join("") + "</div>" : '<div class="empty"><b>No decks yet</b>Build a deck first, or try one from the library below.<br><a class="btn pri" href="#/decks">Go to decks</a></div>';
+  if (libDecks.length) h += '<label class="lb-row lb-pick"><span class="lb-l">Try a library deck</span><select class="inp" data-lb="youLib" aria-label="Try a deck from the library"><option value="">Choose a deck…</option>' + libOptions(libDecks, youLib ? youLib.id : "", byId) + "</select></label>";
+  const oppSel = '<select class="inp" data-lb="oppSel" aria-label="Opponent deck">' +
+    '<optgroup label="Random">' + Object.keys(RANDOM).filter((k) => k !== "random" || libDecks.length).map((k) => '<option value="' + k + '"' + (pref.oppId === k ? " selected" : "") + ">" + RANDOM[k] + "</option>").join("") + "</optgroup>" +
+    (playable.some((d) => !isLibraryId(d.id)) ? '<optgroup label="My decks">' + playable.filter((d) => !isLibraryId(d.id)).map((d) => '<option value="' + esc(d.id) + '"' + (pref.oppId === d.id ? " selected" : "") + ">" + esc(d.name || shortName(d)) + "</option>").join("") + "</optgroup>" : "") +
+    libOptions(libDecks, pref.oppId, byId) + "</select>";
+  const oppDeck = !RANDOM[pref.oppId] && L.decks.find((d) => d.id === pref.oppId);
+  h += '<div class="sect"><h2>Opponent</h2>' + (libDecks.length ? '<span class="r">' + libDecks.length + " library decks</span>" : "") + '</div><div class="lb-pick">' + oppSel + "</div>" +
+    (oppDeck ? '<div class="lb-decks lb-opp1">' + deckCard(oppDeck, app, true, "oppcard", gs) + "</div>" : "");
   h += '<div class="sect"><h2>Rules</h2></div><div class="panel pad lb-opt">' +
     seg("difficulty", "Difficulty", [["easy", "Easy"], ["normal", "Normal"], ["hard", "Hard"]], pref.difficulty) +
     seg("life", "Starting life", [["auto", "Auto"], ["20", "20"], ["30", "30"], ["40", "40"]], pref.life) +
@@ -174,7 +205,7 @@ function scheduleCov(L, you) {
   const run = () => {
     if (token !== L.covToken) return;
     try {
-      const b = L.be.buildDeck(L.app.state, you.id);
+      const b = L.be.buildDeck(L.gs(), you.id);
       const seen = new Set(), list = [];
       b.commanders.concat(b.cards).forEach((c) => {
         if (seen.has(c.name)) return; seen.add(c.name);
@@ -211,6 +242,13 @@ function statsHtml(L) {
 function wire(screen) {
   if (screen._lbWired) return;
   screen._lbWired = true;
+  screen.addEventListener("change", (e) => {
+    const el = e.target.closest("select[data-lb]");
+    if (!el || !screen._lobby || !screen._lobby.pref) return;
+    const L = screen._lobby, pref = L.pref;
+    if (el.dataset.lb === "youLib" && el.value) { pref.deckId = el.value; saveLobby(pref); draw(L); }
+    else if (el.dataset.lb === "oppSel") { pref.oppId = el.value; saveLobby(pref); draw(L); }
+  });
   screen.addEventListener("click", (e) => {
     const el = e.target.closest("[data-lb]");
     if (!el || !screen._lobby) return;
@@ -237,10 +275,9 @@ async function startNew(L, btn) {
   btn.innerHTML = '<span class="spin" style="width:16px;height:16px"></span> Shuffling up…';
   try {
     const be = L.be;
-    const pool = L.decks.filter((d) => canPlay(d));
-    let opp = pool.find((d) => d.id === pref.oppId);
-    if (!opp) opp = pool[Math.floor(Math.random() * pool.length)] || you;
-    const yb = be.buildDeck(L.app.state, you.id), ob = be.buildDeck(L.app.state, opp.id);
+    const pool = oppPool(L, pref.oppId);
+    const opp = pool[Math.floor(Math.random() * pool.length)] || you;
+    const yb = be.buildDeck(L.gs(), you.id), ob = be.buildDeck(L.gs(), opp.id);
     const life = pref.life === "auto" ? yb.startingLife : +pref.life;
     const seed = (Date.now() % 2147483646) + 1;
     const setup = {
@@ -265,7 +302,7 @@ async function resume(L, btn) {
   try {
     let snap = lsGet("snap", null);
     if (!snap) {
-      const yb = L.be.buildDeck(L.app.state, save.setup.deckId), ob = L.be.buildDeck(L.app.state, save.setup.oppDeckId);
+      const yb = L.be.buildDeck(L.gs(), save.setup.deckId), ob = L.be.buildDeck(L.gs(), save.setup.oppDeckId);
       snap = { you: trimDeck(yb), opp: trimDeck(ob) };
     }
     await launch(L, { setup: save.setup, seed: save.seed, snap, answers: save.answers, ev: save.ev, restoring: true });

@@ -379,6 +379,10 @@
   .dart .br{position:absolute;right:10px;top:10px;padding:2px 8px;border-radius:8px;background:rgb(10 10 12 / .7);color:#fff;font-size:12px;font-weight:700}
   .dart .st{position:absolute;left:10px;top:10px;padding:2px 8px;border-radius:8px;font-size:12px;font-weight:700;color:#fff;background:rgb(10 10 12 / .7)}
   .dart .st.owned{background:#1f8a4c}
+  .dart .st.lib,.badge.lib{background:#5b4bb7;color:#fff}
+  .libentry .chev{color:var(--faint);font-size:22px}
+  .libnote{margin:6px 0 4px}
+  .libacts{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 4px}
   .badge.owned{background:#1f8a4c;color:#fff}
   .dtile .body{padding:10px 14px 12px}
   .dtile .nm{font-weight:700;font-size:16px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -996,7 +1000,7 @@
   /* ============================ router ============================ */
   // Hash routes so the browser / phone back button works: #/collection, #/search, #/decks,
   // #/deck/<id>, #/lists, #/binder/<id>, #/wishlist, #/more.
-  const TAB_OF = { collection: "collection", binder: "lists", search: "search", decks: "decks", deck: "decks", lists: "lists", wishlist: "lists", more: "more", scan: "collection", play: "play" };
+  const TAB_OF = { collection: "collection", binder: "lists", search: "search", decks: "decks", deck: "decks", library: "decks", lists: "lists", wishlist: "lists", more: "more", scan: "collection", play: "play" };
   const cur = { name: "", arg: "" };
   function parseHash(){
     const parts = location.hash.replace(/^#\/?/, "").split("/");
@@ -1531,8 +1535,9 @@
       const tiles = groups.length > 1 || (groups[0] && groups[0][0] !== "Other decks")
         ? groups.map((g) => '<div class="sect"><h2>' + esc(g[0]) + '</h2><span class="r">' + g[1].length + '</span></div><div class="decks">' + g[1].map(tileOf).join("") + "</div>").join("")
         : '<div class="decks">' + sorted.map(tileOf).join("") + "</div>";
+      const libTile = '<div class="sect"><h2>Deck library</h2></div><a class="row libentry" href="#/library">' + ICON.grid + '<div class="main"><div class="t">50 Commander precons</div><div class="s">Decks for the AI to play, or for you to try. Not owned.</div></div><span class="chev">›</span></a>';
       $("screen").innerHTML = topbar({ title: "Decks", actions: '<button class="icon-btn tint" data-act="newDeck" aria-label="New deck">' + ICON.plus + "</button>" }) +
-        '<div class="page">' + (state.decks.length ? tiles : emptyHtml("No decks yet", "Start one from scratch or paste a list.", '<br><button class="btn pri" data-act="newDeck">New deck</button>')) + "</div>" +
+        '<div class="page">' + (state.decks.length ? tiles + libTile : emptyHtml("No decks yet", "Start one from scratch or paste a list.", '<br><button class="btn pri" data-act="newDeck">New deck</button>')) + "</div>" +
         '<button class="fab" data-act="newDeck">' + ICON.plus + "<span>New deck</span></button>";
     },
   };
@@ -2475,6 +2480,86 @@
     update(){ const a = playScreen.api; if (a && a.refresh && $("screen")._lobby === a) a.refresh(); },
   };
 
+  /* ============================ deck library ============================ */
+  // #/library and #/library/<id>: official Commander precons from data/library.json (via game/library.js).
+  // Nothing is stored on this device unless you copy a deck to your decks (it becomes a Wishlist deck).
+  const LIB = { lib: null, mod: null, err: "" };
+  async function libLoad(){
+    if (LIB.lib) return LIB.lib;
+    LIB.mod = LIB.mod || await import("./game/library.js");
+    LIB.lib = await LIB.mod.loadLibrary();
+    return LIB.lib;
+  }
+  const libCard = (k) => LIB.lib && LIB.lib.cards[k];
+  function libCmd(d){ const e = d.entries.find((x) => isCmdSection(x.section)); return e ? libCard(e.set + ":" + e.cn) : null; }
+  function libIdentity(d){ const out = new Set(); d.entries.filter((e) => isCmdSection(e.section)).forEach((e) => { const c = libCard(e.set + ":" + e.cn); (c && c.color_identity || []).forEach((x) => out.add(x)); }); return Array.from(out); }
+  function libOwned(d){ return LIB.mod.ownedCount(d, LIB.lib, LIB.mod.ownedNames(state)); }
+  const libraryScreen = {
+    async mount(arg){
+      const scr = $("screen");
+      if (!LIB.lib){
+        scr.innerHTML = topbar({ title: "Deck library", back: "#/decks", backLabel: "Decks" }) + '<div class="page"><div class="loading"><span class="spin"></span><p>Loading the deck library…</p></div></div>';
+        try { await libLoad(); }
+        catch(e){
+          if (cur.name !== "library") return;
+          scr.innerHTML = topbar({ title: "Deck library", back: "#/decks", backLabel: "Decks" }) + '<div class="page">' + emptyHtml("The deck library couldn’t be loaded", "It downloads once, then works offline. Check your connection and try again.", '<br><a class="btn pri" href="#/library">Try again</a>') + "</div>";
+          return;
+        }
+        if (cur.name !== "library" || cur.arg !== arg) return;
+      }
+      if (arg) return libDeckView(arg);
+      const owned = LIB.mod.ownedNames(state);
+      const groups = new Map();
+      LIB.lib.decks.forEach((d) => { if (!groups.has(d.product)) groups.set(d.product, []); groups.get(d.product).push(d); });
+      const tile = (d) => {
+        const cmd = libCmd(d), o = LIB.mod.ownedCount(d, LIB.lib, owned);
+        const art = cmd && cmd.img ? '<img src="' + esc(artCrop(cmd.img)) + '" alt="" loading="lazy" decoding="async">' : "";
+        return '<a class="dtile" href="#/library/' + encodeURIComponent(d.id) + '"><div class="dart">' + art + pipsHtml(libIdentity(d)) + '<span class="st lib">Library</span></div>' +
+          '<div class="body"><div class="nm">' + esc(d.name) + '</div><div class="sub">' + esc(d.commander || "") + "</div>" +
+          '<div class="sub">' + esc(d.archetype || "") + "</div>" +
+          '<div class="stats num"><span><b>' + o.have + "</b>/" + o.total + " cards owned</span></div></div></a>";
+      };
+      scr.innerHTML = topbar({ title: "Deck library", sub: plural(LIB.lib.decks.length, "deck") + " · not owned", back: "#/decks", backLabel: "Decks" }) +
+        '<div class="page"><p class="note libnote">Official Commander precons. The AI can play any of them in Play, and you can try them too. Copy one to your decks to keep it as a Wishlist deck.</p>' +
+        Array.from(groups).map(([p, ds]) => '<div class="sect"><h2>' + esc(p) + '</h2><span class="r">' + ds.length + '</span></div><div class="decks">' + ds.map(tile).join("") + "</div>").join("") + "</div>";
+    },
+  };
+  function libDeckView(id){
+    const d = LIB.lib.decks.find((x) => x.id === id);
+    if (!d){ $("screen").innerHTML = topbar({ title: "Deck", back: "#/library", backLabel: "Library" }) + '<div class="page">' + emptyHtml("Deck not found", "It may have been removed from the library.", '<br><a class="btn" href="#/library">All library decks</a>') + "</div>"; return; }
+    const cmd = libCmd(d), owned = LIB.mod.ownedNames(state), o = LIB.mod.ownedCount(d, LIB.lib, owned);
+    const fold2 = (n) => String(n || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+    const copied = state.decks.find((x) => x.libraryId === d.id);
+    const groups = new Map();
+    d.entries.forEach((e) => { if (!groups.has(e.section)) groups.set(e.section, []); groups.get(e.section).push(e); });
+    const rows = Array.from(groups).map(([g, es]) => '<div class="dsec"><h3>' + esc(g) + '<span class="r num">' + es.reduce((a, e) => a + e.qty, 0) + '</span></h3><div class="list" style="margin-top:0">' + es.map((e) => {
+      const k = e.set + ":" + e.cn, c = libCard(k);
+      const os = !c ? "miss" : /\bBasic\b/.test(c.type_line || "") ? "basic" : owned.has(fold2(c.name)) ? "own" : "miss";
+      const title = { own: "Owned", miss: "Not owned", basic: "Basic land" }[os];
+      return '<button class="drow" data-act="libCard" data-k="' + esc(k) + '"><span class="thumb">' + cimg(c, "small") + '</span><span class="q">' + e.qty + '</span><span class="om ' + (os === "own" ? "" : os) + '" title="' + title + '" aria-label="' + title + '"></span>' +
+        '<span class="n">' + esc(displayName(c)) + "</span>" + (c ? manaHtml(c.mana_cost) : "") + "</button>";
+    }).join("") + "</div></div>").join("");
+    $("screen").innerHTML = topbar({ title: d.name, sub: d.product + " · " + plural(d.count, "card"), back: "#/library", backLabel: "Library" }) +
+      '<div class="page"><div class="dhead">' + (cmd && cmd.img ? '<div class="art"><img src="' + esc(artCrop(cmd.img)) + '" alt=""></div>' : "") +
+      '<div class="info"><div class="cmd">' + esc(d.commander || "") + '</div><div class="arch">' + esc(d.archetype || "") + "</div>" +
+      '<div class="line">' + pipsHtml(libIdentity(d)) + '<span class="badge lib">Library · not owned</span><span class="num">' + o.have + "/" + o.total + " cards owned</span></div></div></div>" +
+      '<div class="libacts"><a class="btn pri sm" href="#/play/vs:' + encodeURIComponent(d.id) + '">' + ICON.play + " Play against</a>" +
+      '<a class="btn sm" href="#/play/' + encodeURIComponent(d.id) + '">' + ICON.play + " Play as this deck</a>" +
+      (copied ? '<a class="btn sm" href="#/deck/' + encodeURIComponent(copied.id) + '">Open my copy</a>' : '<button class="btn sm" data-act="libCopy" data-id="' + esc(d.id) + '">' + ICON.copy + " Copy to my decks</button>") + "</div>" +
+      rows + '<div class="legend"><span><i class="om"></i>Owned</span><span><i class="om miss"></i>Not owned</span><span><i class="om basic"></i>Basic land</span></div>' +
+      (d.source ? '<p class="note" style="margin-top:14px">Decklist: <a href="' + esc(d.source) + '" target="_blank" rel="noopener">official announcement</a>.</p>' : "") + "</div>";
+  }
+  function libCopy(id){
+    const d = LIB.lib && LIB.lib.decks.find((x) => x.id === id); if (!d) return;
+    d.entries.forEach((e) => { const k = e.set + ":" + e.cn; if (!state.cards[k] && LIB.lib.cards[k]) state.cards[k] = JSON.parse(JSON.stringify(LIB.lib.cards[k])); });
+    const nd = { id: slug(d.name) + "-" + uid().slice(-5), name: d.name, format: "commander", commander: d.commander || "", archetype: d.archetype || "", bracket: d.bracket || null,
+      created: today(), updated: today(), status: "wishlist", libraryId: d.id, count: 0, entries: d.entries.map((e) => Object.assign({}, e)) };
+    nd.count = deckCount(nd);
+    state.decks.push(nd); touch(); save("cards"); save("decks");
+    location.hash = "#/deck/" + encodeURIComponent(nd.id);
+    toast("Copied to your decks as a Wishlist deck.");
+  }
+
   /* ============================ routes table ============================ */
   const routes = {
     collection: collScreen,
@@ -2487,6 +2572,7 @@
     more: moreScreen,
     scan: scanScreen,
     play: playScreen,
+    library: libraryScreen,
   };
 
   /* ============================ event wiring ============================ */
@@ -2543,6 +2629,8 @@
     // decks
     newDeck: () => newDeckSheet(),
     deckMenu: () => deckMenu(),
+    libCard: (el) => { const c = libCard(el.dataset.k); if (c) openCard(rememberTemp(JSON.parse(JSON.stringify(c)))); },
+    libCopy: (el) => libCopy(el.dataset.id),
     deckCard: (el) => { const d = deckById(dv.id); const e = d && d.entries[+el.dataset.i]; if (e) openCard(e.set + ":" + e.cn, { deck: d.id, entry: e }); },
     dGroup: (el) => { prefs.deckGroup = el.dataset.v; savePrefs(); deckScreen.update(); },
     dView: () => { prefs.deckView = prefs.deckView === "grid" ? "list" : "grid"; savePrefs(); deckScreen.update(); },
