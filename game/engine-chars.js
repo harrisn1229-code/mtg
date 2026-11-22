@@ -60,8 +60,10 @@ function synthAbilities(d) {
   if (kw.typecycling && typeof kw.typecycling === "object") // basic landcycling / <type>cycling: search for that card instead of drawing
     out.push({ kind: "activated", synthetic: "cycle", zone: "hand", cost: { mana: kw.typecycling.cost, discardSelf: true },
       effects: [{ op: "search", who: "you", filter: kw.typecycling.filter, min: 0, max: 1, to: "hand", reveal: true }], text: `${kw.typecycling.text}cycling ${kw.typecycling.cost}` });
-  if (kw.unearth) // "{cost}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery."
+  if (kw.unearth && typeof kw.unearth === "string") // "{cost}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery."
     out.push({ kind: "activated", synthetic: "unearth", zone: "graveyard", sorcery: true, cost: { mana: costStr(kw.unearth) }, effects: [{ op: "_unearth" }], text: `Unearth ${costStr(kw.unearth)}` });
+  if (kw.suspend && typeof kw.suspend === "object") // upkeep: remove a time counter; when the last is removed, cast it without paying its mana cost (CR 702.62)
+    out.push({ kind: "triggered", synthetic: "suspend", zone: "exile", on: { event: "beginStep", step: "upkeep", whose: "you" }, condition: { type: "_suspended" }, effects: [{ op: "_suspendTick" }], text: `Suspend ${kw.suspend.n}` });
   if (kw.cascade)
     out.push({ kind: "triggered", synthetic: "cascade", zone: "stack", on: { event: "cast", who: "self" }, effects: [{ op: "_cascade" }], text: "Cascade" });
   if (kw.increment) // "Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature."

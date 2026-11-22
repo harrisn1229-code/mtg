@@ -2,6 +2,7 @@
 // Mixed into Game. Every generator ends in `$` and is called with `yield*`.
 import { cmp, colorLetter, parseManaCost, manaStringToPool, MANA_KEYS, tokenDef, cap } from "./engine-util.js";
 import { hasType } from "./engine-chars.js";
+import { m1Ops } from "./engine-m1.js";
 
 const ALL5 = ["W", "U", "B", "R", "G"];
 const isPid = (id) => typeof id === "string" && /^P\d+$/.test(id);
@@ -182,6 +183,7 @@ export const effectMethods = {
     if ("lifeGainedThisTurn" in A) { const ps = this.playersOf(this.refsSync(A.lifeGainedThisTurn ?? "you", ctx)); return ps.reduce((n, p) => n + (this.state.players[p].lifeGainedThisTurn | 0), 0); }
     if ("lifeLostThisTurn" in A) { const ps = this.playersOf(this.refsSync(A.lifeLostThisTurn ?? "you", ctx)); return ps.reduce((n, p) => n + (this.state.players[p].lifeLostThisTurn | 0), 0); }
     if ("value" in A) return this.amount(A.value, ctx);
+    { const r = this.m1Amount(A, ctx); if (r !== undefined) return r; }
     return 0;
   },
 
@@ -232,6 +234,7 @@ export const effectMethods = {
       case "resolvedCount": return cmp(ctx.resolvedCount | 0, C.op || "==", this.amount(C.n ?? 1, ctx));
       case "chosen": { const s = ctx.source && (this.state.objects[ctx.source.id] || ctx.source); return !!s && !!s.chosen && s.chosen[C.key || "mode"] === C.value; }
       default:
+        { const r = this.m1Cond(C, ctx); if (r !== undefined) return r; }
         if (!ctx.quiet) this.manualOnce(ctx.source, `Condition not automated (${t}); treated as false`);
         return false;
     }
@@ -917,3 +920,4 @@ const sgn = (n) => (n >= 0 ? "+" + n : String(n));
 const kwName = (k) => (typeof k === "string" ? k : Object.keys(k || {}).join(", "));
 function colorNameOf(c) { return { W: "white", U: "blue", B: "black", R: "red", G: "green", C: "colorless" }[c] || c; }
 export { hasType };
+Object.assign(OPS, m1Ops);
