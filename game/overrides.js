@@ -8,8 +8,10 @@
 import { compileCard as parseCard } from "./parser.js";
 import ov1 from "./overrides-1.js";
 import ov2 from "./overrides-2.js";
+import lib from "./lib-ov/index.js";
 
-export const OVERRIDES = { ...ov1, ...ov2 };
+// Library overrides first, so the hand-written overrides for Nate's own decks always win.
+export const OVERRIDES = { ...lib, ...ov1, ...ov2 };
 
 function lookup(name) {
   if (name in OVERRIDES) return OVERRIDES[name];

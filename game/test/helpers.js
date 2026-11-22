@@ -41,8 +41,31 @@ export function cardByName(name) {
       if (c.flavor_name) keys.push(fold(c.flavor_name));
       for (const k of keys) if (!nameMap.has(k)) nameMap.set(k, c);
     }
+    // Deck-library cards (data/library.json) after the seed, so scenario tests can use any library card by name.
+    for (const c of Object.values(loadLibrary().cards)) {
+      const keys = [fold(c.name)];
+      if (c.name.indexOf(" // ") > 0) c.name.split(" // ").forEach((n) => keys.push(fold(n)));
+      for (const k of keys) if (!nameMap.has(k)) nameMap.set(k, c);
+    }
   }
   const c = nameMap.get(fold(name));
   if (!c) throw new Error("card not found: " + name);
   return JSON.parse(JSON.stringify(c));
+}
+
+// ---------------------------------------------------------------- deck library (data/library.json)
+let libCache = null;
+export function loadLibrary() {
+  if (!libCache) libCache = JSON.parse(readFileSync(here("../../data/library.json"), "utf8"));
+  return libCache;
+}
+// Built game decks for the library ({ decks, cards } state), optionally only those whose name/id matches `filter`.
+export function libraryDecks(filter) {
+  const lib = loadLibrary();
+  const st = { decks: lib.decks, cards: lib.cards };
+  return lib.decks.filter((d) => !filter || filter(d)).map((d) => buildDeck(st, d));
+}
+// Batches of library card names to automate: { m1: [...], b01: [...], ... } (lib-ov/batches.json).
+export function libraryBatches() {
+  return JSON.parse(readFileSync(here("../lib-ov/batches.json"), "utf8"));
 }

@@ -188,3 +188,30 @@ the tools sheet is grouped (Players / Permanents / Cards & zones) and also reach
 (`SAVE_EV` in ui-match.js): an older save, an illegal answer or a replay error offers "This saved match is from an older version" with Discard.
 `node game/test/browser/audit.mjs scenarios [dir]` sets up positions through `window.__mtgMatch` and hit-tests + screenshots every new prompt.
 
+
+## Library automation (deck library, data/library.json)
+Goal: every card in the 50 deck-library decks fully **and correctly** automated, so neither the AI nor Nate ever meets a ⚠ card.
+Cards still to do are split into batches in `lib-ov/batches.json` (`m1`–`m4` = mechanics batches, `b01`–`b18` = card batches).
+
+**Tools**
+- `node game/test/lib-flagged.mjs <batch>` — the batch's cards that still have unparsed text (oracle text + ⚠ lines). Done = `flagged 0`.
+- `node game/test/lib-sim.mjs <batch> --games 2` — AI-vs-AI games with every library deck that contains a batch card; must show 0 crashes, 0 stalls.
+  The "manual events" list at the end shows text that fired but wasn't automated (should not include your cards when you're done).
+- `node --test game/test/*.test.js` must pass. `node game/test/sim.js --games 1 --quiet` (Nate's own decks) must not crash.
+- `test/helpers.js` `cardByName()` now also finds every library card, so scenario tests (`test/scenario.js`: `setup`, `place`, `act`,
+  `choose`, `resolveAll`, …; see `test/automation.test.js` for examples) can use them.
+
+**Rules for every batch**
+- Correct beats complete. Never clear an unparsed line you haven't implemented exactly (SPEC §5 "never guess", §8). If the engine can't do it,
+  leave the line in `unparsed` and write the gap to `lib-ov/<batch>.requests.md` (card, text, what the engine would need).
+- Overrides for a batch live only in `lib-ov/<batch>.js` (format + conventions: header of `overrides-1.js`; `import { H } from "../overrides-1.js"`).
+  Overrides are keyed by exact card name; library overrides never replace the hand-written ones in overrides-1/2.js.
+- Scripts are deterministic (`g.rng()` only), every `$` generator is called with `yield*`, choices go through `g.choose$` / `g.chooseObjects$` /
+  `g.confirm$` / `g.number$` so they're recorded and replay, and the AI (ai.js `decide`) can answer them.
+- Add scenario tests in `test/lib-<batch>.test.js`: at least one per distinct pattern you automated (more for anything tricky). Keep them fast.
+- Commit your work (in your worktree) with a clear message. Don't push.
+
+**Card batches (b01–b18)** edit only `lib-ov/<batch>.js`, `lib-ov/<batch>.requests.md` and `test/lib-<batch>.test.js`.
+**Mechanics batches (m1–m4)** add the mechanic to the engine/parser (and AI decisions, and UI labels if a new prompt or zone needs one), then
+automate the batch's cards. Keep changes additive and local (new helpers/branches, no refactors) because several batches are merged together;
+note what you added under a short "Library automation: <batch>" subsection below.
