@@ -906,7 +906,6 @@ export default {
     loyalty(-3, "-3: Destroy target permanent that's one or more colors.", { targets: [{ what: { colored: true } }], effects: [{ op: "destroy", what: T(0) }] })),
 
   "Tezzeret, Betrayer of Flesh": { patch: (def) => out(def, { abilities: [
-    ...(def.abilities || []).filter((a) => !(a.kind === "static" && a.effect?.type === "activateCostMod")),
     { kind: "static", effect: { type: "activateCostMod", filter: { types: ["artifact"] }, amount: -2, firstPerTurn: true, key: "tezzeret" }, text: "The first activated ability of an artifact you activate each turn costs {2} less to activate." },
     ...withLoyalty(def, [
       loyalty(1, "+1: Draw two cards. Then discard two cards unless you discard an artifact card.", {

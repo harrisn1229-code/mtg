@@ -146,3 +146,109 @@ test("Harold and Bob: returns as an Aura on a Forest and taps it for three mana"
   assert.equal(back.c.keywords.reach, undefined, "loses all other abilities");
   healthy(g);
 });
+
+// ------------------------------------------------------------------ planeswalkers
+const loy = (g, who, ab) => act(g, `${who}: ${ab}`);
+const counters = (g, name, k) => one(g, name).counters[k] | 0;
+
+test("Loyalty ability: cost paid, once per turn per planeswalker; Kaya -2 doubles the tokens created this turn", () => {
+  const g = setup({ p0: { battlefield: ["Kaya, Geist Hunter", "Elspeth, Sun's Champion"] } });
+  toMain(g);
+  const before = counters(g, "Kaya, Geist Hunter", "loyalty");
+  loy(g, "Kaya, Geist Hunter", "-2");
+  resolveAll(g);
+  assert.equal(counters(g, "Kaya, Geist Hunter", "loyalty"), before - 2);
+  assert.ok(!hasAction(g, "Kaya, Geist Hunter: +1"), "one loyalty ability per planeswalker each turn");
+  loy(g, "Elspeth, Sun's Champion", "+1");
+  resolveAll(g);
+  assert.equal(byName(g, "Soldier").length, 6, "three tokens doubled");
+  healthy(g);
+});
+
+test("Emblems: Elspeth -7 gives creatures +2/+2 and flying; Ajani -7 prevents all but 1 damage", () => {
+  const g = setup({ p0: { battlefield: ["Elspeth, Sun's Champion", "Llanowar Elves"] } });
+  toMain(g);
+  one(g, "Elspeth, Sun's Champion").counters.loyalty = 7;
+  g.refreshRequest();
+  loy(g, "Elspeth, Sun's Champion", "-7");
+  resolveAll(g);
+  assert.equal(g.state.emblems.length, 1);
+  const e = one(g, "Llanowar Elves");
+  assert.equal(e.c.power, 3);
+  assert.ok(g.hasKw(e, "flying"));
+  healthy(g);
+});
+
+test("Tamiyo -2 taps and freezes; Teyo/Narset: Narset limits opposing draws to one a turn", () => {
+  const g = setup({ p0: { battlefield: ["Narset, Parter of Veils"] }, p1: {} });
+  toMain(g);
+  const before = g.state.players[1].hand.length;
+  const n = g.draw(1, 3);
+  assert.equal(n, 1, "only one card");
+  assert.equal(g.state.players[1].hand.length, before + 1);
+  healthy(g);
+});
+
+test("Gideon Jura +2 forces the opponent's creatures to attack him; 0 makes him a 6/6 that takes no damage", () => {
+  const g = setup({ p0: { battlefield: ["Gideon Jura"] }, p1: { battlefield: ["Llanowar Elves"] } });
+  toMain(g);
+  const gid = one(g, "Gideon Jura");
+  loy(g, "Gideon Jura", "+2");
+  resolveUntilAsk(g);
+  while (g.request.kind === "choose") choose(g, "AI");
+  resolveAll(g);
+  until(g, (r, st) => st.turn === 2 && st.combat && st.combat.attackers.length > 0, 6000);
+  assert.equal(g.state.combat.attackers[0].defender, gid.id, "the Elves attack Gideon");
+  healthy(g);
+  const h = setup({ p0: { battlefield: ["Gideon Jura"] } });
+  toMain(h);
+  loy(h, "Gideon Jura", "0");
+  resolveAll(h);
+  const gj = one(h, "Gideon Jura");
+  assert.ok(gj.c.types.includes("creature") && gj.c.types.includes("planeswalker") && gj.c.power === 6);
+  const lo = gj.counters.loyalty;
+  h.dealDamage(gj, gj.id, 3);
+  assert.equal(gj.counters.loyalty, lo, "all damage to him is prevented this turn");
+  healthy(h);
+});
+
+test("Grist: a creature card in hand; enters as a planeswalker; +1 repeats while an Insect card is milled", () => {
+  const g = setup({ p0: { hand: ["Grist, the Hunger Tide"], library: ["Forest", "Bloatfly Swarm"] } });
+  const grist = card(g, "Grist, the Hunger Tide", "hand");
+  assert.ok(grist.c.types.includes("creature") && grist.c.subtypes.includes("insect"), "1/1 Insect creature card in hand");
+  toMain(g);
+  mana(g, 0, "{1}{B}{G}");
+  act(g, "Cast Grist");
+  resolveAll(g);
+  const gr = one(g, "Grist, the Hunger Tide");
+  assert.ok(gr.c.types.includes("planeswalker") && !gr.c.types.includes("creature"), "only a planeswalker on the battlefield");
+  loy(g, "Grist, the Hunger Tide", "+1");
+  resolveAll(g);
+  assert.equal(byName(g, "Insect").length, 2, "an Insect card was milled: repeat");
+  assert.equal(one(g, "Grist, the Hunger Tide").counters.loyalty, 3 + 1 + 1);
+  healthy(g);
+});
+
+test("Saheeli -2: an artifact becomes a copy of another permanent until end of turn, then reverts", () => {
+  const g = setup({ p0: { battlefield: ["Saheeli, Sublime Artificer", "Sol Ring", "Llanowar Elves"] } });
+  toMain(g);
+  loy(g, "Saheeli, Sublime Artificer", "-2");
+  while (g.request.kind === "choose") choose(g, g.request.options.some((o) => /Llanowar/.test(o.label)) ? "Llanowar Elves" : "Sol Ring");
+  resolveAll(g);
+  assert.equal(byName(g, "Llanowar Elves").length, 2, "Sol Ring is a copy of Llanowar Elves");
+  assert.ok(byName(g, "Llanowar Elves").every((o) => o.c.types.includes("creature")));
+  until(g, (r, st) => st.turn === 2);
+  assert.equal(byName(g, "Sol Ring").length, 1, "reverted at end of turn");
+  healthy(g);
+});
+
+test("Wanderer: noncombat damage to you and your other permanents is prevented", () => {
+  const g = setup({ p0: { battlefield: ["The Wanderer", "Llanowar Elves"] }, p1: { hand: ["Lightning Bolt"] } });
+  toMain(g);
+  const l0 = life(g, 0);
+  g.dealDamage(one(g, "The Wanderer"), "P0", 3);
+  assert.equal(life(g, 0), l0, "noncombat damage prevented");
+  g.dealDamage(one(g, "The Wanderer"), one(g, "Llanowar Elves").id, 3);
+  assert.equal(byName(g, "Llanowar Elves").length, 1);
+  healthy(g);
+});
