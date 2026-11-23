@@ -446,6 +446,7 @@ export class Brain {
           if (kind === "-1/-1") { const rem = num(o.c.toughness) - (o.damage | 0); w = -(n >= rem ? this.objValue(o) : n * 9); }
           else if (kind === "+1/+1") w = this.isCre(o) ? n * 13 : 1;
           else if (kind === "loyalty") w = n * 8;
+          else if (kind === "level") w = n * 22; // Class levels / Level up
           else w = n * 3;
           v += mine ? w : -w;
         }
@@ -515,6 +516,8 @@ export class Brain {
       }
       case "ringTempts": return plOf(e.who ?? "you").reduce((s, q) => s + (q === p ? (this.ctrlBf(p).some((o) => this.isCre(o)) ? 15 : 7) : -10), 0);
       case "amass": return this.amt(e.amount ?? 1, E) * 12;
+      case "becomeMonarch": return plOf(e.who ?? "you").reduce((s, q) => s + (q === p ? 32 : -32), 0); // library m4: the monarch draws an extra card each turn
+      case "getRadCounters": { const n = this.amt(e.amount ?? 1, E); return plOf(e.who ?? "you").reduce((s, q) => s + (q === p ? -5 : 5) * n, 0); }
       case "explore": return 14;
       case "proliferate": return 8;
       case "exileTop": return plOf(e.who ?? "you").includes(p) ? this.amt(e.amount ?? 1, E) * 12 : 0;
@@ -591,7 +594,7 @@ export class Brain {
         const back = src?.def?.faces?.[1];
         return back ? this.permSpellValue(src, back, { p }) + (src.zone === "battlefield" ? this.objValue(src) : 0) : 0; // the card itself comes back
       }
-      default: return 0;
+      default: return e && e.aiValue != null ? Number(e.aiValue) : e && typeof e.run === "function" ? 8 : 0; // scripted library effects: `aiValue` tags their worth
     }
   }
   myTurnFor(p) { return this.st.active === p && (this.st.step === "main1" || this.st.step === "beginCombat"); }

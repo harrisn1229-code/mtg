@@ -23,7 +23,24 @@ function withChapters(def, abs) {
 /** Patch for a Saga: replace the listed chapters; everything else the parser produced stays. */
 const saga = (...abs) => ({ patch: (def) => out(def, { abilities: withChapters(def, abs) }) });
 /** A loyalty ability. */
-const loyalty = (n, text, body) => ({ kind: "activated", loyalty: true, sorcery: true, limit: "turn", cost: { loyalty: n }, ...body, text });
+const loyalty = (n, text, body) => {
+  const key = Object.keys(AI_VALUE).find((k) => text.startsWith(k));
+  const effects = key && body.effects?.length ? [{ ...body.effects[0], aiValue: AI_VALUE[key] }, ...body.effects.slice(1)] : body.effects;
+  return { kind: "activated", loyalty: true, sorcery: true, limit: "turn", cost: { loyalty: n }, ...body, ...(effects ? { effects } : {}), text };
+};
+/** What the AI thinks a scripted (inline `run`) loyalty effect is worth: keyed by the start of the ability text. Effects tagged `aiValue` are read by ai.js (evalEffect default). */
+const AI_VALUE = {
+  "-6: Exile all cards from all graveyards": 30, "0: Create two 2/2 black and green Wolf": 30, "-3: Return target creature card from your graveyard": 34,
+  "-6: Destroy up to three target creatures": 55, "-2: For each opponent, return up to one target nonland": 20, "-7: Target artifact you control becomes a 9/9": 45,
+  "0: Remove a loyalty counter from each of any number": 22, "-2: Put a +1/+1 counter on each creature you control and a loyalty": 26, "-2: Reveal the top three cards": 18,
+  "-8: For each player, search": 70, "-X: Chandra deals X damage": 24, "+2: Each opponent gets an emblem": 24, "-8: Search your library for an artifact or creature": 60,
+  "-2: Draw a card, then you may discard": 16, "-2: You may sacrifice a creature. When you do": 28, "+1: Create a 1/1 black and green Insect": 22,
+  "-2: Exile target creature or enchantment you don": 30, "-2: Target artifact becomes an artifact creature": 14, "+1: Draw two cards. Then discard two": 14,
+  "0: Look at the top card of your library. If it's a land": 16, "-6: Untap up to two target lands": 16, "-3: You draw X cards": 26, "+1: Exile the top card of your library face down": 22,
+  "+1: Exile the top card of your library. You may cast": 16, "0: Draw a card and reveal it": 6, "+1: Until your next turn, whenever a creature an opponent": 8,
+  "+1: Choose up to two target creatures. Until your next turn": 8, "-2: Tap up to two target nonland permanents": 14, "+2: During target opponent's next turn": 14,
+  "0: Until end of turn, Gideon Jura becomes": 6, "+1: Until end of turn, each planeswalker you control becomes": 4,
+};
 /** def.abilities with the loyalty abilities whose text starts with `prefix` (e.g. "-2") removed, then `abs` added in printed order. */
 function withLoyalty(def, abs) {
   const key = (a) => (a.text || "").replace(/^\[?([+\-−]?\d+|[+\-−]?X)\]?:.*$/s, "$1").replace("−", "-").toLowerCase();
@@ -69,7 +86,7 @@ const linkedCards = (g, src) => g.state.links.filter((l) => l.sourceId === src.i
 
 // shared inline effects
 /** An effect that gives its controller an emblem. */
-const emblem = (name, text, abilities) => ({ op: "emblem", text: `You get an emblem with "${text}"`, run: function* (g, ctx) { g.createEmblem(ctx.you, { name: `Emblem — ${name}`, text, abilities }); } });
+const emblem = (name, text, abilities) => ({ op: "emblem", aiValue: 90, text: `You get an emblem with "${text}"`, run: function* (g, ctx) { g.createEmblem(ctx.you, { name: `Emblem — ${name}`, text, abilities }); } });
 const normalizeDefLocal = (d) => normalizeDef(d);
 /** "Exile <victim> until <host> leaves the battlefield" (two targets; if the host is already gone nothing is exiled, CR 610.3c). */
 function* exileUntilOtherLeaves$(g, ctx, victimId, hostId) {
