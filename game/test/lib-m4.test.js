@@ -341,3 +341,47 @@ test("Level up: Coralhelm Commander is 2/2 at level 0-1, 3/3 flying at 2-3, 4/4 
   assert.equal(c().c.power, 4);
   healthy(g);
 });
+
+// ------------------------------------------------------------------ Battles
+const SIEGE = "Invasion of Tolvada // The Broken Sky";
+test("Battle (Siege): enters with defense counters, can be attacked by its controller, and when defeated is cast transformed", () => {
+  const g = setup({ p0: { hand: ["Invasion of Tolvada"], battlefield: ["Llanowar Elves", "Plains", "Plains", "Swamp", "Plains", "Swamp"], graveyard: ["Sol Ring"] } });
+  toMain(g);
+  mana(g, 0, "{3}{W}{B}");
+  act(g, "Cast Invasion of Tolvada");
+  while (g.request.kind === "choose") choose(g, "Sol Ring");
+  resolveAll(g);
+  const b = one(g, SIEGE);
+  assert.equal(b.counters.defense, 5);
+  assert.equal(b.protector, 1);
+  assert.equal(byName(g, "Sol Ring").length, 1, "ETB returned Sol Ring");
+  assert.ok(b.c.types.includes("battle"));
+  healthy(g);
+});
+
+test("Battle: damage removes defense counters; at zero the Siege is defeated and may be cast transformed", () => {
+  const g = setup({ p0: { battlefield: ["Invasion of Tolvada"] } });
+  toMain(g);
+  const b = one(g, SIEGE);
+  g.dealDamage(b, b.id, 5);
+  g.refresh();
+  kick(g);
+  resolveUntilAsk(g);
+  if (g.request.kind === "confirm") confirm(g, true);
+  resolveAll(g);
+  assert.equal(byName(g, "The Broken Sky").length, 1, "cast transformed");
+  assert.equal(byName(g, SIEGE).length, 0);
+  healthy(g);
+});
+
+test("Battle: its controller may attack it; unblocked combat damage removes defense counters (the protector defends)", () => {
+  const g = setup({ p0: { battlefield: ["Invasion of Tolvada", "Llanowar Elves"] } });
+  toMain(g);
+  const b = one(g, SIEGE);
+  until(g, (r) => r.kind === "attackers");
+  assert.ok(g.request.candidates.some((c) => c.defenders.includes(b.id)), "the Battle is a legal attack target");
+  g.respond({ attacks: [{ obj: one(g, "Llanowar Elves").id, defender: b.id }] });
+  until(g, (r, st) => st.step === "endCombat" || st.step === "main2");
+  assert.equal(g.obj(b.id)?.counters?.defense, 4, "Llanowar Elves dealt 1 damage");
+  healthy(g);
+});

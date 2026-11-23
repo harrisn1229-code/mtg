@@ -6,7 +6,7 @@ export const combatMethods = {
   defenderPlayer(def) {
     if (isPid(def)) return +def.slice(1);
     const o = this.state.objects[def];
-    return o ? o.controller : null;
+    return o ? (o.c?.types.includes("battle") && o.protector != null ? o.protector : o.controller) : null; // a Battle is defended by its protector
   },
 
   *combatPhase$() {
@@ -42,6 +42,7 @@ export const combatMethods = {
       defenders.push(pid(q));
       for (const id of st.battlefield) { const o = st.objects[id]; if (o.controller === q && o.c.types.includes("planeswalker")) defenders.push(o.id); }
     }
+    for (const id of st.battlefield) { const b = st.objects[id]; if (b && b.c.types.includes("battle") && b.protector !== a && !b.lki) defenders.push(b.id); } // library m4: anyone but the protector may attack a Battle
     const out = [];
     if (!defenders.length) return out;
     for (const id of st.battlefield) {

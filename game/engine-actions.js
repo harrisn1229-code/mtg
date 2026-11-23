@@ -448,7 +448,7 @@ export const actionMethods = {
       if (o.zone !== "stack" || (o.isAbility && !spec.ability) || (src && o.id === src.id)) return false;
       if (spec.spellFilter && !this.matches(o, spec.spellFilter, mctx, "*")) return false;
     } else if (what === "any") {
-      if (o.zone !== "battlefield" || !(hasType(o.c, "creature") || hasType(o.c, "planeswalker"))) return false;
+      if (o.zone !== "battlefield" || !(hasType(o.c, "creature") || hasType(o.c, "planeswalker") || hasType(o.c, "battle"))) return false;
     } else {
       if (o.isAbility) return false;
       const zone = spec.zone || (typeof what === "object" ? what.zone : null) || "battlefield";

@@ -703,13 +703,17 @@ function compileFace(d, o = {}) {
     colors: Array.isArray(d.colors) ? [...d.colors] : colorsOfCost(cost),
     identity: Array.isArray(d.color_identity) ? [...d.color_identity] : [],
     supertypes: tl.supertypes, types: tl.types, subtypes: tl.subtypes,
-    power: null, toughness: null, loyalty: null,
+    power: null, toughness: null, loyalty: null, defense: null,
     img: d.img || null, text: d.oracle_text || "",
     keywords: {}, abilities: [], spell: null, additionalCost: null, faces: null, layout: "normal", unparsed: [],
   };
   const pt = d.pt ? String(d.pt).split("/") : null;
   if (pt && pt.length === 2) { def.power = ptOf(pt[0]); def.toughness = ptOf(pt[1]); }
   else if (d.power != null && d.toughness != null) { def.power = ptOf(d.power); def.toughness = ptOf(d.toughness); }
+  if (def.types.includes("battle")) { // library m4: Battles — defense counters (the card data may lack the field: Sieges default to 5)
+    def.defense = d.defense != null && d.defense !== "" ? +d.defense : 5;
+    if (def.subtypes.includes("siege")) def.abilities.push({ kind: "static", effect: { type: "asEntersChoose", choice: "protector" }, text: "As a Siege enters, choose an opponent to protect it." });
+  }
   if (d.loyalty != null && d.loyalty !== "") def.loyalty = /^\d+$/.test(String(d.loyalty)) ? +d.loyalty : /^x$/i.test(String(d.loyalty)) ? "x" : "*";
 
   const isSpellCard = def.types.includes("instant") || def.types.includes("sorcery");

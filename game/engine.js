@@ -524,6 +524,7 @@ export class Game {
     const d = this.faceDef(o);
     const ctx = { source: o, you: o.controller, quiet: true };
     if (o.c.types.includes("planeswalker")) o.counters.loyalty = (o.counters.loyalty | 0) + (d.loyalty === "x" ? o.x | 0 : +d.loyalty || 0); // printed loyalty X = the X paid
+    if (o.c.types.includes("battle")) { o.counters.defense = (o.counters.defense | 0) + (+d.defense || 5); o.protector = entry?.chosen?.protector ?? this.opponentsOf(o.controller)[0]; } // library m4: Battles
     if (opts.counters) for (const [k, n] of Object.entries(opts.counters)) o.counters[k] = (o.counters[k] | 0) + (n | 0);
     if (entry && entry.copy) { // "except it enters with an additional +1/+1 counter if it's a creature / loyalty counter if it's a planeswalker"
       const ex = entry.copy.except || {};
@@ -837,6 +838,7 @@ export class Game {
       this.emit({ t: "damage", source: src.id, target: targetId, amount: n, combat: !!opts.combat, text: `${srcName} deals ${n} damage to ${o.c.name}` });
       const isCre = o.c.types.includes("creature");
       if (o.c.types.includes("planeswalker")) this.addCounters(o, "loyalty", -n);
+      if (o.c.types.includes("battle")) this.addCounters(o, "defense", -n);
       if (isCre) {
         if (this.hasKw(src, "wither") || this.hasKw(src, "infect")) this.addCounters(o, "-1/-1", n);
         else o.damage += n;
@@ -1187,7 +1189,7 @@ export class Game {
         else if (this.options.commander) for (const [cid, n] of Object.entries(pl.commanderDamage)) if (n >= 21) { this.playerLoses(pl.idx, `21 combat damage from ${this.nameOf(cid)}`); break; }
       }
       if (this.over) return;
-      const toGy = [], toDestroy = [], toSac = [];
+      const toGy = [], toDestroy = [], toSac = []; let toDefeat = null;
       for (const id of st.battlefield) {
         const o = st.objects[id];
         const c = o.c;
@@ -1196,6 +1198,7 @@ export class Game {
           if ((o.damage >= this.lethalThreshold(o) || (o.deathtouched && o.damage > 0)) && !this.hasKw(o, "indestructible")) { toDestroy.push(o); continue; }
         }
         if (c.types.includes("planeswalker") && (o.counters.loyalty | 0) <= 0) { toGy.push(o); continue; }
+        if (c.types.includes("battle") && (o.counters.defense | 0) <= 0) { (toDefeat ||= []).push(o); continue; } // CR 704.5v
         if (c.subtypes.includes("saga") && this.sagaDone(o)) { toSac.push(o); continue; }
         if (o.counters["+1/+1"] && o.counters["-1/-1"]) { const m = Math.min(o.counters["+1/+1"], o.counters["-1/-1"]); o.counters["+1/+1"] -= m; o.counters["-1/-1"] -= m; if (!o.counters["+1/+1"]) delete o.counters["+1/+1"]; if (!o.counters["-1/-1"]) delete o.counters["-1/-1"]; acted = true; this.markDirty(); }
         const isAura = c.subtypes.includes("aura");
@@ -1210,6 +1213,7 @@ export class Game {
           }
         }
       }
+      for (const o of toDefeat || []) { if (o.zone === "battlefield") { this.defeatBattle(o); acted = true; } }
       for (const o of toGy) { if (o.zone === "battlefield") { this.moveObj(o, "graveyard"); acted = true; } }
       for (const o of toDestroy) { if (o.zone === "battlefield") { this.moveObj(o, "graveyard", { cause: "destroy" }); acted = true; } }
       for (const o of toSac) { if (o.zone === "battlefield" && this.sacrifice(o)) acted = true; }

@@ -63,6 +63,10 @@ export const extMethods = {
           const opts3 = Array.from({ length: n }, (_, i) => ({ id: String(i + 1), label: `Chapter ${["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"][i] || i + 1}`, type: "text" }));
           const ch = yield* this.choose$(p, { prompt: `${d.name}: read ahead — choose a chapter to start on`, options: opts3, min: 1, max: 1, reason: "chapter", source: o.id, hint: { kind: "readAhead", max: n } });
           entry.chosen.chapter = +(ch[0]?.id || 1);
+        } else if (e.choice === "protector") {
+          const opps = this.opponentsOf(p);
+          const ch = opps.length > 1 ? yield* this.choose$(p, { prompt: `${d.name}: choose an opponent to protect it`, options: opps.map((q) => ({ id: "P" + q, label: this.pname(q), type: "player" })), min: 1, max: 1, reason: "protector", source: o.id }) : [{ id: "P" + opps[0] }];
+          entry.chosen.protector = +String(ch[0]?.id || "P" + opps[0]).slice(1);
         } else if (e.choice === "mode") {
           const opts2 = (e.options || []).map((m) => ({ id: m.id, label: m.label || m.id, type: "mode" }));
           const ch = yield* this.choose$(p, { prompt: `${d.name}: choose ${opts2.map((x) => x.id).map(cap).join(" or ")}`, options: opts2, min: 1, max: 1, reason: "mode", source: o.id, hint: { kind: "entryMode", options: e.options } });
@@ -107,6 +111,7 @@ export const extMethods = {
         if (e.choice === "creatureType") entry.chosen.creatureType = this.creatureTypeOptions(p)[0];
         else if (e.choice === "color") entry.chosen.color = ALL5.find((c) => c !== e.except);
         else if (e.choice === "mode") entry.chosen.mode = e.options?.[0]?.id;
+        else if (e.choice === "protector") entry.chosen.protector = this.opponentsOf(p)[0];
         else if (e.choice === "chapter") entry.chosen.chapter = 1;
       } else if (e.type === "entersTapped") entry.tapped = !(e.unless && this.evalCond(e.unless, { source: o, you: p, quiet: true }));
     }

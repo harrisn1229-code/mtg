@@ -46,6 +46,23 @@ export const m4Methods = {
   },
   emblemsOf(p) { return (this.state.emblems || []).map((id) => this.state.objects[id]).filter((o) => o && (p == null || o.owner === p)); },
 
+  // ================================================================ Battles (CR 310)
+  /** A Battle with no defense counters left is defeated (CR 704.5v). A Siege is exiled and its controller may cast it transformed without paying its mana cost; any other Battle goes to the graveyard. */
+  defeatBattle(o) {
+    const p = o.controller, back = o.def.faces && o.def.faces[1], siege = o.def.subtypes.includes("siege");
+    this.emit({ t: "defeated", obj: o.id, player: p, text: `${o.c.name} is defeated` });
+    this.moveObj(o, siege ? "exile" : "graveyard");
+    this.fireTrigger({ type: "defeated", obj: o, player: p });
+    if (!siege || !back) return;
+    const id = o.id;
+    this.pendInternal(o, p, { kind: "triggered", text: `${o.def.name} was defeated: exile it, then you may cast it transformed without paying its mana cost.`,
+      run: function* (g, ctx) {
+        const x = g.obj(id);
+        if (!x || x.zone !== "exile") return;
+        if (yield* g.confirm$(ctx.you, `Cast ${back.name} without paying its mana cost?`, x.id, { kind: "may" })) yield* g.castFree$(ctx.you, x, { face: 1 });
+      } }, null);
+  },
+
   // ================================================================ the monarch (CR 724)
   becomeMonarch(p) {
     const st = this.state;
