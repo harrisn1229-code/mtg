@@ -215,3 +215,35 @@ Cards still to do are split into batches in `lib-ov/batches.json` (`m1`–`m4` =
 **Mechanics batches (m1–m4)** add the mechanic to the engine/parser (and AI decisions, and UI labels if a new prompt or zone needs one), then
 automate the batch's cards. Keep changes additive and local (new helpers/branches, no refactors) because several batches are merged together;
 note what you added under a short "Library automation: <batch>" subsection below.
+
+### Library automation: m4 (planeswalkers, Sagas, Battles, Classes, Level up, Cases, monarch, rad counters)
+Engine code is in `engine-m4.js` (a mixin like the others) plus small hooks elsewhere; card scripts are in `lib-ov/m4.js`, deviations in `lib-ov/m4.requests.md`.
+
+**IR additions**
+- *Saga*: `def.finalChapter`; chapter abilities are `{kind:"triggered", on:{event:"chapter", who:"self", chapters:[n..]}}` (parser: `CHAPTER_RE`, `parseChapterLine`).
+  The lore counter is added at entry (`applyEntersReplacements`) and at your precombat main (`m4StepStart`); `sagaChapters` fires one `chapter` event per number
+  passed. SBA `sagaDone` sacrifices it once lore >= final chapter with no chapter ability pending/on the stack. *Read ahead* = `asEntersChoose choice:"chapter"`
+  (`reason:"chapter"` request, hint `{kind:"readAhead"}`, `entry.chosen.chapter`).
+- *Class*: a `level` counter (enters with 1, static `entersWithCounters`). `ab.classLevel` = level-up activated ability (sorcery speed, condition `counters level == n-1`).
+  Gate level abilities with `condition:{type:"counters", what:"self", kind:"level", op:">=", n}` (`LV(n)` in m4.js). "When this Class becomes level N" = `counterAdded` on kind `level`.
+- *Level up creatures*: `kw.levelUp` synthesises the activated ability (`engine-chars.js`); `LEVEL a-b` tiers parse to `setPT`/`pump` statics gated on level counters.
+- *Case*: `o.solved` flag + cond `{type:"solved"}`; the "to solve" check is an end-step trigger that sets it.
+- *Planeswalker*: `loyalty` ability = `{kind:"activated", loyalty:true, cost:{loyalty:±n|"-x"}, limit:"turn"}`; printed loyalty `X` is `"x"` (enters with X counters). Helpers `loyalty()`,
+  `walker()` in m4.js replace abilities by their cost key ("+1", "-2", "-x"); `AI_VALUE` tags the AI's value for scripted effects (`aiValue` on the effect, read by `ai.js` evalEffect default).
+- *Battle*: `def.defense` (default 5 for Sieges when the data lacks it), `defense` counters, `o.protector`, `asEntersChoose choice:"protector"`; battles are legal attack targets for everyone
+  but the protector, `defenderPlayer(battle)` = protector, SBA -> `defeatBattle` (Siege: exile, may cast the back face free via `castFree$(p,o,{face:1})`).
+- *Emblems*: `st.emblems`, `createEmblem(p,{name,text,abilities})`; static abilities join the continuous-effect pass, triggered ones fire from `fireTrigger` (abilities carry `zone:"emblem"`).
+- *Monarch*: `st.monarch`, `becomeMonarch`, event `becameMonarch`, cond `{type:"monarch", who:"you|opponent|none|any"}`, trigger `beginStep whose:"monarch"`, end-step draw and
+  combat-damage steal are engine-internal (`m4StepStart`, `monarchHit`). *Rad counters*: player counter `rad`; precombat-main mill/lose-life step is engine-internal; ops `getRadCounters`,
+  static `radGain`; mill events `milled` (per card) and `milledCards` (batch, `nonland`) with `o.milledTurn` / filter `milledThisTurn`.
+- New statics: `tokenMult`, `tokenReplace`, `castFreeHand`, `playFromTop`, `lookTop`, `attackDir`, `mustAttackObj`, `attackTax`, `cantAttackYou`, `monarchControls`, `cantBeBlockedBy` (`byMonarch`, `greaterPower`),
+  `cantBeBlockedWhileDefenderHas`, `drawLimit`, `damageToCounters`, `typesOffBattlefield`, `activateCostMod`/`cost.costReduce`, `asType` `setSubtypes`/`addColors`, `damageMod` (`combat`, `exceptSelf`, `youOrPlaneswalker`, `allButOne`),
+  `entersTapped.optionalTapped`. New filter keys `colored`, `milledThisTurn`; new cond `castSpellThisTurn`, `solved`, `monarch`.
+- New object fields: `skipUntap` ("doesn't untap during its controller's next untap step"), `formDef` (a permanent that is a different card form while on the battlefield), `mayCastGy` (cast a graveyard card this turn),
+  `copyRevert` (temporary copy), `oncePerTurn` on triggered abilities, event field `first` on `gainLife`, `nth` on `draw`.
+
+**Engine helpers** (`engine-m4.js`): `addTempTrigger(on, run, ctx, until, opts)`, `castPaid$(p,o,{spendAs})`, `attackTax$`, `effCost`/`noteActivation`, `milledEvents`/`fireMilled`, `createEmblem`, `becomeMonarch`, `defeatBattle`,
+`tokenMult`, `tokenReplaceDef`, `playFromTopObj`, `attackDirDefenders`, `poolCount`. Stun counters replace the untap; shield counters replace damage/destruction.
+
+**AI**: scripted effects are valued through `aiValue` (default 8 for any `run` effect); `becomeMonarch`, `getRadCounters` and `level` counters have values in `ai.js`; Read-ahead, protector, mode and pile choices
+use the generic first-option/ordering paths. **UI**: counter badges now name lore/defense/level/stun/shield; player strips show the monarch, rad/energy/experience counters and emblems.

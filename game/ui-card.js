@@ -155,7 +155,7 @@ export function fillCard(el, v, size) {
   }
 }
 
-const SHORT = { "+1/+1": "+1/+1", "-1/-1": "−1/−1", loyalty: "", charge: "charge", time: "time" };
+const SHORT = { "+1/+1": "+1/+1", "-1/-1": "−1/−1", loyalty: "", charge: "charge", time: "time", lore: "lore", defense: "defense", level: "level", stun: "stun", shield: "shield" };
 /* Live overlay: P/T (coloured when buffed or damaged), counters, loyalty, badges. */
 export function setLive(el, o, flags) {
   flags = flags || {};

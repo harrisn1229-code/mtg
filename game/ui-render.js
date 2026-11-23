@@ -150,6 +150,13 @@ export const renderMethods = {
       const cd = P.commanderDamage || {};
       Object.keys(cd).forEach((k) => { if (cd[k] > 0) tags.push('<span class="tg cdm" title="Commander damage taken">⚔ ' + cd[k] + "/21</span>"); });
       if (P.ring && P.ring.level) tags.push('<span class="tg ring" title="The Ring tempts you, level ' + P.ring.level + '">Ring ' + P.ring.level + "</span>");
+      // library m4: the monarch, rad / energy / experience counters, emblems
+      if (S.monarch === p) tags.push('<span class="tg mon" title="The monarch draws a card at the beginning of their end step; a creature that deals combat damage to the monarch steals the crown">\u265B Monarch</span>');
+      const pc = P.counters || {};
+      if (pc.rad > 0) tags.push('<span class="tg rad" title="Rad counters: at your precombat main phase, mill that many cards; each nonland card lost 1 life and a rad counter">\u2622 ' + pc.rad + "</span>");
+      if (pc.energy > 0) tags.push('<span class="tg nrg" title="Energy counters">\u26A1 ' + pc.energy + "</span>");
+      if (pc.experience > 0) tags.push('<span class="tg xp" title="Experience counters">XP ' + pc.experience + "</span>");
+      (S.emblems || []).forEach((id) => { const e = S.objects[id]; if (e && e.owner === p) tags.push('<span class="tg emb" title="' + esc((e.c && e.c.text) || (e.def && e.def.text) || "Emblem") + '">\u2736 ' + esc(String((e.c && e.c.name) || (e.def && e.def.name) || "Emblem").replace(/^Emblem \u2014 /, "")) + "</span>"); });
       const th = tags.join("");
       if (s._tags !== th) { s._tags = th; s.nm.innerHTML = esc(name) + th; }
       // opponent hand backs
