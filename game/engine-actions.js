@@ -51,6 +51,11 @@ export const actionMethods = {
       }
     };
     for (const id of pl.hand) castFrom(O(id), "hand");
+    const ptop = this.playFromTopObj(p); // library m4: "you may play cards from the top of your library"
+    if (ptop) {
+      if (ptop.def.types.includes("land")) { if (sorc && pl.landsPlayed < pl.landsPerTurn) acts.push({ type: "land", obj: ptop.id, objRef: ptop, label: `Play ${ptop.def.name}`, zone: "library" }); }
+      else castFrom(ptop, "library");
+    }
     for (const id of pl.command) castFrom(O(id), "command");
     for (const q of st.players) for (const id of q.graveyard) { const go = O(id); if (q.idx === p || this.mayCastGy(go, p)) castFrom(go, "graveyard"); } // library m4: mayCastGy = "until end of turn, you may cast that card from the graveyard"
     for (const q of st.players) for (const id of q.exile) { const o = O(id); if ((o.owner === p && o.onAdventure) || this.mayPlayFromExile(o, p)) castFrom(o, "exile"); }
@@ -123,6 +128,8 @@ export const actionMethods = {
         if (d.layout === "adventure" && castable(d.faces[1])) out.push({ variant: "adventure", face: 1 });
         else if (d.layout === "mdfc" && castable(d.faces[1])) out.push({ variant: "face1", face: 1 });
       }
+    } else if (zone === "library") {
+      if (castable(d) && this.playFromTopObj(p) === o) out.push({ variant: "normal", face: 0 }, ...this.altVariants(o, d, p));
     } else if (zone === "command") {
       if (o.isCommander && o.owner === p && castable(d)) out.push({ variant: "commander", face: 0 });
     } else if (zone === "graveyard") {
@@ -187,6 +194,7 @@ export const actionMethods = {
       const who = s.st.who || "you";
       if (who === "you" && s.you !== p) continue;
       if (who === "opponent" && s.you === p) continue;
+      if (s.st.notFromHand && o.zone === "hand") continue; // "spells you cast from anywhere other than your hand"
       if (s.st.filter && !this.matches(view, s.st.filter, { source: s.src, you: s.you }, "*")) continue;
       delta += this.amount(s.st.amount ?? -1, { source: s.src, you: s.you });
     }
@@ -598,6 +606,7 @@ export const actionMethods = {
     o.onAdventure = false; o.mayPlay = null; o.cmdPending = false;
     o.faceDown = v.variant === "morph";
     o.manaSpent = spent.n;
+    { const pl2 = st.players[p]; const tm = pl2.treasureMana | 0; if (tm > 0 && spent.n > 0) { o.treasureSpent = true; pl2.treasureMana = Math.max(0, tm - spent.n); } else o.treasureSpent = false; }
     o._division = division;
     o._targets = targets; o._targetSpecs = specs; o._modes = modes; o._modeTargets = modeTargets;
     o._sacrificed = ctx.sacrificed || [];
@@ -606,9 +615,10 @@ export const actionMethods = {
     o.c = this.baseC(o);
     this.markDirty();
     st.spellsThisTurn++;
+    { const pc = st.players[p]; pc.castsT = pc.castsT && pc.castsT.turn === st.turn ? { turn: st.turn, n: pc.castsT.n + 1 } : { turn: st.turn, n: 1 }; }
     const tgt = o.targets.length ? ` targeting ${o.targets.map((id) => this.nameOf(id)).join(", ")}` : "";
     this.emit({ t: "cast", obj: o.id, player: p, targets: [...o.targets], from, variant: v.variant, manaSpent: spent.n, text: `${pl.name} casts ${o.faceDown ? "a face-down creature spell" : o.c.name}${x ? ` (X=${x})` : ""}${v.variant === "kicked" ? " (kicked)" : v.variant === "mutate" ? " for its mutate cost" : v.variant === "spectacle" ? " for its spectacle cost" : ""}${tgt}` });
-    this.fireTrigger({ type: "cast", obj: o, player: p, manaSpent: spent.n });
+    this.fireTrigger({ type: "cast", obj: o, player: p, manaSpent: spent.n, treasure: o.treasureSpent ? 1 : 0 });
     this.afterTargeting(o);
     this.fireOnSpend(spent.units, spend, p);
   },
@@ -663,12 +673,14 @@ export const actionMethods = {
       if (!(yield* this.payMana$(p, { ...c, x: 0 }, { exclude: new Set([o.id]), spend: { kind: "ability", source: o, player: p }, protect: o.id }))) return false;
     }
     this._manaTrig = [];
+    const trBefore = o.c.subtypes.includes("treasure") ? this.poolCount(p) : -1; // Alchemist's Talent: remember how much of the pool came from a Treasure
     if (cost.tap) { if (o.tapped) return false; o.tapped = true; this.markDirty(); this.emit({ t: "tap", obj: o.id, mana: true, silent: !!auto, text: `${o.c.name} is tapped for mana` }); this.fireTrigger({ type: "tapped", obj: o, forMana: true, player: p }); }
     const rest = { ...cost }; delete rest.mana; delete rest.tap;
     if (Object.keys(rest).length) { if (!(yield* this.payCost$(p, rest, ctx, { skipMana: true }))) return false; }
     if (typeof ab.run === "function") yield* ab.run(this, ctx);
     else yield* this.runEffects$(ab.effects || [], ctx);
     yield* this.runManaTriggers$();
+    if (trBefore >= 0) { const pl = this.state.players[p]; pl.treasureMana = (pl.treasureMana | 0) + Math.max(0, this.poolCount(p) - trBefore); }
     if (ab.limit === "turn") { if (!o.activations || o.activations.turn !== this.state.turn) o.activations = { turn: this.state.turn }; o.activations[idx] = (o.activations[idx] | 0) + 1; }
     return true;
   },

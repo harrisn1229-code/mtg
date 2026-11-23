@@ -639,7 +639,7 @@ export class Game {
     pl.life += n;
     pl.lifeGainedThisTurn += n;
     this.emit({ t: "life", player: p, delta: n, life: pl.life, text: `${pl.name} gains ${n} life (${pl.life})` });
-    this.fireTrigger({ type: "gainLife", player: p, amount: n });
+    this.fireTrigger({ type: "gainLife", player: p, amount: n, first: pl.lifeGainedThisTurn === n ? 1 : 0 });
     return n;
   }
   loseLife(p, n, opts = {}) {
@@ -728,6 +728,7 @@ export class Game {
       if (opts.nonLegendary) def = normalizeDef({ ...def, supertypes: def.supertypes.filter((s) => s !== "legendary"), faces: null });
     } else def = tokenDef(t);
     n = n * this.tokenMult(p); // library m4: Kaya's token doubling
+    def = this.tokenReplaceDef(p, def); // library m4: Fisher's Talent (Fish -> Shark -> Octopus)
     if (opts.power != null || opts.toughness != null) def = normalizeDef({ ...def, power: opts.power ?? def.power, toughness: opts.toughness ?? def.toughness, faces: null });
     for (let i = 0; i < n; i++) {
       const o = this.newObj(null, def, p, "none");
@@ -1602,7 +1603,7 @@ export class Game {
     st.priority = null;
     this.emit({ t: "step", step: name, text: stepLabel(name) });
   }
-  emptyPools() { for (const pl of this.state.players) { pl.mana = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }; pl.manaX = []; } }
+  emptyPools() { for (const pl of this.state.players) { pl.mana = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }; pl.manaX = []; pl.treasureMana = 0; } }
 
   *turn$() {
     const st = this.state;

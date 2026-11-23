@@ -34,6 +34,10 @@ function withLoyalty(def, abs) {
 /** Patch for a planeswalker. Abilities are matched by their loyalty cost text ("+1", "-2", "0", "-X"). Two abilities with the same cost (Garruk, Apex Predator) are all replaced. */
 const walker = (...abs) => ({ patch: (def) => out(def, { abilities: withLoyalty(def, abs) }) });
 const plus = (def, ...abs) => [...(def.abilities || []), ...abs];
+/** Class level gate: the Class is at least level N. */
+const LV = (n) => ({ type: "counters", what: "self", kind: "level", op: ">=", n });
+const FIRST_GAIN = { type: "compare", a: { event: "first" }, op: ">", b: 0 };
+const FISH = { name: "Fish", types: ["creature"], subtypes: ["fish"], colors: ["U"], power: 1, toughness: 1 };
 const SAGA_ONLY = (def) => out(def, {});
 /** Add abilities to whatever the parser produced (the card's other lines stay); every unparsed line is considered handled. */
 const plusAbs = (...abs) => ({ patch: (def) => out(def, { abilities: [...(def.abilities || []), ...abs] }) });
@@ -1196,4 +1200,46 @@ export default {
     loyalty(-3, "-3: Exile target creature or enchantment you don't control until target enchantment you control leaves the battlefield.", {
       targets: [{ what: { types: ["creature", "enchantment"], controller: "opponent" } }, { what: { types: ["enchantment"], controller: "you" } }],
       effects: [{ op: "calixExile", run: function* (g, ctx) { yield* exileUntilOtherLeaves$(g, ctx, ctx.targets?.[0]?.[0], ctx.targets?.[1]?.[0]); } }] })),
+
+  // ================================================================ Classes / Case
+  "Gourmand's Talent": plusAbs(
+    { kind: "static", condition: { type: "yourTurn" }, text: "During your turn, artifacts you control are Foods in addition to their other types and have \"{2}, {T}, Sacrifice this artifact: You gain 3 life.\"",
+      effect: { type: "asType", affects: { types: ["artifact"], controller: "you" }, addSubtypes: ["food"], abilities: [{ kind: "activated", cost: { mana: "{2}", tap: true, sacSelf: true }, effects: [{ op: "gainLife", who: "you", amount: 3 }], text: "{2}, {T}, Sacrifice this artifact: You gain 3 life." }] } },
+    { kind: "triggered", on: { event: "gainLife", who: "you" }, condition: { type: "and", all: [LV(2), FIRST_GAIN] }, text: "Whenever you gain life for the first time each turn, create a 3/3 green Raccoon creature token.",
+      effects: [{ op: "createToken", who: "you", amount: 1, token: tok("Raccoon", ["creature"], ["raccoon"], ["G"], 3, 3) }] },
+    { kind: "triggered", on: { event: "gainLife", who: "you" }, condition: { type: "and", all: [LV(3), FIRST_GAIN] }, text: "Whenever you gain life for the first time each turn, put a +1/+1 counter on each creature you control.",
+      effects: [{ op: "classCounters", run: function* (g, ctx) { for (const o of g.find({ types: ["creature"], controller: "you" }, ctx)) g.addCounters(o, "+1/+1", 1); } }] }),
+
+  "Fisher's Talent": plusAbs(
+    { kind: "triggered", on: { event: "beginStep", step: "upkeep", whose: "you" }, condition: LV(1), text: "At the beginning of your upkeep, look at the top card of your library. You may reveal it if it's a land card. Create a 1/1 blue Fish creature token if you revealed it this way. Then draw a card.",
+      effects: [{ op: "fisherUpkeep", run: function* (g, ctx) {
+        const pl = g.state.players[ctx.you];
+        const top = pl.library.length ? g.obj(pl.library[pl.library.length - 1]) : null;
+        if (top && top.def.types.includes("land") && (yield* g.confirm$(ctx.you, `Reveal ${top.def.name} to create a 1/1 Fish token?`, ctx.source?.id, { kind: "may" }))) {
+          g.emit({ t: "reveal", objs: [top.id], player: ctx.you, text: `${g.pname(ctx.you)} reveals ${top.def.name}` });
+          g.createToken(ctx.you, FISH, 1);
+        }
+        yield* g.drawCards$(ctx.you, 1);
+      } }] },
+    { kind: "static", condition: LV(2), effect: { type: "tokenReplace", from: "fish", to: tok("Shark", ["creature"], ["shark"], ["U"], 3, 3) }, text: "If you would create a Fish token, create a 3/3 blue Shark creature token instead." },
+    { kind: "static", condition: LV(3), effect: { type: "tokenReplace", from: "shark", to: tok("Octopus", ["creature"], ["octopus"], ["U"], 8, 8) }, text: "If you would create a Shark token, create an 8/8 blue Octopus creature token instead." }),
+
+  "Fortune Teller's Talent": plusAbs(
+    { kind: "static", effect: { type: "lookTop" }, text: "You may look at the top card of your library any time." },
+    { kind: "static", condition: { type: "and", all: [LV(2), { type: "castSpellThisTurn" }] }, effect: { type: "playFromTop" }, text: "As long as you've cast a spell this turn, you may play cards from the top of your library." },
+    { kind: "static", condition: LV(3), effect: { type: "costMod", who: "you", amount: -2, notFromHand: true }, text: "Spells you cast from anywhere other than your hand cost {2} less to cast." }),
+
+  "Alchemist's Talent": plusAbs(
+    { kind: "static", condition: LV(2), text: "Treasures you control have \"{T}, Sacrifice this artifact: Add two mana of any one color.\"",
+      effect: { type: "asType", affects: { subtypes: ["treasure"], controller: "you" }, abilities: [{ kind: "activated", mana: true, cost: { tap: true, sacSelf: true }, effects: [{ op: "addMana", mana: { any: 2 } }], text: "{T}, Sacrifice this artifact: Add two mana of any one color." }] } },
+    { kind: "triggered", on: { event: "cast", who: "you" }, condition: { type: "and", all: [LV(3), { type: "compare", a: { event: "treasure" }, op: ">", b: 0 }] },
+      text: "Whenever you cast a spell, if mana from a Treasure was spent to cast it, this Class deals damage equal to that spell's mana value to each opponent.",
+      effects: [{ op: "alchemistBurn", run: function* (g, ctx) { const n = ctx.event?.obj?.c?.cmc | 0; if (n > 0) for (const q of g.opponentsOf(ctx.you)) g.dealDamage(ctx.source, "P" + q, n); } }] }),
+
+  "Case of the Shifting Visage": plusAbs(
+    { kind: "triggered", on: { event: "beginStep", step: "end", whose: "you" }, condition: { type: "and", all: [{ type: "not", cond: { type: "solved" } }, { type: "count", filter: { zone: "graveyard", owner: "you" }, op: ">=", n: 15 }] },
+      text: "To solve — There are fifteen or more cards in your graveyard. (If unsolved, solve at the beginning of your end step.)",
+      effects: [{ op: "solveCase", run: function* (g, ctx) { const o = g.obj(ctx.source?.id); if (o && o.zone === "battlefield" && !o.solved) { o.solved = true; g.emit({ t: "solve", obj: o.id, text: `${o.c.name} is solved` }); g.markDirty(); } } }] },
+    { kind: "triggered", on: { event: "cast", who: "you", filter: { types: ["creature"], notSupertypes: ["legendary"] } }, condition: { type: "solved" },
+      text: "Solved — Whenever you cast a nonlegendary creature spell, copy that spell.", effects: [{ op: "copySpell", what: { ref: "event", what: "object" } }] }),
 };

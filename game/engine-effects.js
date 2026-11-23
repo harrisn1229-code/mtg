@@ -202,6 +202,8 @@ export const effectMethods = {
       case "life": { const ps = P(C.who); return ps.some((p) => cmp(this.state.players[p].life, C.op || "<=", this.amount(C.n ?? 0, ctx))); }
       case "handSize": { const ps = P(C.who); return ps.some((p) => cmp(this.state.players[p].hand.length, C.op || ">=", this.amount(C.n ?? 0, ctx))); }
       case "yourTurn": return this.state.active === ctx.you;
+      case "solved": { const s = ctx.source && (this.state.objects[ctx.source.id] || ctx.source); return !!s && !!s.solved; } // Cases
+      case "castSpellThisTurn": { const t = this.state.players[ctx.you]?.castsT; return !!t && t.turn === this.state.turn && t.n >= (C.n ?? 1); } // "as long as you've cast a spell this turn"
       case "monarch": { const m = this.state.monarch; const w = C.who ?? "you"; return w === "none" ? m == null : w === "opponent" ? m != null && m !== ctx.you : w === "any" ? m != null : m === ctx.you; }
       case "notYourTurn": case "opponentTurn": return this.state.active !== ctx.you;
       case "kicked": return !!ctx.kicked;

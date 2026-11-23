@@ -4,7 +4,7 @@
 //   * the monarch, rad counters, per-step turn-based actions                         -> becomeMonarch, m4StepStart
 //   * temporary triggered abilities ("until your next turn, whenever …")             -> addTempTrigger
 // Every generator ends in `$` and is called with `yield*`.
-import { normalizeDef, parseManaCost } from "./engine-util.js";
+import { normalizeDef, parseManaCost, tokenDef } from "./engine-util.js";
 
 const isPid = (id) => typeof id === "string" && /^P\d+$/.test(id);
 
@@ -103,6 +103,30 @@ export const m4Methods = {
     else d.until = until;
     return d;
   },
+
+  /** The top card of p's library when a {type:"playFromTop"} static of theirs is active (Fortune Teller's Talent), else null. */
+  playFromTopObj(p) {
+    if (!(this._statics || []).some((s) => s.st.type === "playFromTop" && s.you === p)) return null;
+    const lib = this.state.players[p].library;
+    return lib.length ? this.state.objects[lib[lib.length - 1]] : null;
+  },
+  /** Does p have a {type:"lookTop"} static ("you may look at the top card of your library any time")? */
+  canLookTop(p) { return (this._statics || []).some((s) => (s.st.type === "lookTop" || s.st.type === "playFromTop") && s.you === p); },
+  /** "If you would create a <Fish> token, create <a Shark> instead": apply the tokenReplace statics of p to a token def (chains, each static once). */
+  tokenReplaceDef(p, def) {
+    const reps = (this._statics || []).filter((s) => s.st.type === "tokenReplace" && s.you === p);
+    if (!reps.length) return def;
+    const used = new Set();
+    for (let guard = 0; guard < 6; guard++) {
+      const i = reps.findIndex((s, k) => !used.has(k) && (def.subtypes || []).includes(s.st.from));
+      if (i < 0) break;
+      used.add(i);
+      def = tokenDef(reps[i].st.to);
+    }
+    return def;
+  },
+  /** Total mana (pool + tracked units) in p's pool. */
+  poolCount(p) { const pl = this.state.players[p]; return Object.values(pl.mana).reduce((a, b) => a + (b | 0), 0) + (pl.manaX || []).length; },
 
   // ================================================================ small continuous-effect hooks
   /** Product of the {type:"tokenMult", factor} effects controlled by p ("if one or more tokens would be created under your control, twice that many are created instead"). */
