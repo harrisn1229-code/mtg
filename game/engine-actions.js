@@ -42,7 +42,8 @@ export const actionMethods = {
     for (const id of pl.hand) castFrom(O(id), "hand");
     for (const id of pl.command) castFrom(O(id), "command");
     for (const id of pl.graveyard) castFrom(O(id), "graveyard");
-    for (const q of st.players) for (const id of q.exile) { const o = O(id); if ((o.owner === p && o.onAdventure) || this.mayPlayFromExile(o, p)) castFrom(o, "exile"); }
+    for (const q of st.players) for (const id of q.exile) { const o = O(id); if ((o.owner === p && o.onAdventure) || this.mayPlayFromExile(o, p) || this.m1ExileCastable(o, p)) castFrom(o, "exile"); }
+    this.m1Actions(p, sources, sorc, acts);
     // activated abilities
     const actFrom = (o) => {
       const abs = o.c.abilities || [];
@@ -97,7 +98,7 @@ export const actionMethods = {
     const out = [];
     if (zone !== "command" && o.owner !== p && !this.mayPlayFromExile(o, p)) return out;
     const castable = (fd) => fd && !fd.types.includes("land") && fd.cost != null && (fd.cost !== "" || (fd.types.length && !isPerm(fd) && false));
-    const kw = d.keywords || {};
+    const kw = this.m1Kws(o, p, d);
     const cs = (v) => (typeof v === "string" ? v : v && typeof v === "object" ? v.cost || v.mana || "" : null);
     if (zone === "hand") {
       if (!castable(d) && d.types.includes("land") && (kw.morph != null || kw.megamorph != null || kw.disguise != null)) out.push({ variant: "morph", face: 0 }); // a land with morph / disguise can be cast face down
@@ -117,12 +118,13 @@ export const actionMethods = {
     } else if (zone === "graveyard") {
       if (cs(kw.flashback)) out.push({ variant: "flashback", face: 0 });
       if (cs(kw.escape)) out.push({ variant: "escape", face: 0 });
-      if (castable(d) && d.abilities.some((a) => a.kind === "static" && a.effect?.type === "castFrom" && a.effect.zone === "graveyard" && (!a.condition || this.evalCond(a.condition, { source: o, you: p, quiet: true }))))
+      if (castable(d) && !this.m1NoGraveyardNormal(o, d) && d.abilities.some((a) => a.kind === "static" && a.effect?.type === "castFrom" && a.effect.zone === "graveyard" && (!a.condition || this.evalCond(a.condition, { source: o, you: p, quiet: true }))))
         out.push({ variant: "normal", face: 0 }, ...this.altVariants(o, d, p));
     } else if (zone === "exile") {
       if (o.onAdventure && castable(d)) out.push({ variant: "normal", face: 0 });
       else if (this.mayPlayFromExile(o, p) && castable(d)) out.push({ variant: o.mayPlay.free ? "free" : "normal", face: 0 }, ...(o.mayPlay.free ? [] : this.altVariants(o, d, p)));
     }
+    this.m1Variants(o, zone, p, d, out);
     return out;
   },
 
@@ -150,7 +152,7 @@ export const actionMethods = {
   spellCost(p, o, v) {
     if (typeof v === "string") v = { variant: v, face: v === "adventure" || v === "face1" ? 1 : 0 };
     const fd = this.variantDef(o, v);
-    const kw = o.def.keywords || {};
+    const kw = this.m1Kws(o, p, o.def);
     const cs = (x) => (typeof x === "string" ? x : x && typeof x === "object" ? x.cost || x.mana || "" : "");
     let base;
     switch (v.variant) {
@@ -161,14 +163,15 @@ export const actionMethods = {
       case "mutate": base = cs(kw.mutate); break;
       case "morph": base = "{3}"; break;
       case "spectacle": base = cs(kw.spectacle); break;
-      default: base = fd.cost || "";
+      default: { const m1b = this.m1BaseCost(p, o, v, fd); base = m1b !== undefined ? m1b : fd.cost || ""; }
     }
     let c = parseManaCost(base);
     if (v.variant === "kicked") c = addCosts(c, parseManaCost(cs(kw.kicker)));
     if (v.variant === "commander") c.generic += 2 * (this.state.players[p].commanderCasts[o.id] | 0);
-    if (v.variant === "free") return c;
+    if (v.variant === "free" || v.variant === "plotted" || v.variant === "suspend") return c;
+    c = this.m1CostTweak(p, o, v, c, fd);
     // cost modifiers
-    let delta = 0;
+    let delta = this.m1CostDelta(p, o, v, fd);
     const view = this.spellView(o, fd, p);
     for (const s of this._statics) {
       if (s.st.type !== "costMod") continue;
@@ -176,6 +179,8 @@ export const actionMethods = {
       if (who === "you" && s.you !== p) continue;
       if (who === "opponent" && s.you === p) continue;
       if (s.st.filter && !this.matches(view, s.st.filter, { source: s.src, you: s.you }, "*")) continue;
+      if (s.st.fromZones && !s.st.fromZones.includes(o.zone)) continue;
+      if (s.st.notFromZone && s.st.notFromZone === o.zone) continue;
       delta += this.amount(s.st.amount ?? -1, { source: s.src, you: s.you });
     }
     for (const a of fd.abilities) {
@@ -205,7 +210,7 @@ export const actionMethods = {
   castCheck(p, o, v, sources, sorc) {
     const fd = this.variantDef(o, v);
     const pl = this.state.players[p];
-    const instant = fd.types.includes("instant") || this.hasKw({ c: { keywords: fd.keywords } }, "flash") || (pl.flashSorceries && fd.types.includes("sorcery"));
+    const instant = (fd.types.includes("instant") || this.hasKw({ c: { keywords: fd.keywords } }, "flash") || (pl.flashSorceries && fd.types.includes("sorcery"))) && !this.m1ForcesSorcery(v);
     if (!instant && !sorc) return null;
     const ctx = { source: o, you: p, quiet: true };
     if (fd.spell?.modes && v.variant !== "overload") {
@@ -214,16 +219,20 @@ export const actionMethods = {
       if (avail.length < Math.min(ms.min ?? 1, (ms.modes || []).length)) return null;
     }
     for (const t of this.targetSpecsFor(o, fd, v.variant)) if (this.targetCandidates(t, o, p, ctx).length < this.specMin(t, ctx)) return null;
-    const add = v.variant === "morph" ? null : withFlashbackCost(o.def, v, (v.variant === "escape" ? escapeCost(o.def) : null) || fd.additionalCost || (v.face ? null : o.def.additionalCost));
+    const add = v.variant === "morph" ? null : this.m1MergeAdd(o, v, fd, withFlashbackCost(o.def, v, (v.variant === "escape" ? escapeCost(o.def) : null) || fd.additionalCost || (v.face ? null : o.def.additionalCost)));
     const spend = { kind: "spell", view: this.spellView(o, fd, p), player: p };
     if (add && !this.canPayCost(p, add, o, { ...ctx, x: 0 }, { noMana: false, extraSources: sources, spend })) return null;
-    const cost = this.spellCost(p, o, v);
+    let cost = this.spellCost(p, o, v);
     const delve = o.def.keywords?.delve ? pl.graveyard.filter((id) => id !== o.id).length : 0;
+    cost = this.m1Relief(p, o, v, fd, cost);
+    if (!cost) return null;
     const plan = this.planPayment(p, { ...cost, x: 0 }, { sources, delve, spend });
     if (!plan) return null;
     const name = v.variant === "morph" ? o.def.name : fd.name;
     const suffix = { kicked: " (kicked)", overload: " (overload)", flashback: " (flashback)", escape: " (escape)", adventure: " (adventure)", commander: " from the command zone", free: " (without paying its mana cost)",
-      mutate: " for its mutate cost", morph: " face down (morph)", spectacle: " for its spectacle cost" }[v.variant] || "";
+      mutate: " for its mutate cost", morph: " face down (morph)", spectacle: " for its spectacle cost",
+      dash: " (dash)", evoke: " (evoke)", blitz: " (blitz)", emerge: " (emerge)", harmonize: " (harmonize)", retrace: " (retrace)", jumpstart: " (jump-start)",
+      aftermath: " (aftermath)", foretold: " (foretold)", plotted: " (plotted — free)", miracle: " (miracle)", madness: " (madness)" }[v.variant] || "";
     return { label: `Cast ${name}${suffix}`, costStr: costToString(cost), sac: plan.sacrifices || 0 };
   },
 
@@ -294,6 +303,7 @@ export const actionMethods = {
       if (this.tapOtherCands(p, cost.tapOther, src).length < n) return false;
     }
     if (cost.loyalty != null && typeof cost.loyalty === "number" && cost.loyalty < 0 && (!src || (src.counters.loyalty | 0) < -cost.loyalty)) return false;
+    if (cost.m1 && !this.m1CanPay(p, cost.m1, src, ctx)) return false;
     if (cost.mana && !opts.noMana) {
       const c = parseManaCost(cost.mana);
       const x = c.x ? (ctx.x | 0) : 0;
@@ -381,6 +391,7 @@ export const actionMethods = {
       ctx.crafted = ch.map((o) => (o.zone === "battlefield" ? this.snapshot(o) : o));
       for (const o of ch) this.moveObj(o, "exile");
     }
+    if (cost.m1 && !(yield* this.m1Pay$(p, cost.m1, src, ctx))) return false;
     if (cost.exileFromGraveyard) {
       const n = this.amount(cost.exileFromGraveyard, ctx);
       const ch = yield* this.chooseObjects$(p, this.gyExileCands(p, cost, src), { prompt: `Exile ${n} card${n > 1 ? "s" : ""} from your graveyard`, min: n, max: n, reason: "exile", source: src?.id });
@@ -513,7 +524,7 @@ export const actionMethods = {
     }
     // X
     const cost = this.spellCost(p, o, v);
-    const add0 = v.variant === "morph" ? null : withFlashbackCost(o.def, v, (v.variant === "escape" ? escapeCost(o.def) : null) || fd.additionalCost || (v.face ? null : o.def.additionalCost));
+    const add0 = v.variant === "morph" ? null : this.m1MergeAdd(o, v, fd, withFlashbackCost(o.def, v, (v.variant === "escape" ? escapeCost(o.def) : null) || fd.additionalCost || (v.face ? null : o.def.additionalCost)));
     const spend = { kind: "spell", view: this.spellView(o, fd, p), player: p };
     let x = 0;
     const delveN = o.def.keywords?.delve ? pl.graveyard.filter((id) => id !== o.id).length : 0;
@@ -521,7 +532,7 @@ export const actionMethods = {
       let max = cost.x ? this.maxX(p, cost, { delve: delveN }) : 0;
       if (!cost.x && add0) max = add0.life === "x" || add0.life === "X" ? pl.life : 20;
       if (max < 0) return;
-      x = yield* this.number$(p, `Choose X for ${fd.name}`, 0, max, o.id, { kind: "x", effects: fd.spell?.effects || [] });
+      x = yield* this.number$(p, `Choose X for ${fd.name}`, o.def.keywords?.kickerXMin1 && v.variant === "kicked" ? 1 : 0, max, o.id, { kind: "x", effects: fd.spell?.effects || [] });
     }
     ctx.x = x;
     // targets
@@ -531,6 +542,9 @@ export const actionMethods = {
     const division = specs.length ? yield* this.chooseDivision$(p, fd.spell?.effects || [], targets, o, ctx) : {};
     // pay
     let total = { ...cost, generic: cost.generic + x * cost.x, x: 0 };
+    const m1p = yield* this.m1PrePay$(p, o, v, fd, ctx, total, spend);
+    if (!m1p) return;
+    total = m1p.total;
     if (delveN && total.generic > 0) {
       let need = 0;
       while (need < Math.min(delveN, total.generic) && !this.planPayment(p, { ...total, generic: total.generic - need })) need++;
@@ -561,6 +575,7 @@ export const actionMethods = {
     o.face = v.face || 0;
     o.castVariant = v.variant;
     o.x = x; o.kicked = v.variant === "kicked";
+    this.m1OnCast(o, p, m1p.rec, spent);
     o.onAdventure = false; o.mayPlay = null; o.cmdPending = false;
     o.faceDown = v.variant === "morph";
     o.faceDownWard = o.faceDown && o.def.keywords?.disguise != null;
@@ -576,6 +591,7 @@ export const actionMethods = {
     const tgt = o.targets.length ? ` targeting ${o.targets.map((id) => this.nameOf(id)).join(", ")}` : "";
     this.emit({ t: "cast", obj: o.id, player: p, targets: [...o.targets], from, variant: v.variant, manaSpent: spent.n, text: `${pl.name} casts ${o.faceDown ? "a face-down creature spell" : o.c.name}${x ? ` (X=${x})` : ""}${v.variant === "kicked" ? " (kicked)" : v.variant === "mutate" ? " for its mutate cost" : v.variant === "spectacle" ? " for its spectacle cost" : ""}${tgt}` });
     this.fireTrigger({ type: "cast", obj: o, player: p, manaSpent: spent.n });
+    this.m1AfterCast(o, p, m1p.rec);
     this.afterTargeting(o);
     this.fireOnSpend(spent.units, spend, p);
   },
@@ -584,6 +600,7 @@ export const actionMethods = {
     const st = this.state;
     const o = act.objRef;
     if (act.variant === "faceUp") { yield* this.turnFaceUp$(p, o); return; }
+    if (typeof act.variant === "string" && act.variant.startsWith("m1:")) { yield* this.m1Activate$(p, act); return; }
     const ab = o.c.abilities[act.ability];
     if (!ab) return;
     if (ab.mana && !(ab.targets && ab.targets.length)) { yield* this.activateManaAbility$(p, o, act.ability, null, false); return; }

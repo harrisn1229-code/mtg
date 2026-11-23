@@ -5,6 +5,7 @@
 
 import { m3When } from "./parser-m3.js";
 import { Fail, fail, num, NUM_RE, COLORS, BASIC_LAND_TYPES, parseFilter, parseKeywordList, cmcOfCost, colorsOfCost, subtypeOf, KEYWORD_SET } from "./parser-filters.js";
+import { kwItemM1, M1_KW_START } from "./parser-m1.js";
 import { createCtx, parseEffects, parseCost, parseCond, splitTop, splitSentences, attempt, countOf, expr, maskQuotes } from "./parser-effects.js";
 
 const EVT_OBJ = { ref: "event", what: "object" };
@@ -55,6 +56,7 @@ function kwItem(item, kws) {
   const t = item.trim().replace(/[.]$/, "");
   const lt = t.toLowerCase();
   let m;
+  if (kwItemM1(t, kws, { parseCost: (x) => { try { return parseCost(x); } catch (e) { if (e instanceof Fail) return null; throw e; } }, parseFilter })) return true;
   if (SIMPLE_KW.has(lt) && KW_ACCEPT.has(lt)) { kws[lt] = true; return true; }
   if ((m = t.match(/^ward (\{[^}]+\}(?:\{[^}]+\})*|\d+)$/i))) { kws.ward = /^\d+$/.test(m[1]) ? `{${m[1]}}` : m[1]; return true; }
   if ((m = t.match(/^protection from (white|blue|black|red|green)((?: and from (?:white|blue|black|red|green))*)$/i))) {
@@ -102,10 +104,13 @@ function tryKeywordLine(L) {
   const kws = {};
   // looks like a keyword line only if the first item is (or begins like) a keyword
   const startsKw = items.length && (SIMPLE_KW.has(items[0].trim().toLowerCase()) || /^(?:ward|protection from|equip|cycling|flashback|kicker|echo|overload|annihilator|toxic|escape-|mutate|morph|megamorph|spectacle|craft with|afterlife|unearth|cascade|ascend|disguise|dredge|basic landcycling|(?:plains|island|swamp|mountain|forest)(?:walk|cycling))\b/i.test(items[0]) || UNSUPPORTED_KW_RE.test(items[0].trim()));
+  const m1Start = !startsKw && items.length && M1_KW_START.test(items[0].trim());
   if (/^flashback\s*[—-]/i.test(L)) { const kws2 = {}; return kwItem(L, kws2) ? { kws: kws2 } : { unparsed: true }; }
-  if (!startsKw) return null;
+  if (/^(?:escape|blitz)\s*[—-]/i.test(L)) { const kws2 = {}; return kwItem(L.replace(/[.]$/, ""), kws2) ? { kws: kws2 } : null; }
+  if (!startsKw && !m1Start) return null;
   for (const it of items) {
     if (!kwItem(it, kws)) {
+      if (m1Start) return null;
       if (/^escape-/i.test(it.trim())) return null;
       return { unparsed: true };
     }

@@ -29,6 +29,7 @@ import { actionMethods } from "./engine-actions.js";
 import { combatMethods } from "./engine-combat.js";
 import { extMethods } from "./engine-ext.js";
 import { installM3 } from "./engine-m3.js";
+import { m1Methods, M1_EXILE_VARIANTS } from "./engine-m1.js";
 
 export { STEPS, parseManaCost, costToString, costCmc, TOKENS, makeRng, describeCost, hasType };
 
@@ -451,7 +452,7 @@ export class Game {
       o.sick = true;
       o.damage = 0;
       o.ts = ++st.ts;
-      if (from !== "stack") { o.kicked = false; o.x = null; }
+      if (from !== "stack") { o.kicked = false; o.x = null; o.m1 = null; }
       const entry = opts.entry || this.defaultEntry(o, opts);
       if (entry.copy && entry.copy.def) o.copyDef = entry.copy.def;
       o.chosen = entry.chosen && Object.keys(entry.chosen).length ? { ...entry.chosen } : null;
@@ -474,7 +475,7 @@ export class Game {
       if (!opts.keepFace) o.face = 0;
       if (to !== "exile") o.onAdventure = false;
       o.mayPlay = null;
-      o.x = null; o.kicked = false; o.targets = []; o.castVariant = null;
+      o.x = null; o.kicked = false; o.targets = []; o.castVariant = null; if (!opts.keepM1) o.m1 = null;
       o.c = this.baseC(o);
       if (o.isCommander && to !== "command" && !opts.cmdAsked) o.cmdPending = true;
     } else {
@@ -573,7 +574,8 @@ export class Game {
       const o = this.state.objects[pl.library[pl.library.length - 1]];
       this.moveObj(o, "hand", { quiet: true });
       this.emit({ t: "draw", player: p, obj: o.id, text: `${pl.name} draws a card` });
-      this.fireTrigger({ type: "draw", player: p, obj: o });
+      const nth = this.m1OnDraw(p, o);
+      this.fireTrigger({ type: "draw", player: p, obj: o, nth });
       k++;
     }
     return k;
@@ -608,6 +610,7 @@ export class Game {
   }
   discardCard(o) {
     const p = o.owner;
+    if (this.m1OnDiscard(o)) return;
     this.moveObj(o, "graveyard", { quiet: true });
     this.emit({ t: "move", obj: o.id, from: "hand", to: "graveyard", player: p, text: `${this.pname(p)} discards ${o.c.name}` });
     this.fireTrigger({ type: "discard", player: p, obj: o });
@@ -705,6 +708,7 @@ export class Game {
       const src = t.copyOf;
       def = this.copiableDef(src);
       if (opts.nonLegendary) def = normalizeDef({ ...def, supertypes: def.supertypes.filter((s) => s !== "legendary"), faces: null });
+      if (opts.tokenOverride) def = normalizeDef({ ...def, ...opts.tokenOverride, faces: null });
     } else def = tokenDef(t);
     if (opts.power != null || opts.toughness != null) def = normalizeDef({ ...def, power: opts.power ?? def.power, toughness: opts.toughness ?? def.toughness, faces: null });
     for (let i = 0; i < n; i++) {
@@ -930,6 +934,7 @@ export class Game {
     }
     // internal ring triggers
     this.ringTriggers(evt);
+    this.m1Triggers(evt);
     // delayed triggers
     for (let i = 0; i < st.delayed.length; i++) {
       const d = st.delayed[i];
@@ -1346,7 +1351,7 @@ export class Game {
     if (!this.pruneTargets(o, ctx)) {
       this.removeFromStack(o);
       this.emit({ t: "countered", obj: o.id, text: `${o.c.name} fizzles (all targets illegal)` });
-      this.moveObj(o, o.castVariant === "flashback" || o.castVariant === "escape" ? "exile" : "graveyard", { quiet: true });
+      this.moveObj(o, o.castVariant === "flashback" || o.castVariant === "escape" || this.m1ExileLeaving(o) ? "exile" : "graveyard", { quiet: true, keepM1: false });
       return;
     }
     this.emit({ t: "resolve", obj: o.id, text: `${o.c.name} resolves` });
@@ -1356,8 +1361,10 @@ export class Game {
       const attachTo = isAura ? ctx.targets?.[0]?.[0] : null;
       if (o.isCopy) { o.isCopy = false; o.token = true; }
       yield* this.enter$(o, { controller: o.controller, attachTo, keepCast: true, counters: o.castVariant === "escape" && d.keywords?.escapeCounters ? { "+1/+1": d.keywords.escapeCounters } : undefined });
+      if (o.zone === "battlefield") yield* this.m1PostEnter$(o);
       return;
     }
+    if (o.m1 && o.m1.gift) yield* this.m1GiftOnResolve$(o);
     const spell = d.spell || {};
     if (typeof spell.run === "function") yield* spell.run(this, ctx);
     else {
@@ -1372,8 +1379,9 @@ export class Game {
     if (o.zone === "stack") {
       this.removeFromStack(o);
       if (o.isCopy) { o.zone = "gone"; return; }
-      const exileIt = o.castVariant === "flashback" || o.castVariant === "escape" || d.keywords?.exileOnResolve;
-      if (o.castVariant === "adventure") { this.moveObj(o, "exile", { quiet: true }); o.onAdventure = true; this.log(`${o.c.name} goes on an adventure`); }
+      const exileIt = o.castVariant === "flashback" || o.castVariant === "escape" || d.keywords?.exileOnResolve || this.m1ExileLeaving(o);
+      if (o.m1 && o.m1.buyback) this.moveObj(o, "hand", { quiet: true });
+      else if (o.castVariant === "adventure") { this.moveObj(o, "exile", { quiet: true }); o.onAdventure = true; this.log(`${o.c.name} goes on an adventure`); }
       else this.moveObj(o, exileIt ? "exile" : "graveyard", { quiet: true });
     }
   }
@@ -1382,7 +1390,7 @@ export class Game {
     return {
       source: o, you: o.controller, targets: o._targets || [], targetSpecs: o._targetSpecs || [], x: o.x | 0, kicked: !!o.kicked,
       modes: o._modes || [], sacrificed: o._sacrificed || [], overload: o.castVariant === "overload", overloadSpecs: this.faceDef(o).spell?.targets || [], it: [], prev: 0, event: null,
-      division: o._division || null, manaSpent: o.manaSpent | 0,
+      division: o._division || null, manaSpent: o.manaSpent | 0, m1: o.m1 || null,
     };
   }
 
@@ -1396,7 +1404,7 @@ export class Game {
     this.removeFromStack(o);
     this.emit({ t: "countered", obj: o.id, text: `${o.c.name} is countered${by?.c?.name ? ` by ${by.c.name}` : ""}` });
     if (o.isAbility || o.isCopy) o.zone = "gone";
-    else this.moveObj(o, o.castVariant === "flashback" || o.castVariant === "escape" ? "exile" : "graveyard", { quiet: true });
+    else this.moveObj(o, o.castVariant === "flashback" || o.castVariant === "escape" || this.m1ExileLeaving(o) ? "exile" : "graveyard", { quiet: true });
     return true;
   }
 
@@ -1559,6 +1567,7 @@ export class Game {
     st.extraCombats = 0;
     st.mainIndex = 0;
     for (const q of st.players) { q.landsPlayed = 0; q.lifeLostThisTurn = 0; q.lifeGainedThisTurn = 0; }
+    this.m1TurnReset();
     this.emit({ t: "turn", player: a, n: st.turn, text: `Turn ${st.turn} — ${pl.name}` });
     // untap
     yield* this.step$("untap");
@@ -1646,8 +1655,8 @@ export class Game {
 }
 
 // mixins
-Object.assign(Game.prototype, charMethods, manaMethods, effectMethods, actionMethods, combatMethods, extMethods);
-installM3(Game); // library batch m3 (energy, rad, monarch, voting, ...)
+Object.assign(Game.prototype, charMethods, manaMethods, effectMethods, actionMethods, combatMethods, extMethods, m1Methods);
+installM3(Game); // library batch m3 (energy, voting, investigate, manifest, ...) — wraps methods, so it runs after the mixins
 
 export function publicAction(a) {
   const o = { type: a.type, obj: a.obj, label: a.label, zone: a.zone };
