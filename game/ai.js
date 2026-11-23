@@ -13,6 +13,7 @@
 // The engine attaches non-enumerable `_hint` objects to some requests (target index + effects, modes, may-effects…);
 // the AI uses them to tell harmful from beneficial choices. Everything degrades gracefully without hints.
 
+import { m1CastScore, m1SpecialScore, m1Choose, m1Confirm, m1Number } from "./ai-m1.js";
 import { parseManaCost, costCmc, manaAvailable } from "./engine.js";
 
 const LEVEL = { easy: 0, normal: 1, hard: 2 };
@@ -910,6 +911,7 @@ export class Brain {
       const cd = this.castDef(a);
       if (!cd) return null;
       const { o, fd } = cd;
+      { const m1r = m1CastScore(this, a, i, o, fd); if (m1r !== undefined) return m1r; }
       if (a.variant === "mutate") return this.mutateScore(a, i, o, fd);
       if (a.variant === "morph") {
         if (!main) return null;
@@ -988,6 +990,7 @@ export class Brain {
       if (score <= 0) return null;
       return { a, i, score: score * noise, intent };
     }
+    if (a.type === "activate" && typeof a.variant === "string" && a.variant.startsWith("m1:")) return m1SpecialScore(this, a, i);
     if (a.type === "activate" && a.variant === "faceUp") {
       const o = this.O(a.obj);
       if (!o || !o.faceDown) return null;
@@ -1610,6 +1613,7 @@ export class Brain {
     const pickLow = (scores, min, max) => pickTop(scores.map((s) => -s), min, max, Infinity);
     const objOf = (opt) => (opt && opt.id && !isPid(opt.id) ? this.O(opt.id) : null);
     const intent = this.memo.intent && this.memo.intent.src === r.source ? this.memo.intent : null;
+    { const m1a = m1Choose(this, r, hint); if (m1a) return m1a; }
 
     switch (r.reason) {
       case "target": {
@@ -1826,6 +1830,7 @@ export class Brain {
     const r = this.req;
     const h = r._hint || {};
     const prompt = String(r.prompt || "");
+    { const m1a = m1Confirm(this, r, h); if (m1a !== undefined) return m1a; }
     if (h.kind === "commander" || /command zone\?/i.test(prompt)) return true;
     if (h.kind === "payToKeep") return true;
     if (h.kind === "ward") { const o = this.O(h.obj); return !o || this.stackValue(o) > 15; }
@@ -1884,6 +1889,7 @@ export class Brain {
     const r = this.req;
     const h = r._hint || {};
     const intent = this.memo.intent && this.memo.intent.src === r.source ? this.memo.intent : null;
+    { const m1a = m1Number(this, r, h); if (m1a !== undefined) return m1a; }
     if (h.kind === "divide") return this.divideNumber(r, h);
     if (h.kind === "x") {
       if (h.loyalty) return Math.max(r.min, Math.min(r.max, r.max - 1));
