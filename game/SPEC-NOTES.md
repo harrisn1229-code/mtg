@@ -215,3 +215,16 @@ Cards still to do are split into batches in `lib-ov/batches.json` (`m1`–`m4` =
 **Mechanics batches (m1–m4)** add the mechanic to the engine/parser (and AI decisions, and UI labels if a new prompt or zone needs one), then
 automate the batch's cards. Keep changes additive and local (new helpers/branches, no refactors) because several batches are merged together;
 note what you added under a short "Library automation: <batch>" subsection below.
+
+## Library automation: m2 (creature, combat and counter keywords)
+
+Code: `game/engine-m2.js` (methods mixed into `Game`, ops registered into `OPS`), `game/kw-synth.js` (engine-free keyword -> ability synthesis, called from `synthAbilities`), overrides in `game/lib-ov/m2.js`, tests in `game/test/lib-m2.test.js`.
+
+- Keyword synthesis (`kwSynth`): crew (activated, `cost:{crew:N}`, `synthetic:"crew"`, AI reason `crew`), evolve, exalted, battle cry, mentor, myriad, training, melee, dethrone, afflict, mobilize, living weapon, fabricate, squad (ETB `_squad` only; the cast-time repeat count prompt is not implemented), partner with (search only), ravenous, undaunted, station. Granted keywords (statics / `pump` with `keywords`) are synthesised in `m2Refresh` for the `GRANTABLE` set (adds annihilator, prowess, undying, persist).
+- Costs: `{E}` energy (`cost.energy`, `energyOk`), `cost.crew`, `cost.reduce`, `abilityCostMod` static.
+- Combat: extra combat phases (`extraCombat` op with `untapAll`/`mustAttack`/`noAttackPlayer`; `st.extraQueue`, `st.combatsThisTurn`), goad (`o.goads`, `goad`/`ungoad` ops, `goaded` static, expires at the goader's next untap), `exertOnAttack`, `noReattack`, `mustAttackPlayer`, `cantAttackPlayer`, `cantBlockControlledBy`, `attackDeclared` event, `exerted`/`enlisted` conds, stun counters (CR 122.1g).
+- Entry: devour and riot via `m2Entry$` / `m2ApplyEntry`; `entersWithCountersFor`.
+- Amount/cond extensions in `m2Amount` / `m2Cond` (e.g. `attackedOpponents`, `tappedPower`, `commanderCmc`, `cardTypesInGraveyards`, `firstAttack`, `firstCombat`, `creatureDiedThisTurn`, `stepIs`).
+- Other ops: `_monstrosity`, `populate`, `_discover`, `manifest` (`cloak:true`), `flipCoin`, `chooseParity`, `unattach`, `_removeFromCombat`.
+- Spell restriction `castRestrict` (a Cond) on a spell def.
+- AI: crew activation (main 1 / beginning of combat on own turn) and `crew` choice reason (cheapest creatures reaching the number).

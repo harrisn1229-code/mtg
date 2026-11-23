@@ -1005,6 +1005,11 @@ export class Brain {
       if (used >= cap && a.variant !== "equip") return null;
       if (a.variant === "equip") return this.equipScore(a, i, o);
       if (a.variant === "cycle") return this.cycleScore(a, i, o);
+      if (ab.synthetic === "crew") { // m2: crew a Vehicle on my turn before attackers (main 1 / beginning of combat), once
+        if (!myTurn || !(step === "main1" || step === "beginCombat") || this.isCre(o) || o.sick || o.tapped) return null;
+        if (num(o.def?.power) <= 0) return null;
+        return { a, i, score: 24 + num(o.def?.power) * 2 };
+      }
       const E = { p: this.p, src: o, x: 0 };
       let sacVictim = null;
       if (ab.cost?.sac) {
@@ -1641,6 +1646,13 @@ export class Brain {
         } else scores = opts.map((o) => this.candValueForRole(o.id, role, E));
         if (this.level === 0) scores = scores.map((s) => s * (0.7 + this.rng() * 0.6));
         return pickTop(scores, r.min, r.max, 0.5);
+      }
+      case "crew": { // m2: tap the cheapest set of creatures reaching the crew number (summoning-sick / low value first)
+        const need = hint.need | 0;
+        const ranked = opts.map((o, i) => { const x = objOf(o); return { i, pw: num(x?.c?.power), v: x ? this.objValue(x) + (x.sick ? -50 : 0) : 0 }; }).sort((a, b) => a.v - b.v);
+        const ch = []; let tot = 0;
+        for (const c of ranked) { if (tot >= need) break; ch.push(c.i); tot += c.pw; }
+        return { chosen: ch };
       }
       case "sacrifice": {
         if (intent && intent.sac) {
