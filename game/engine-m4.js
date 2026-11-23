@@ -104,6 +104,21 @@ export const m4Methods = {
     return d;
   },
 
+  // ================================================================ small continuous-effect hooks
+  /** Product of the {type:"tokenMult", factor} effects controlled by p ("if one or more tokens would be created under your control, twice that many are created instead"). */
+  tokenMult(p) { let f = 1; for (const s of this._statics || []) if (s.st.type === "tokenMult" && s.you === p) f *= +s.st.factor || 1; return f; },
+  /** Statics {type:"castFreeHand"} owned by p: "You may cast spells from your hand without paying their mana costs" (Tamiyo's emblem). */
+  castsFreeFromHand(p) { return (this._statics || []).some((s) => s.st.type === "castFreeHand" && s.you === p); },
+  /** Attack restriction from {type:"attackDir", dir:"left"|"right"} (Teyo): the defending players `a` may attack. null = no restriction. */
+  attackDirDefenders(a) {
+    const eff = (this._statics || []).filter((s) => s.st.type === "attackDir").pop();
+    if (!eff) return null;
+    const n = this.state.players.length;
+    const step = eff.st.dir === "right" ? -1 : 1;
+    for (let i = 1; i < n; i++) { const q = (a + step * i + n * 4) % n; if (!this.state.players[q].lost) return q; }
+    return null;
+  },
+
   // ================================================================ casting from a script
   /** Cast `o` (exile/graveyard/hand) now, paying its mana cost normally; `opts.spendAs` = "color" | "type" ("spend mana as though …"). True if it went on the stack. */
   *castPaid$(p, o, opts = {}) {

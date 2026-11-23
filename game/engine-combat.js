@@ -52,6 +52,8 @@ export const combatMethods = {
       // "can't attack you" statics (Fealty to the Realm, Champions of Minas Tirith)
       let defs = defenders;
       for (const s of this._statics) if (s.st.type === "cantAttackYou" && s.you !== a && this._affects(s, o)) defs = defs.filter((d) => d !== pid(s.you));
+      const dirQ = this.attackDirDefenders(a); // Teyo: only the nearest opponent in the chosen direction (and their planeswalkers)
+      if (dirQ != null) defs = defs.filter((d) => d === pid(dirQ) || this.state.objects[d]?.controller === dirQ);
       if (!defs.length) continue;
       out.push({ obj: o.id, defenders: [...defs] });
     }
@@ -68,6 +70,10 @@ export const combatMethods = {
     for (const c of cands) {
       const o = st.objects[c.obj];
       if (o.c.mustAttack && !attacks.some((x) => x.obj === c.obj)) attacks.push({ obj: c.obj, defender: c.defenders[0] });
+    }
+    for (const c of cands) for (const s of this._statics) if (s.st.type === "mustAttackObj" && s.you !== a && c.defenders.includes(s.st.obj)) { // Gideon Jura: attacks him if able
+      const i = attacks.findIndex((x) => x.obj === c.obj);
+      if (i >= 0) attacks[i] = { ...attacks[i], defender: s.st.obj }; else attacks.push({ obj: c.obj, defender: s.st.obj });
     }
     attacks = yield* this.attackTax$(a, attacks); // library m4: "can't attack you unless … pays"
     const list = [];

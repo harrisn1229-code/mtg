@@ -144,6 +144,11 @@ export const charMethods = {
       loyalty: d.loyalty, keywords: { ...d.keywords }, cost: d.cost, cmc: d.cmc, text: d.text, img: d.img || o.img || null,
       unparsed: d.unparsed, abilities: this.baseAbilities(o), identity: d.identity,
     };
+    if (o.zone !== "battlefield") for (const ab of d.abilities || []) if (ab.kind === "static" && ab.effect?.type === "typesOffBattlefield") { // Grist: "as long as ~ isn't on the battlefield, it's a 1/1 Insect creature in addition to its other types"
+      for (const t of ab.effect.addTypes || []) if (!c.types.includes(t)) c.types.push(t);
+      for (const t of ab.effect.addSubtypes || []) if (!c.subtypes.includes(t)) c.subtypes.push(t);
+      if (c.power == null) { c.power = ab.effect.power; c.toughness = ab.effect.toughness; }
+    }
     if (c.keywords.changeling) c.allCreatureTypes = true;
     if (c.keywords.devoid) c.colors = [];
     if (o.zone === "stack" && o.x != null && d.cost && /\{X\}/i.test(d.cost)) c.cmc = d.cmc + o.x * (d.cost.match(/\{X\}/gi) || []).length;
@@ -233,6 +238,7 @@ export const charMethods = {
         for (const t of s.st.addSubtypes || []) if (!c.subtypes.includes(t)) c.subtypes.push(String(t).toLowerCase());
         if (s.st.allCreatureTypes) c.allCreatureTypes = true;
         if (s.st.colors) c.colors = s.st.colors.map(colorLetter).filter(Boolean);
+        for (const col of s.st.addColors || []) { const L = colorLetter(col); if (L && !c.colors.includes(L)) c.colors.push(L); }
       }
     }
     // pass 2: abilities / keywords / rule flags
@@ -358,6 +364,7 @@ export const charMethods = {
     if (f.owner && !relMatch(o.owner, f.owner, you, this)) return false;
     if (f.token != null && !!o.token !== !!f.token) return false;
     if (f.nontoken && o.token) return false;
+    if (f.colored != null && ((c.colors || []).length > 0) !== !!f.colored) return false; // "one or more colors"
     if (f.colors && f.colors.length && !colorMatch(c.colors, f.colors)) return false;
     if (f.notColors && f.notColors.length && colorMatch(c.colors, f.notColors)) return false;
     if (f.cmc && typeof f.cmc === "object" && !cmp(c.cmc, f.cmc.op, this.amount(f.cmc.n, ctx))) return false;

@@ -430,7 +430,7 @@ export class Game {
       o.tapped = false; o.damage = 0; o.deathtouched = false; o.counters = {}; o.sick = false; o.echoDue = false;
       o.controller = o.owner; o.baseController = o.owner; o.loyaltyUsed = null; o.activations = null;
       if (o.pile && o.pile.length > 1) o._leftPile = o.pile.filter((id) => id !== o.id);
-      o.pile = null; o.mergeDef = null; o.formDef = null; o.medModes = null; o.chosen = null; o.phasedIndirect = false; o.phasedController = null;
+      o.pile = null; o.mergeDef = null; o.formDef = null; o.medModes = null; o.copyRevert = null; o.chosen = null; o.phasedIndirect = false; o.phasedController = null;
       if (!o.token) o.copyDef = null;
     }
     if (o.faceDown && !(from === "stack" && to === "battlefield") && !(from === "exile" && to === "exile")) {
@@ -578,12 +578,16 @@ export class Game {
     const pl = this.state.players[p];
     if (!pl || pl.lost) return 0;
     let k = 0;
+    const limit1 = this._statics && this._statics.some((s) => s.st.type === "drawLimit" && s.you !== p); // Narset, Parter of Veils
     for (let i = 0; i < n; i++) {
+      if (!pl.drawsT || pl.drawsT.turn !== this.state.turn) pl.drawsT = { turn: this.state.turn, n: 0 };
+      if (limit1 && pl.drawsT.n >= 1) break;
       if (!pl.library.length) { pl.drewFromEmpty = true; break; }
+      pl.drawsT.n++;
       const o = this.state.objects[pl.library[pl.library.length - 1]];
       this.moveObj(o, "hand", { quiet: true });
       this.emit({ t: "draw", player: p, obj: o.id, text: `${pl.name} draws a card` });
-      this.fireTrigger({ type: "draw", player: p, obj: o });
+      this.fireTrigger({ type: "draw", player: p, obj: o, nth: pl.drawsT.n });
       k++;
     }
     return k;
@@ -723,6 +727,7 @@ export class Game {
       def = this.copiableDef(src);
       if (opts.nonLegendary) def = normalizeDef({ ...def, supertypes: def.supertypes.filter((s) => s !== "legendary"), faces: null });
     } else def = tokenDef(t);
+    n = n * this.tokenMult(p); // library m4: Kaya's token doubling
     if (opts.power != null || opts.toughness != null) def = normalizeDef({ ...def, power: opts.power ?? def.power, toughness: opts.toughness ?? def.toughness, faces: null });
     for (let i = 0; i < n; i++) {
       const o = this.newObj(null, def, p, "none");
@@ -1614,7 +1619,7 @@ export class Game {
     yield* this.step$("untap");
     this.expireEffects("yourNextTurn", a);
     this.phaseIn(a);
-    for (const id of st.battlefield) { const o = st.objects[id]; if (o.controller === a) { o.sick = false; if (o.tapped && !this.hasKw(o, "doesn't untap") && !o.c.doesntUntap) this.untap(o, true); } }
+    for (const id of st.battlefield) { const o = st.objects[id]; if (o.controller === a) { o.sick = false; if (o.skipUntap) { o.skipUntap = false; this.log(`${o.c.name} doesn't untap`); } else if (o.tapped && !this.hasKw(o, "doesn't untap") && !o.c.doesntUntap) this.untap(o, true); } }
     this.markDirty();
     this.refresh();
     // upkeep
@@ -1694,6 +1699,7 @@ export class Game {
       if (kind === "yourNextTurn") for (const d of st.delayed) if (d.untilEndOfTurnOf === player && d.armedTurn == null) d.armedTurn = st.turn; // that player's turn has begun
       if (kind === "endOfTurn") st.delayed = st.delayed.filter((d) => d.armedTurn !== st.turn);
     }
+    if (kind === "endOfTurn") for (const id of st.battlefield) { const o = st.objects[id]; if (o && o.copyRevert) { o.copyDef = o.copyRevert.prev; o.copyRevert = null; this.markDirty(); } } // "becomes a copy of … until end of turn" (Saheeli)
     const before = st.controlEffects.length;
     st.controlEffects = st.controlEffects.filter(keep);
     if (before !== st.controlEffects.length) for (const id of st.battlefield) st.objects[id].sick = st.objects[id].sick; // controller recomputed in refresh

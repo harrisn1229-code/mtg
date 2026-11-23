@@ -118,7 +118,7 @@ export const actionMethods = {
         if (cs(kw.overload)) out.push({ variant: "overload", face: 0 });
         out.push(...this.altVariants(o, d, p));
       }
-      if (this.hasStaticOn(d, "castFree", { source: o, you: p })) out.push({ variant: "free", face: 0 });
+      if (this.hasStaticOn(d, "castFree", { source: o, you: p }) || (castable(d) && this.castsFreeFromHand(p))) out.push({ variant: "free", face: 0 });
       if (d.faces && d.faces[1]) {
         if (d.layout === "adventure" && castable(d.faces[1])) out.push({ variant: "adventure", face: 1 });
         else if (d.layout === "mdfc" && castable(d.faces[1])) out.push({ variant: "face1", face: 1 });
