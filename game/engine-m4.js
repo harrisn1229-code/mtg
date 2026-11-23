@@ -4,7 +4,7 @@
 //   * the monarch, rad counters, per-step turn-based actions                         -> becomeMonarch, m4StepStart
 //   * temporary triggered abilities ("until your next turn, whenever …")             -> addTempTrigger
 // Every generator ends in `$` and is called with `yield*`.
-import { normalizeDef } from "./engine-util.js";
+import { normalizeDef, parseManaCost } from "./engine-util.js";
 
 const isPid = (id) => typeof id === "string" && /^P\d+$/.test(id);
 
@@ -96,4 +96,43 @@ export const m4Methods = {
     d.until = until;
     return d;
   },
+
+  // ================================================================ casting from a script
+  /** Cast `o` (exile/graveyard/hand) now, paying its mana cost normally; `opts.spendAs` = "color" | "type" ("spend mana as though …"). True if it went on the stack. */
+  *castPaid$(p, o, opts = {}) {
+    if (!o || o.zone === "gone" || o.zone === "stack" || !o.def || o.def.types.includes("land")) return false;
+    const v = { variant: "normal", face: 0, ...(opts.spendAs ? { spendAs: opts.spendAs } : {}) };
+    let cost;
+    try { cost = this.spellCost(p, o, v); } catch { return false; }
+    if (!cost || (!cost.x && !this.canPayMana(p, { ...cost, x: 0 }))) return false;
+    yield* this.cast$(p, { type: "cast", obj: o.id, objRef: o, _v: v });
+    return o.zone === "stack";
+  },
+
+  // ================================================================ attack costs ("can't attack you unless …pays {2} for each")
+  /** Filter the declared attacks by the attack-tax statics ({type:"attackTax", amount}) protecting a player: the attacker pays
+   *  `amount` generic per taxed creature; creatures it can't pay for are dropped (it chooses which). Returns the attacks that remain. */
+  *attackTax$(a, attacks) {
+    const st = this.state;
+    const taxes = this._statics.filter((s) => s.st.type === "attackTax");
+    if (!taxes.length || !attacks.length) return attacks;
+    const per = (at) => taxes.reduce((n, s) => n + (at.defender === "P" + s.you && s.you !== a ? (+s.st.amount || 0) : 0), 0);
+    const taxed = attacks.filter((at) => per(at) > 0);
+    if (!taxed.length) return attacks;
+    const total = (list) => list.reduce((n, at) => n + per(at), 0);
+    const can = (n) => n <= 0 || this.canPayMana(a, { ...this.parseCost(`{${n}}`), x: 0 });
+    let keep = [...taxed];
+    if (!can(total(keep))) {
+      let max = 0;
+      while (max < keep.length && can(total(keep.slice(0, max + 1)))) max++;
+      const drop = keep.length - max;
+      const objs = keep.map((at) => st.objects[at.obj]);
+      const dropped = drop > 0 ? yield* this.chooseObjects$(a, objs, { prompt: `You can't pay the attack cost for every creature — choose ${drop} that won't attack`, min: drop, max: drop, reason: "generic" }) : [];
+      keep = keep.filter((at) => !dropped.some((o) => o.id === at.obj));
+    }
+    const n = total(keep);
+    if (n > 0) { this.log(`${this.pname(a)} pays {${n}} to attack`); yield* this.payMana$(a, { ...this.parseCost(`{${n}}`), x: 0 }); }
+    return attacks.filter((at) => per(at) <= 0 || keep.includes(at));
+  },
+  parseCost(str) { return parseManaCost(str); },
 };

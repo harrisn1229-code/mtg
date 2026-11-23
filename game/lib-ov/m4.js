@@ -224,4 +224,264 @@ export default {
         },
       }],
     })),
+
+  // ---- Final Fantasy "Summon" Sagas
+  "Summon: Kujata": saga(
+    chapter([1], "I — Lightning — This creature deals 3 damage to each of up to two target creatures.", {
+      targets: [{ what: { types: ["creature"] }, min: 0, max: 2 }],
+      effects: [{ op: "damage", amount: 3, to: T(0) }],
+    }),
+    chapter([3], "III — Fire — Discard a card, then draw two cards. When you discard a card this way, this creature deals damage equal to that card's mana value to each opponent.", {
+      effects: [{
+        op: "fire",
+        run: function* (g, ctx) {
+          const p = ctx.you, src = ctx.source;
+          let mv = null;
+          const hand = g.state.players[p].hand.map((id) => g.obj(id));
+          if (hand.length) {
+            const [d] = yield* g.chooseObjects$(p, hand, { prompt: "Summon: Kujata — discard a card", min: 1, max: 1, reason: "discard", source: src?.id });
+            if (d) { mv = d.def.cmc | 0; g.discardCard(d); }
+          }
+          yield* g.drawCards$(p, 2);
+          if (mv != null) g.pendInternal(src, p, { kind: "triggered", text: "When you discard a card this way, this creature deals damage equal to that card's mana value to each opponent.",
+            run: function* (g2, c2) { for (const q of g2.opponentsOf(c2.you)) g2.dealDamage(src, "P" + q, mv); } }, null);
+        },
+      }],
+    })),
+
+  "Summon: Ixion": saga(chapter([2, 3], "II, III — Put a +1/+1 counter on each of up to two target creatures you control. You gain 2 life.", {
+    targets: [{ what: { types: ["creature"], controller: "you" }, min: 0, max: 2 }],
+    effects: [{ op: "addCounters", what: T(0), kind: "+1/+1", amount: 1 }, { op: "gainLife", who: "you", amount: 2 }],
+  })),
+
+  "Summon: Yojimbo": saga(
+    chapter([2, 3], "II, III — Until your next turn, creatures can't attack you unless their controller pays {2} for each of those creatures.", {
+      effects: [{ op: "attackTax", run: function* (g, ctx) { g.addEffect({ type: "attackTax", amount: 2 }, ctx, { until: "yourNextTurn" }); } }],
+    }),
+    chapter([4], "IV — Create X Treasure tokens, where X is the number of opponents who control a creature with power 4 or greater.", {
+      effects: [{ op: "treasures", run: function* (g, ctx) {
+        const x = opps(g, ctx).filter((q) => g.find({ types: ["creature"], power: { op: ">=", n: 4 } }, ctx).some((o) => o.controller === q)).length;
+        if (x) g.createToken(ctx.you, "treasure", x);
+      } }],
+    })),
+
+  "Summon: Valefor": saga(chapter([1], "I — Sonic Wings — Each opponent chooses a creature with the greatest mana value among creatures they control. Return those creatures to their owners' hands.", {
+    effects: [{ op: "sonicWings", run: function* (g, ctx) {
+      const picked = [];
+      for (const q of g.apnap(opps(g, ctx))) {
+        const mine = g.find({ types: ["creature"] }, ctx).filter((o) => o.controller === q);
+        if (!mine.length) continue;
+        const top = Math.max(...mine.map((o) => o.c.cmc | 0));
+        const [c] = yield* g.chooseObjects$(q, mine.filter((o) => (o.c.cmc | 0) === top), { prompt: "Sonic Wings — choose a creature with the greatest mana value you control", min: 1, max: 1, reason: "return", source: ctx.source?.id });
+        if (c) picked.push(c);
+      }
+      for (const c of picked) g.bounce(c);
+    } }],
+  })),
+
+  "Summon: Magus Sisters": saga(chapter([1, 2, 3], "I, II, III — Choose one at random — • Combine Powers! — Put three +1/+1 counters on target creature. • Defense! — Put a shield counter on target creature. You gain 3 life. • Fight! — This creature fights up to one target creature an opponent controls.", {
+    effects: [],
+    modes: { min: 1, max: 1, random: true, modes: [
+      { text: "Combine Powers! — Put three +1/+1 counters on target creature.", targets: [{ what: { types: ["creature"] } }], effects: [{ op: "addCounters", what: T(0), kind: "+1/+1", amount: 3 }] },
+      { text: "Defense! — Put a shield counter on target creature. You gain 3 life.", targets: [{ what: { types: ["creature"] } }], effects: [{ op: "addCounters", what: T(0), kind: "shield", amount: 1 }, { op: "gainLife", who: "you", amount: 3 }] },
+      { text: "Fight! — This creature fights up to one target creature an opponent controls.", targets: [{ what: { types: ["creature"], controller: "opponent" }, min: 0, max: 1 }], effects: [{ op: "fight", a: "self", b: T(0) }] },
+    ] },
+  })),
+
+  "Summon: Esper Valigarmanda": saga(
+    chapter([1], "I — Exile an instant or sorcery card from each graveyard.", {
+      effects: [{ op: "exileSpells", run: function* (g, ctx) {
+        const src = g.obj(ctx.source.id);
+        const ids = [];
+        for (const q of g.state.players) {
+          const cands = q.graveyard.map((id) => g.obj(id)).filter((o) => o && (o.def.types.includes("instant") || o.def.types.includes("sorcery")));
+          if (!cands.length) continue;
+          const [c] = yield* g.chooseObjects$(ctx.you, cands, { prompt: `Esper Valigarmanda — exile an instant or sorcery card from ${q.name}'s graveyard`, min: 1, max: 1, reason: "exile", source: src?.id });
+          if (c && g.moveObj(c, "exile")) ids.push(c.id);
+        }
+        if (src) src.exiledWith = { ts: src.ts, ids: [...(src.exiledWith?.ts === src.ts ? src.exiledWith.ids : []), ...ids] };
+      } }],
+    }),
+    chapter([2, 3, 4], "II, III, IV — Add {R} for each lore counter on this Saga. You may cast an instant or sorcery card exiled with this Saga, and mana of any type can be spent to cast that spell.", {
+      effects: [{ op: "addMana", mana: { color: "R", n: { countersOn: "self", kind: "lore" } } }, { op: "castExiled", run: function* (g, ctx) {
+        const src = g.obj(ctx.source.id);
+        if (!src || src.exiledWith?.ts !== src.ts) return;
+        const cands = src.exiledWith.ids.map((id) => g.obj(id)).filter((o) => o && o.zone === "exile");
+        const ok = [];
+        for (const o of cands) { try { const c = g.spellCost(ctx.you, o, { variant: "normal", face: 0, spendAs: "type" }); if (g.canPayMana(ctx.you, { ...c, x: 0 })) ok.push(o); } catch { /* not castable */ } }
+        if (!ok.length) return;
+        const [c] = yield* g.chooseObjects$(ctx.you, ok, { prompt: "Esper Valigarmanda — you may cast an exiled instant or sorcery card (any type of mana can pay)", min: 0, max: 1, reason: "exile", source: src.id });
+        if (c) yield* g.castPaid$(ctx.you, c, { spendAs: "type" });
+      } }],
+    })),
+
+  "Summon: Good King Mog XII": saga(chapter([2, 3], "II, III — Whenever you cast a noncreature spell this turn, create a token that's a copy of a non-Saga token you control.", {
+    effects: [{ op: "mogTrigger", run: function* (g, ctx) {
+      g.addTempTrigger({ event: "cast", who: "you", filter: { notTypes: ["creature"] } }, function* (g2, c2) {
+        const toks = g2.find({ token: true, controller: "you", notSubtypes: ["saga"] }, c2);
+        if (!toks.length) return;
+        const [t] = yield* g2.chooseObjects$(c2.you, toks, { prompt: "Choose a non-Saga token you control to copy", min: 1, max: 1, reason: "generic", source: c2.source?.id });
+        if (t) g2.createToken(c2.you, { copyOf: t }, 1);
+      }, ctx, "endOfTurn");
+    } }],
+  })),
+
+  // ---- other Sagas
+  "The Mending of Dominaria": saga(
+    chapter([1, 2], "I, II — Mill two cards, then you may return a creature card from your graveyard to your hand.", {
+      effects: [{ op: "mill", who: "you", amount: 2 }, { op: "may", effects: [{ op: "move", what: { ref: "choose", filter: { zone: "graveyard", owner: "you", types: ["creature"] }, min: 1, max: 1, reason: "return", prompt: "Return a creature card from your graveyard to your hand" }, to: "hand" }] }],
+    }),
+    chapter([3], "III — Return all land cards from your graveyard to the battlefield, then shuffle your graveyard into your library.", {
+      effects: [{ op: "move", what: { ref: "all", filter: { zone: "graveyard", owner: "you", types: ["land"] } }, to: "battlefield" }, {
+        op: "shuffleGraveyard",
+        run: function* (g, ctx) {
+          const p = ctx.you;
+          for (const id of [...g.state.players[p].graveyard]) { const o = g.obj(id); if (o) yield* g.moveTo$(o, "library", { position: "top", quiet: true }); }
+          g.shuffle(p);
+        },
+      }],
+    })),
+
+  "King Narfi's Betrayal": saga(
+    chapter([1], "I — Each player mills four cards. Then you may exile a creature or planeswalker card from each graveyard.", {
+      effects: [{ op: "mill", who: "eachPlayer", amount: 4 }, { op: "exileFromYards", run: function* (g, ctx) {
+        const src = g.obj(ctx.source.id);
+        const ids = [];
+        for (const q of g.state.players) {
+          const cands = q.graveyard.map((id) => g.obj(id)).filter((o) => o && (o.def.types.includes("creature") || o.def.types.includes("planeswalker")));
+          if (!cands.length) continue;
+          const [c] = yield* g.chooseObjects$(ctx.you, cands, { prompt: `King Narfi's Betrayal — you may exile a creature or planeswalker card from ${q.name}'s graveyard`, min: 0, max: 1, reason: "exile", source: src?.id });
+          if (c && g.moveObj(c, "exile")) ids.push(c.id);
+        }
+        if (src) src.exiledWith = { ts: src.ts, ids: [...(src.exiledWith?.ts === src.ts ? src.exiledWith.ids : []), ...ids] };
+      } }],
+    }),
+    chapter([2, 3], "II, III — Until end of turn, you may cast spells from among cards exiled with this Saga, and you may spend mana as though it were mana of any color to cast those spells.", {
+      effects: [{ op: "grantCast", run: function* (g, ctx) {
+        const src = g.obj(ctx.source.id);
+        if (!src || src.exiledWith?.ts !== src.ts) return;
+        for (const id of src.exiledWith.ids) { const o = g.obj(id); if (o && o.zone === "exile") o.mayPlay = { player: ctx.you, untilTurn: g.state.turn, spendAs: "color" }; }
+        g.markDirty();
+      } }],
+    })),
+
+  "Battle at the Helvault": saga(
+    chapter([1, 2], "I, II — For each player, exile up to one target non-Saga, nonland permanent that player controls until this Saga leaves the battlefield.", {
+      targets: perPlayerSpecs({ notTypes: ["land"], notSubtypes: ["saga"] }),
+      effects: [{ op: "exileUntilLeaves", run: exileUntilLeaves$ }],
+    }),
+    chapter([3], "III — Create Avacyn, a legendary 8/8 white Angel creature token with flying, vigilance, and indestructible.", {
+      effects: [{ op: "createToken", who: "you", token: { ...tok("Avacyn", ["creature"], ["angel"], ["W"], 8, 8, { flying: true, vigilance: true, indestructible: true }), supertypes: ["legendary"] }, amount: 1 }],
+    })),
+
+  "Battle for Bretagard": saga(chapter([3], "III — Choose any number of artifact tokens and/or creature tokens you control with different names. For each of them, create a token that's a copy of it.", {
+    effects: [{ op: "copyTokens", run: function* (g, ctx) {
+      const all = g.find({ token: true, controller: "you", anyOf: [{ types: ["artifact"] }, { types: ["creature"] }] }, ctx);
+      const byName = new Map();
+      for (const o of all) if (!byName.has(o.c.name)) byName.set(o.c.name, o);
+      const cands = [...byName.values()];
+      if (!cands.length) return;
+      const picked = yield* g.chooseObjects$(ctx.you, cands, { prompt: "Battle for Bretagard — choose any number of artifact/creature tokens with different names to copy", min: 0, max: cands.length, reason: "generic", source: ctx.source?.id });
+      for (const t of picked) g.createToken(ctx.you, { copyOf: t }, 1);
+    } }],
+  })),
+
+  "Love Song of Night and Day": saga(
+    chapter([1], "I — You and target opponent each draw two cards.", {
+      targets: [{ what: "opponent" }],
+      effects: [{ op: "draw", who: "you", amount: 2 }, { op: "draw", who: T(0), amount: 2 }],
+    }),
+    chapter([3], "III — Put a +1/+1 counter on each of up to two target creatures.", {
+      targets: [{ what: { types: ["creature"] }, min: 0, max: 2 }],
+      effects: [{ op: "addCounters", what: T(0), kind: "+1/+1", amount: 1 }],
+    })),
+
+  "The Eldest Reborn": saga(chapter([3], "III — Put target creature or planeswalker card from a graveyard onto the battlefield under your control.", {
+    targets: [{ what: { zone: "graveyard", types: ["creature", "planeswalker"] }, zone: "graveyard" }],
+    effects: [{ op: "move", what: T(0), to: "battlefield", control: "you" }],
+  })),
+
+  "The Binding of the Titans": saga(chapter([2], "II — Exile up to two target cards from graveyards. For each creature card exiled this way, you gain 1 life.", {
+    targets: [{ what: { zone: "graveyard" }, zone: "graveyard", min: 0, max: 2 }],
+    effects: [{ op: "exileGain", run: function* (g, ctx) {
+      let n = 0;
+      for (const id of ctx.targets?.[0] || []) { const o = g.obj(id); if (o && o.zone === "graveyard") { const cre = o.def.types.includes("creature"); if (g.moveObj(o, "exile") && cre) n++; } }
+      if (n) g.gainLife(ctx.you, n);
+    } }],
+  })),
+
+  "The First Tyrannic War": saga(
+    chapter([1], "I — You may put a creature card from your hand onto the battlefield. If its mana cost contains {X}, it enters with a number of +1/+1 counters on it equal to the number of lands you control.", {
+      effects: [{ op: "putCreature", run: function* (g, ctx) {
+        const p = ctx.you;
+        const hand = g.state.players[p].hand.map((id) => g.obj(id)).filter((o) => o && o.def.types.includes("creature"));
+        if (!hand.length) return;
+        const [c] = yield* g.chooseObjects$(p, hand, { prompt: "The First Tyrannic War — you may put a creature card from your hand onto the battlefield", min: 0, max: 1, reason: "return", source: ctx.source?.id });
+        if (!c) return;
+        const lands = g.find({ types: ["land"], controller: "you" }, ctx).length;
+        yield* g.moveTo$(c, "battlefield", { controller: p, ...(/\{X\}/i.test(c.def.cost || "") && lands ? { counters: { "+1/+1": lands } } : {}) });
+      } }],
+    }),
+    chapter([2, 3], "II, III — Double the number of each kind of counter on target creature you control.", {
+      targets: [{ what: { types: ["creature"], controller: "you" } }],
+      effects: [{ op: "doubleCounters", run: function* (g, ctx) {
+        const o = g.obj((ctx.targets?.[0] || [])[0]);
+        if (!o || o.zone !== "battlefield") return;
+        for (const [k, n] of Object.entries({ ...o.counters })) g.addCounters(o, k, n);
+      } }],
+    })),
+
+  "The Horus Heresy": saga(
+    chapter([1], "I — For each opponent, gain control of up to one target nonlegendary creature that player controls for as long as this Saga remains on the battlefield.", {
+      targets: [{ what: { types: ["creature"], controller: "opponent", notSupertypes: ["legendary"] }, min: 0, max: 1 }],
+      effects: [{ op: "gainControl", what: T(0), until: "sourceOnBattlefield" }],
+    }),
+    chapter([2], "II — Draw a card for each creature you control but don't own.", {
+      effects: [{ op: "draw", who: "you", amount: { count: { types: ["creature"], controller: "you", owner: "opponent" } } }],
+    }),
+    chapter([3], "III — Starting with you, each player chooses a creature. Destroy each creature chosen this way.", {
+      effects: [{ op: "chooseAndDestroy", run: function* (g, ctx) {
+        const creatures = g.find({ types: ["creature"] }, ctx);
+        const order = g.apnap(g.state.players.filter((q) => !q.lost).map((q) => q.idx));
+        const i = order.indexOf(ctx.you);
+        const ring = i > 0 ? [...order.slice(i), ...order.slice(0, i)] : order;
+        const chosen = [];
+        for (const q of ring) {
+          if (!creatures.length) break;
+          const [c] = yield* g.chooseObjects$(q, creatures, { prompt: "The Horus Heresy — choose a creature (it will be destroyed)", min: 1, max: 1, reason: "target", source: ctx.source?.id });
+          if (c && !chosen.includes(c)) chosen.push(c);
+        }
+        for (const c of chosen) g.destroy(c);
+      } }],
+    })),
+
+  "The War in Heaven": saga(chapter([3], "III — Choose up to three target creature cards with total mana value 8 or less in your graveyard. Return each of them to the battlefield with a necrodermis counter on it. They're artifacts in addition to their other types.", {
+    targets: [{ what: { zone: "graveyard", owner: "you", types: ["creature"] }, zone: "graveyard", min: 0, max: 3, totalCmc: 8 }],
+    effects: [{ op: "necrodermis", run: function* (g, ctx) {
+      for (const id of ctx.targets?.[0] || []) {
+        const o = g.obj(id);
+        if (!o || o.zone !== "graveyard") continue;
+        yield* g.moveTo$(o, "battlefield", { controller: ctx.you, counters: { necrodermis: 1 } });
+        if (o.zone === "battlefield") g.addEffect({ type: "asType", addTypes: ["artifact"] }, ctx, { objIds: [o.id], until: "forever" });
+      }
+    } }],
+  })),
+
+  "Birth of the Imperium": saga(chapter([3], "III — Draw two cards for each opponent who controls fewer creatures than you.", {
+    effects: [{ op: "drawFewer", run: function* (g, ctx) {
+      const mine = g.find({ types: ["creature"], controller: "you" }, ctx).length;
+      const n = opps(g, ctx).filter((q) => g.find({ types: ["creature"] }, ctx).filter((o) => o.controller === q).length < mine).length;
+      if (n) yield* g.drawCards$(ctx.you, 2 * n);
+    } }],
+  })),
+
+  "The Elder Dragon War": saga(chapter([2], "II — Discard any number of cards, then draw that many cards.", {
+    effects: [{ op: "rummage", run: function* (g, ctx) {
+      const hand = g.state.players[ctx.you].hand.map((id) => g.obj(id));
+      if (!hand.length) return;
+      const ch = yield* g.chooseObjects$(ctx.you, hand, { prompt: "The Elder Dragon War — discard any number of cards, then draw that many", min: 0, max: hand.length, reason: "discard", source: ctx.source?.id });
+      for (const o of ch) g.discardCard(o);
+      if (ch.length) yield* g.drawCards$(ctx.you, ch.length);
+    } }],
+  })),
 };

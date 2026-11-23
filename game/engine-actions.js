@@ -9,6 +9,17 @@ const pid = (i) => "P" + i;
 const PERM = ["artifact", "battle", "creature", "enchantment", "land", "planeswalker"];
 const isPerm = (d) => d.types.some((t) => PERM.includes(t));
 
+/** "Spend mana as though it were mana of any color" ("color": colorless still can't pay a colored symbol) / "of any type" (colored symbols become generic). */
+function spendAsCost(c, how) {
+  const out = { ...c, hybrid: [...(c.hybrid || [])] };
+  for (const k of ["W", "U", "B", "R", "G"]) {
+    for (let i = 0; i < (out[k] | 0); i++) { if (how === "type") out.generic += 1; else out.hybrid.push(["W", "U", "B", "R", "G"]); }
+    out[k] = 0;
+  }
+  if (how === "type") { out.generic += out.C | 0; out.C = 0; out.generic += out.hybrid.length; out.hybrid = []; }
+  return out;
+}
+
 export const actionMethods = {
   // ---------------------------------------------------------------- enumeration
   /** Internal action list for player p (each has objRef). Only legal + affordable actions. */
@@ -120,7 +131,7 @@ export const actionMethods = {
         out.push({ variant: "normal", face: 0 }, ...this.altVariants(o, d, p));
     } else if (zone === "exile") {
       if (o.onAdventure && castable(d)) out.push({ variant: "normal", face: 0 });
-      else if (this.mayPlayFromExile(o, p) && castable(d)) out.push({ variant: o.mayPlay.free ? "free" : "normal", face: 0 }, ...(o.mayPlay.free ? [] : this.altVariants(o, d, p)));
+      else if (this.mayPlayFromExile(o, p) && castable(d)) out.push({ variant: o.mayPlay.free ? "free" : "normal", face: 0, ...(o.mayPlay.spendAs ? { spendAs: o.mayPlay.spendAs } : {}) }, ...(o.mayPlay.free ? [] : this.altVariants(o, d, p)));
     }
     return out;
   },
@@ -185,6 +196,7 @@ export const actionMethods = {
       delta += per * this.amount(a.effect.amount ?? -1, ctx);
     }
     if (delta) c.generic = Math.max(0, c.generic + delta);
+    if (v.spendAs) c = spendAsCost(c, v.spendAs);
     return c;
   },
 
@@ -451,6 +463,21 @@ export const actionMethods = {
       const min = this.specMin(spec, ctx), max = Math.min(this.specMax(spec, ctx), cands.length);
       if (cands.length < min) return null;
       if (max <= 0) { out.push([]); continue; }
+      if (spec.totalCmc != null) { // "…with total mana value N or less": pick one at a time among the cards that still fit
+        const picked = [];
+        let left = spec.totalCmc | 0;
+        while (picked.length < max) {
+          const fit = cands.filter((id) => !picked.includes(id) && ((this.state.objects[id]?.def?.cmc | 0) <= left));
+          if (!fit.length) break;
+          const options1 = fit.map((id) => ({ id, label: this.objLabel(this.state.objects[id], p), type: "object" }));
+          const ch1 = yield* this.choose$(p, { prompt: `Choose target ${picked.length + 1} for ${src?.c?.name || "ability"} (total mana value ${left} or less; none to stop)`, options: options1, min: 0, max: 1, reason: "target", source: src?.id, hint: { kind: "target", index: i, spec, effects: effects || [], chosen: out.map((x) => [...x]) } });
+          if (!ch1.length) break;
+          picked.push(ch1[0].id);
+          left -= this.state.objects[ch1[0].id]?.def?.cmc | 0;
+        }
+        out.push(picked);
+        continue;
+      }
       const options = cands.map((id) => ({ id, label: isPid(id) ? this.pname(+id.slice(1)) : this.objLabel(this.state.objects[id], p), type: isPid(id) ? "player" : "object" }));
       const ch = yield* this.choose$(p, { prompt: `Choose ${min === max ? (max === 1 ? "a target" : max + " targets") : min > 0 ? `${min}–${max} targets` : `up to ${max} target${max === 1 ? "" : "s"}`} for ${src?.c?.name || "ability"}${spec.text ? ` (${spec.text})` : ""}`, options, min, max, reason: "target", source: src?.id, hint: { kind: "target", index: i, spec, effects: effects || [], chosen: out.map((x) => [...x]) } });
       out.push(ch.map((c) => c.id));
@@ -465,6 +492,12 @@ export const actionMethods = {
     let mx = ms.max ?? ms.min ?? 1;
     if (ms.maxIf && ms.maxIf.cond && this.evalCond(ms.maxIf.cond, { ...ctx, source: src, you: p, quiet: true })) mx = Math.max(mx, ms.maxIf.max | 0);
     const min = Math.min(ms.min ?? 1, modes.length), max = Math.min(mx, avail.length);
+    if (ms.random) { // "choose one at random": the engine's rng, before targets are chosen
+      const i = Math.floor(this.rng() * modes.length);
+      this.log(`${src?.c?.name || "Ability"}: random mode — ${modes[i].text || i + 1}`);
+      const t = modes[i].targets?.length ? yield* this.chooseTargets$(p, modes[i].targets, src, ctx, modes[i].effects) : [];
+      return t ? { modes: [i], modeTargets: [t] } : null;
+    }
     if (avail.length < min || max <= 0) return null;
     const ch = yield* this.choose$(p, { prompt: `Choose ${min === max ? min : `${min}–${max}`} mode${max > 1 ? "s" : ""} for ${src?.c?.name || "spell"}`, options: avail.map((i) => ({ id: "m" + i, label: modes[i].text || `Mode ${i + 1}`, type: "mode" })), min, max, reason: "mode", source: src?.id, hint: { kind: "mode", modes } });
     const picked = ch.map((c) => +c.id.slice(1)).sort((a, b) => a - b);

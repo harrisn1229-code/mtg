@@ -179,7 +179,11 @@ export const charMethods = {
     // controllers (layer 2) first: control-changing effects in timestamp order
     for (const o of bf) {
       let ctl = o.baseController ?? o.owner;
-      for (const ce of st.controlEffects) if (ce.objId === o.id) ctl = ce.controller;
+      for (const ce of st.controlEffects) if (ce.objId === o.id) {
+        if (ce.until === "sourceOnBattlefield") { const cs = st.objects[ce.sourceId]; if (!cs || cs.zone !== "battlefield") continue; }
+        if (ce.until === "sourceControlled") { const cs = st.objects[ce.sourceId]; if (!cs || cs.zone !== "battlefield" || cs.controller !== ce.controller) continue; } // "for as long as you control <source>"
+        ctl = ce.controller;
+      }
       if (o.controller !== ctl) { o.controller = ctl; }
     }
     // gather statics

@@ -647,6 +647,7 @@ export class Game {
   destroy(o) {
     if (!o || o.zone !== "battlefield") return false;
     if (this.hasKw(o, "indestructible")) { this.log(`${o.c.name} is indestructible`); return false; }
+    if (o.counters.shield > 0) { this.addCounters(o, "shield", -1); this.log(`${o.c.name}: a shield counter is removed instead of being destroyed`); return false; }
     return this.moveObj(o, "graveyard", { cause: "destroy" });
   }
   exile(o) { if (!o) return false; if (o.zone === "stack") this.removeFromStack(o); return this.moveObj(o, "exile"); }
@@ -813,6 +814,7 @@ export class Game {
       const o = st.objects[targetId];
       if (!o || o.zone !== "battlefield") return 0;
       if (this.protectedFrom(o, src) && !this._noPrevent) { this.log(`Damage to ${o.c.name} is prevented (protection)`); return 0; }
+      if (o.counters.shield > 0) { this.addCounters(o, "shield", -1); this.log(`${o.c.name}: a shield counter is removed instead of damage being dealt`); return 0; } // CR 122.1c
       this.emit({ t: "damage", source: src.id, target: targetId, amount: n, combat: !!opts.combat, text: `${srcName} deals ${n} damage to ${o.c.name}` });
       const isCre = o.c.types.includes("creature");
       if (o.c.types.includes("planeswalker")) this.addCounters(o, "loyalty", -n);

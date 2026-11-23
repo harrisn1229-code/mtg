@@ -60,11 +60,12 @@ export const combatMethods = {
     const cands = this.attackCandidates(a);
     if (!cands.length) return;
     const ans = yield { kind: "attackers", player: a, prompt: "Declare attackers", candidates: cands };
-    const attacks = [...ans.attacks];
+    let attacks = [...ans.attacks];
     for (const c of cands) {
       const o = st.objects[c.obj];
       if (o.c.mustAttack && !attacks.some((x) => x.obj === c.obj)) attacks.push({ obj: c.obj, defender: c.defenders[0] });
     }
+    attacks = yield* this.attackTax$(a, attacks); // library m4: "can't attack you unless … pays"
     const list = [];
     for (const at of attacks) {
       const o = st.objects[at.obj];
