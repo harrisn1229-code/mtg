@@ -261,6 +261,7 @@ export function parseCost(text) {
       else if ((m = w.match(/^an? (.+) card$/i))) cost.discard = parseFilter(m[1] + " card");
       else fail("discard cost");
     } else if ((m = p.match(/^pay (\d+|x) life$/i))) cost.life = num(m[1]);
+    else if ((m = p.match(/^pay ((?:\{E\})+)$/i))) cost.energy = (cost.energy || 0) + m[1].length / 3;
     else if ((m = p.match(/^pay ((?:\{[^}]+\})+)$/i))) cost.mana = (cost.mana || "") + m[1];
     else if ((m = p.match(/^exile (.+?) from your graveyard$/i))) {
       const w = m[1].trim();
@@ -370,7 +371,7 @@ function parseTokenKeywordsAndAbilities(restText, ctx, tok) {
       if (!ctx.parseAbility) fail("no ability parser");
       (tok.abilities ||= []).push(...ctx.parseAbility(q));
     } else {
-      for (const k of parseKeywordList(unmask(p))) (tok.keywords ||= {})[k] = true;
+      for (const k of parseKeywordList(unmask(p))) { if (typeof k === "object") Object.assign((tok.keywords ||= {}), k); else (tok.keywords ||= {})[k] = true; }
     }
   }
 }
@@ -672,6 +673,7 @@ export function parseClauses(s, ctx) {
 function parseClause(c, ctx) {
   c = c.trim().replace(/^then,?\s+/i, "").replace(/[.]$/, "");
   let m;
+  if ((m = c.match(/^you get ((?:\{E\})+)$/i))) return [{ op: "addCounters", what: "you", kind: "energy", amount: m[1].length / 3 }];
   if (/^it's still an? \w+$/i.test(c)) return [];
   if ((m = c.match(/^until end of turn, (.+)$/i)) && !/ becomes /i.test(c)) return parseClause(m[1] + " until end of turn", ctx);
   if ((m = c.match(/^until end of turn, ~ becomes an? (\d+)\/(\d+) ([a-z ]+?)(?:creature)(?: with (.+))?$/i))) {
@@ -1026,6 +1028,11 @@ function imperativeRules(c, ctx) {
   }
   if (/^copy (?:that|this|the triggering) ability$/i.test(c)) return [{ op: "copyAbility", what: { ref: "event", what: "ability" } }];
   if (/^proliferate$/i.test(c)) return [{ op: "proliferate" }];
+  // library batch m2: goad / monstrosity / populate / flip a coin
+  if ((m = c.match(/^goad (.+)$/i)) && !/ (?:that|each) (?:had|has)\b/i.test(c)) return [{ op: "goad", what: objRef(m[1], ctx) }];
+  if ((m = c.match(/^monstrosity (\d+|x)$/i))) return [{ op: "_monstrosity", amount: /^x$/i.test(m[1]) ? "x" : +m[1] }];
+  if (/^populate$/i.test(c)) return [{ op: "populate" }];
+  if (/^flip a coin$/i.test(c)) return [{ op: "flipCoin" }];
   if ((m = c.match(/^adapt (\d+)$/i))) return [{ op: "if", cond: { type: "counters", what: "self", kind: "+1/+1", op: "==", n: 0 }, then: [{ op: "addCounters", what: "self", kind: "+1/+1", amount: +m[1] }] }];
   if (/^choose a creature type$/i.test(c)) return [{ op: "chooseCreatureType" }];
   // exile

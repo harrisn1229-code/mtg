@@ -60,7 +60,7 @@ const NOT_SUBTYPE_CAPS = new Set(["ring", "ring-bearer", "ring-bearers", "jace",
 
 export const KEYWORD_LIST = ["flying", "first strike", "double strike", "deathtouch", "defender", "haste", "hexproof", "indestructible", "lifelink", "menace",
   "reach", "trample", "vigilance", "flash", "fear", "intimidate", "skulk", "shadow", "infect", "wither", "persist", "undying", "changeling", "devoid", "prowess",
-  "shroud", "horsemanship"];
+  "shroud", "horsemanship", "myriad", "evolve", "exalted", "battle cry", "mentor", "riot", "training", "melee", "dethrone", "enlist"];
 export const KEYWORD_SET = new Set(KEYWORD_LIST);
 
 // ---------------------------------------------------------------------------------------------
@@ -295,8 +295,11 @@ export function parseKeywordList(text) {
   if (!parts.length) fail("no keywords");
   const out = [];
   for (const p of parts) {
-    if (!KEYWORD_SET.has(p)) fail("keyword " + p);
-    out.push(p);
+    let m;
+    if (KEYWORD_SET.has(p)) out.push(p);
+    else if ((m = p.match(/^(annihilator|afflict|fabricate|toxic|bloodthirst|mobilize) (\d+)$/))) out.push({ [m[1]]: +m[2] });
+    else if ((m = p.match(/^mobilize x, where x is (?:its|this creature's) power$/))) out.push({ mobilize: { powerOf: "self" } });
+    else fail("keyword " + p);
   }
   return out;
 }

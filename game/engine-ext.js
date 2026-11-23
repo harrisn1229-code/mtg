@@ -80,6 +80,7 @@ export const extMethods = {
         }
       }
     }
+    yield* this.m2Entry$(o, d, p, entry); // riot, devour (engine-m2.js)
     return entry;
   },
 
@@ -102,6 +103,7 @@ export const extMethods = {
         else if (e.choice === "mode") entry.chosen.mode = e.options?.[0]?.id;
       } else if (e.type === "entersTapped") entry.tapped = !(e.unless && this.evalCond(e.unless, { source: o, you: p, quiet: true }));
     }
+    this.m2EntryDefault(o, d, p, entry);
     return entry;
   },
 
@@ -229,6 +231,7 @@ export const extMethods = {
   faceUpCost(o) {
     if (!o || !o.faceDown) return null;
     const kw = o.def?.keywords || {};
+    if (o.manifestUp && (o.def?.types || []).includes("creature") && o.def.cost) return o.def.cost; // manifested / cloaked creature card (m2)
     const v = kw.morph ?? kw.megamorph ?? kw.disguise ?? o.fuCost; // manifested / cloaked creature cards turn up for their mana cost
     if (v == null || v === false) return null;
     return typeof v === "string" ? v : v.cost || "{0}";

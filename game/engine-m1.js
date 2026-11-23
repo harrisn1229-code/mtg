@@ -450,7 +450,8 @@ export const m1Methods = {
 
   /** internal triggers keyed off events: exalted (printed or granted) */
   m1Triggers(evt) {
-    if (evt.type === "attacks" && evt.alone && evt.obj) {
+    // Exalted (printed or granted) is synthesised by kw-synth.js (batch m2); kept off here so it can't trigger twice.
+    if (false && evt.type === "attacks" && evt.alone && evt.obj) {
       const att = evt.obj;
       for (const id of this.state.battlefield) {
         const o = this.state.objects[id];

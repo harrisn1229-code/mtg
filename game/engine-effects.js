@@ -184,7 +184,8 @@ export const effectMethods = {
     if ("lifeLostThisTurn" in A) { const ps = this.playersOf(this.refsSync(A.lifeLostThisTurn ?? "you", ctx)); return ps.reduce((n, p) => n + (this.state.players[p].lifeLostThisTurn | 0), 0); }
     if ("value" in A) return this.amount(A.value, ctx);
     { const r = this.m1Amount(A, ctx); if (r !== undefined) return r; }
-    return 0;
+    const m2 = this.m2Amount(A, ctx); // library batch m2 amounts (engine-m2.js)
+    return m2 == null ? 0 : m2;
   },
 
   // ---------------------------------------------------------------- conditions
@@ -233,10 +234,13 @@ export const effectMethods = {
       case "compare": return cmp(this.amount(C.a, ctx), C.op || ">=", this.amount(C.b, ctx));
       case "resolvedCount": return cmp(ctx.resolvedCount | 0, C.op || "==", this.amount(C.n ?? 1, ctx));
       case "chosen": { const s = ctx.source && (this.state.objects[ctx.source.id] || ctx.source); return !!s && !!s.chosen && s.chosen[C.key || "mode"] === C.value; }
-      default:
+      default: {
         { const r = this.m1Cond(C, ctx); if (r !== undefined) return r; }
+        const m2 = this.m2Cond(t, C, ctx); // library batch m2 conditions (engine-m2.js)
+        if (m2 !== undefined) return m2;
         if (!ctx.quiet) this.manualOnce(ctx.source, `Condition not automated (${t}); treated as false`);
         return false;
+      }
     }
   },
 
@@ -287,7 +291,7 @@ export const effectMethods = {
 };
 
 // ------------------------------------------------------------------ ops
-const OPS = {
+export const OPS = {
   *damage$(e, ctx) {
     const n = this.amount(e.amount, ctx);
     let src = ctx.source;
@@ -906,6 +910,8 @@ export function describeCost(c) {
   if (!c) return "";
   if (typeof c === "string") return c;
   const parts = [];
+  if (c.crew != null) parts.push(`Crew ${c.crew}`);
+  if (c.energy) parts.push("{E}".repeat(c.energy));
   if (c.mana) parts.push(c.mana);
   if (c.tap) parts.push("{T}");
   if (c.life) parts.push(`${c.life} life`);

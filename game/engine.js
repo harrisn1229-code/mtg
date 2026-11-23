@@ -30,6 +30,7 @@ import { combatMethods } from "./engine-combat.js";
 import { extMethods } from "./engine-ext.js";
 import { installM3 } from "./engine-m3.js";
 import { m1Methods, M1_EXILE_VARIANTS } from "./engine-m1.js";
+import { m2Methods } from "./engine-m2.js";
 
 export { STEPS, parseManaCost, costToString, costCmc, TOKENS, makeRng, describeCost, hasType };
 
@@ -387,6 +388,7 @@ export class Game {
     return {
       id: o.id, owner: o.owner, controller: o.controller, zone: "battlefield", c: o.c, counters: { ...o.counters }, token: o.token,
       isCommander: o.isCommander, tapped: o.tapped, damage: o.damage, def: o.def, face: o.face, attachedTo: o.attachedTo, lki: true, ts: o.ts,
+      attacking: !!(this.state.combat && this.state.combat.attackers.some((a) => a.obj === o.id)), dmgBy: o.dmgBy || null,
       copyDef: o.copyDef || null, mergeDef: o.mergeDef || null, faceDown: !!o.faceDown, pile: o.pile ? [...o.pile] : null, chosen: o.chosen || null,
     };
   }
@@ -430,6 +432,8 @@ export class Game {
       for (let i = st.links.length - 1; i >= 0; i--) if (st.links[i].sourceId === o.id) { returning.push(st.links[i].objId); st.links.splice(i, 1); }
       o.tapped = false; o.damage = 0; o.deathtouched = false; o.counters = {}; o.sick = false; o.echoDue = false;
       o.controller = o.owner; o.baseController = o.owner; o.loyaltyUsed = null; o.activations = null;
+      this.m2Left(o);
+      if (o.c?.types.includes("creature") && to !== "battlefield") st.creatureDied = true;
       if (o.pile && o.pile.length > 1) o._leftPile = o.pile.filter((id) => id !== o.id);
       o.pile = null; o.mergeDef = null; o.chosen = null; o.phasedIndirect = false; o.phasedController = null;
       if (!o.token) o.copyDef = null;
@@ -452,7 +456,7 @@ export class Game {
       o.sick = true;
       o.damage = 0;
       o.ts = ++st.ts;
-      if (from !== "stack") { o.kicked = false; o.x = null; o.m1 = null; }
+      if (from !== "stack") { o.kicked = false; o.x = null; o.m1 = null; o.squad = 0; }
       const entry = opts.entry || this.defaultEntry(o, opts);
       if (entry.copy && entry.copy.def) o.copyDef = entry.copy.def;
       o.chosen = entry.chosen && Object.keys(entry.chosen).length ? { ...entry.chosen } : null;
@@ -553,6 +557,7 @@ export class Game {
       if (s.st.type === "entersTapped" && s.src && s.src.id !== o.id && s.st.affects && s.st.affects !== "self" && this.matches(o, s.st.affects, { source: s.src, you: s.you })) o.tapped = true;
     }
     if (this.keywordOf(o, "echo")) o.echoDue = true;
+    this.m2ApplyEntry(o, entry);
     this.markDirty();
     this.refresh();
   }
@@ -688,6 +693,7 @@ export class Game {
   }
   untap(o, silent) {
     if (!o || o.zone !== "battlefield" || !o.tapped) return false;
+    if ((o.counters["stun"] | 0) > 0) { this.addCounters(o, "stun", -1); this.log(`${o.c.name} loses a stun counter instead of untapping`); return false; } // CR 122.1g
     o.tapped = false;
     this.markDirty();
     this.emit({ t: "untap", obj: o.id, text: `${o.c.name} untaps`, ...(silent ? { silent: true } : {}) });
@@ -775,7 +781,7 @@ export class Game {
     if (!src) return 0;
     const st = this.state;
     const srcCtrl = src.controller ?? src.owner ?? 0;
-    n = this.modifyDamage(src, targetId, n);
+    n = this.modifyDamage(src, targetId, n, opts);
     if (n <= 0) return 0;
     const srcName = src.c?.name || "Something";
     if (isPid(targetId)) {
@@ -791,6 +797,7 @@ export class Game {
         if (pl.lifeLocked) this.log(`${pl.name}'s life total can't change`);
         else {
           pl.life -= n;
+          pl.damagedThisTurn = true;
           pl.lifeLostThisTurn += n;
           this.emit({ t: "life", player: p, delta: -n, life: pl.life, text: `${pl.name} loses ${n} life (${pl.life})` });
           this.fireTrigger({ type: "loseLife", player: p, amount: n });
@@ -811,6 +818,7 @@ export class Game {
       if (isCre) {
         if (this.hasKw(src, "wither") || this.hasKw(src, "infect")) this.addCounters(o, "-1/-1", n);
         else o.damage += n;
+        { const dm = (o.dmgBy && o.dmgBy.turn === st.turn) ? o.dmgBy : (o.dmgBy = { turn: st.turn }); dm[srcCtrl] = (dm[srcCtrl] | 0) + n; } // damage by controller this turn (Grothama)
         if (this.hasKw(src, "deathtouch")) o.deathtouched = true;
       }
       this.markDirty();
@@ -822,13 +830,14 @@ export class Game {
     return n;
   }
 
-  modifyDamage(src, targetId, n) {
+  modifyDamage(src, targetId, n, opts = {}) {
     const mods = this._statics.filter((s) => s.st.type === "damageMod");
     if (!mods.length) return n;
     const tgtPlayer = isPid(targetId) ? +targetId.slice(1) : null;
     const tgtObj = tgtPlayer == null ? this.state.objects[targetId] : null;
     const applies = (s) => {
       const ctx = { source: s.src, you: s.you };
+      if (s.st.combatOnly && !opts.combat) return false;
       if (s.st.source && !this.matches(src, s.st.source, ctx, "*")) return false;
       if (s.st.sourceController === "you" && (src.controller ?? src.owner) !== s.you) return false;
       const to = s.st.to ?? "any";
@@ -1060,7 +1069,7 @@ export class Game {
         if (evt.type === "draw" && on.nth && evt.nth !== on.nth) return false;
         return true;
       default:
-        return false;
+        return this.m2TriggerMatches(on, evt, s, ctrl, whoObj, whoPlayer); // evolves, crewed, monstrous, goaded, ... (engine-m2.js)
     }
   }
 
@@ -1087,7 +1096,7 @@ export class Game {
     const real = t.sourceId ? st.objects[t.sourceId] : null;
     const source = real || t.source;
     const srcName = source?.c?.name || t.source?.c?.name || "Delayed trigger";
-    const ctx = { ...(t.delayed ? t.delayed.ctx : {}), source, you: t.controller, event: t.event, x: t.delayed?.ctx?.x ?? 0, it: t.delayed?.ctx?.it || [], trigger: true };
+    const ctx = { ...(t.delayed ? t.delayed.ctx : {}), source, you: t.controller, event: t.event, x: t.delayed?.ctx?.x ?? (source && source.x && t.event && t.event.type === "enters" && t.event.obj && t.event.obj.id === source.id ? source.x : 0) ?? 0, it: t.delayed?.ctx?.it || [], trigger: true };
     let targets = [], modes = null, modeTargets = null;
     if (ab.modes && Array.isArray(ab.modes.modes)) {
       const r = yield* this.chooseModes$(t.controller, ab.modes, source, ctx);
@@ -1564,16 +1573,17 @@ export class Game {
     st.turn++;
     st.requestsThisTurn = 0;
     st.spellsThisTurn = 0;
-    st.extraCombats = 0;
+    st.extraCombats = 0; st.extraQueue = []; st.curExtra = null; st.combatsThisTurn = 0; st.creatureDied = false;
     st.mainIndex = 0;
-    for (const q of st.players) { q.landsPlayed = 0; q.lifeLostThisTurn = 0; q.lifeGainedThisTurn = 0; }
+    for (const q of st.players) { q.landsPlayed = 0; q.lifeLostThisTurn = 0; q.lifeGainedThisTurn = 0; q.damagedThisTurn = false; q.noncreatureCast = 0; q.castThisTurn = 0; }
     this.m1TurnReset();
     this.emit({ t: "turn", player: a, n: st.turn, text: `Turn ${st.turn} — ${pl.name}` });
     // untap
     yield* this.step$("untap");
     this.expireEffects("yourNextTurn", a);
     this.phaseIn(a);
-    for (const id of st.battlefield) { const o = st.objects[id]; if (o.controller === a) { o.sick = false; if (o.tapped && !this.hasKw(o, "doesn't untap") && !o.c.doesntUntap) this.untap(o, true); } }
+    this.m2TurnStart(a);
+    for (const id of st.battlefield) { const o = st.objects[id]; if (o.controller === a) { o.sick = false; if (this.m2NoUntap(o)) continue; if (o.tapped && !this.hasKw(o, "doesn't untap") && !o.c.doesntUntap) this.untap(o, true); } }
     this.markDirty();
     this.refresh();
     // upkeep
@@ -1590,12 +1600,16 @@ export class Game {
     // main 1
     yield* this.beginStep$("main1");
     if (this.over) return;
+    yield* this.m2ExtraCombats$(); // additional combat phases created during the first main phase come first
+    if (this.over) return;
     // combat (+ extra combats)
     yield* this.combatPhase$();
-    while (!this.over && st.extraCombats > 0) { st.extraCombats--; yield* this.combatPhase$(); }
+    yield* this.m2ExtraCombats$();
     if (this.over) return;
     st.mainIndex = 1;
     yield* this.beginStep$("main2");
+    if (this.over) return;
+    yield* this.m2ExtraCombats$();
     if (this.over) return;
     yield* this.beginStep$("end");
     if (this.over) return;
@@ -1606,6 +1620,7 @@ export class Game {
   *beginStep$(name) {
     yield* this.step$(name);
     this.fireTrigger({ type: "beginStep", step: name, player: this.state.active, mainIndex: this.state.mainIndex });
+    if (name === "main1") this.radTriggers();
     yield* this.priorityRound$();
     this.emptyPools();
   }
@@ -1655,7 +1670,7 @@ export class Game {
 }
 
 // mixins
-Object.assign(Game.prototype, charMethods, manaMethods, effectMethods, actionMethods, combatMethods, extMethods, m1Methods);
+Object.assign(Game.prototype, charMethods, manaMethods, effectMethods, actionMethods, combatMethods, extMethods, m1Methods, m2Methods);
 installM3(Game); // library batch m3 (energy, voting, investigate, manifest, ...) — wraps methods, so it runs after the mixins
 
 export function publicAction(a) {

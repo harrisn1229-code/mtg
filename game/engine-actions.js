@@ -56,8 +56,10 @@ export const actionMethods = {
           let label;
           if (ab.synthetic === "cycle") label = `Cycle ${name}`;
           else if (ab.synthetic === "equip") label = `Equip ${name}`;
+          else if (ab.synthetic === "crew") label = `Crew ${name} (${ab.cost.crew})`;
+          else if (ab.synthetic === "station") label = `Station ${name}`;
           else label = `${name}: ${shortText(ab.text || describeCost(ab.cost) + ": ability")}`;
-          acts.push({ type: "activate", obj: o.id, objRef: o, label, cost: describeCost(ab.cost), zone: o.zone, ability: i, mana: ab.mana ? true : undefined, variant: ab.synthetic === "cycle" ? "cycle" : ab.synthetic === "equip" ? "equip" : undefined });
+          acts.push({ type: "activate", obj: o.id, objRef: o, label, cost: describeCost(ab.cost), zone: o.zone, ability: i, mana: ab.mana ? true : undefined, variant: ab.synthetic === "cycle" ? "cycle" : ab.synthetic === "equip" ? "equip" : ab.synthetic === "crew" ? "crew" : undefined });
         } catch { /* skip */ }
       }
     };
@@ -213,6 +215,7 @@ export const actionMethods = {
     const instant = (fd.types.includes("instant") || this.hasKw({ c: { keywords: fd.keywords } }, "flash") || (pl.flashSorceries && fd.types.includes("sorcery"))) && !this.m1ForcesSorcery(v);
     if (!instant && !sorc) return null;
     const ctx = { source: o, you: p, quiet: true };
+    if (fd.castRestrict && !this.evalCond(fd.castRestrict, ctx)) return null; // "Cast this spell only during ..."
     if (fd.spell?.modes && v.variant !== "overload") {
       const ms = fd.spell.modes;
       const avail = (ms.modes || []).filter((m) => (m.targets || []).every((t) => this.targetCandidates(t, o, p, ctx).length >= this.specMin(t, ctx)));
@@ -273,6 +276,9 @@ export const actionMethods = {
     const st = this.state;
     const pl = st.players[p];
     if (Array.isArray(cost.oneOf) && cost.oneOf.length) return cost.oneOf.some((c) => this.canPayCost(p, c, src, ctx, opts));
+    if (cost.mana && (cost.reduce || (src && src.zone === "battlefield" && this._statics.some((s) => s.st.type === "abilityCostMod")))) cost = { ...cost, mana: this.reducedMana(cost, src, p, ctx), reduce: null };
+    if (cost.crew != null && !this.crewOk(p, cost.crew, src)) return false;
+    // energy costs ({E}) are checked and paid by engine-m3.js (canPayCost / payCost$ wrappers)
     if (cost.tap) { if (!src || src.zone !== "battlefield" || !this.tapReady(src, p)) return false; }
     if (cost.untap) { if (!src || src.zone !== "battlefield" || !this.tapReady(src, p, true)) return false; }
     if (cost.sacSelf && (!src || src.zone !== "battlefield")) return false;
@@ -346,6 +352,7 @@ export const actionMethods = {
       if (!(yield* this.payCost$(p, rest, ctx, opts))) return false;
       return yield* this.payCost$(p, pick, ctx, opts);
     }
+    if (cost.mana && (cost.reduce || (src && src.zone === "battlefield" && this._statics.some((s) => s.st.type === "abilityCostMod")))) cost = { ...cost, mana: this.reducedMana(cost, src, p, ctx), reduce: null };
     if (cost.mana && !opts.skipMana) {
       const c = parseManaCost(cost.mana);
       const x = c.x ? (ctx.x | 0) : 0;
@@ -354,6 +361,7 @@ export const actionMethods = {
       if (!(yield* this.payMana$(p, total, { exclude, spend: opts.spend, protect: src?.id }))) return false;
     }
     ctx.sacrificed = ctx.sacrificed || [];
+    if (cost.crew != null) yield* this.payCrew$(p, cost.crew, src, ctx);
     if (cost.tap && src) this.tap(src);
     if (cost.untap && src) this.untap(src);
     if (cost.loyalty != null && src) {
@@ -366,7 +374,7 @@ export const actionMethods = {
     if (cost.tapOther) {
       const n = this.amount(cost.tapOtherCount ?? 1, ctx);
       const ch = yield* this.chooseObjects$(p, this.tapOtherCands(p, cost.tapOther, src), { prompt: `Tap ${n} untapped ${describeFilter(cost.tapOther)}`, min: n, max: n, reason: "pay", source: src?.id });
-      for (const o of ch) this.tap(o);
+      for (const o of ch) { ctx.tappedOther = [...(ctx.tappedOther || []), this.snapshot(o)]; this.tap(o); }
     }
     if (cost.sacSelf && src && src.zone === "battlefield") { ctx.sacrificed.push(this.snapshot(src)); this.sacrifice(src); }
     if (cost.sac) {
@@ -588,6 +596,7 @@ export const actionMethods = {
     o.c = this.baseC(o);
     this.markDirty();
     st.spellsThisTurn++;
+    this.m2Cast(p, fd);
     const tgt = o.targets.length ? ` targeting ${o.targets.map((id) => this.nameOf(id)).join(", ")}` : "";
     this.emit({ t: "cast", obj: o.id, player: p, targets: [...o.targets], from, variant: v.variant, manaSpent: spent.n, text: `${pl.name} casts ${o.faceDown ? "a face-down creature spell" : o.c.name}${x ? ` (X=${x})` : ""}${v.variant === "kicked" ? " (kicked)" : v.variant === "mutate" ? " for its mutate cost" : v.variant === "spectacle" ? " for its spectacle cost" : ""}${tgt}` });
     this.fireTrigger({ type: "cast", obj: o, player: p, manaSpent: spent.n });
@@ -621,6 +630,7 @@ export const actionMethods = {
     }
     let targets = [];
     if (ab.targets && ab.targets.length) { const t = yield* this.chooseTargets$(p, ab.targets, o, ctx, ab.effects); if (!t) return; targets = t; ctx.division = yield* this.chooseDivision$(p, ab.effects || [], targets, o, ctx); }
+    ctx._chosenTargets = targets;
     const spend = { kind: "ability", source: o, player: p };
     if (!this.canPayCost(p, cost, o, ctx, { spend })) { this.log(`${this.pname(p)} can't pay for ${o.c.name}'s ability`); return; }
     const ok = yield* this.payCost$(p, cost, ctx, { spend });
