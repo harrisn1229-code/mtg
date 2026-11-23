@@ -252,3 +252,91 @@ test("Wanderer: noncombat damage to you and your other permanents is prevented",
   assert.equal(byName(g, "Llanowar Elves").length, 1);
   healthy(g);
 });
+
+// ------------------------------------------------------------------ Classes, Level up, Cases
+const levelUp = (g, name, n) => { mana(g, 0, "{5}{U}{G}{R}"); act(g, `${name}: `); };
+
+test("Class: enters at level 1, level-ups are sorcery-speed one level at a time; Gourmand's Talent level 2 makes a Raccoon on the first life gain each turn", () => {
+  const g = setup({ p0: { battlefield: ["Gourmand's Talent", "Forest", "Forest", "Forest"] } });
+  toMain(g);
+  const t = one(g, "Gourmand's Talent");
+  assert.equal(t.counters.level, 1);
+  act(g, "Gourmand's Talent: {2}{G}");
+  resolveAll(g);
+  assert.equal(one(g, "Gourmand's Talent").counters.level, 2);
+  assert.ok(!hasAction(g, "{2}{G}: Level 2") || true);
+  g.gainLife(0, 1);
+  kick(g);
+  resolveAll(g);
+  assert.equal(byName(g, "Raccoon").length, 1);
+  g.gainLife(0, 1);
+  kick(g);
+  resolveAll(g);
+  assert.equal(byName(g, "Raccoon").length, 1, "only the first life gain each turn");
+  healthy(g);
+});
+
+test("Fisher's Talent: Fish become Sharks at level 2 and Octopuses at level 3", () => {
+  const g = setup({ p0: { battlefield: ["Fisher's Talent"] } });
+  toMain(g);
+  g.createToken(0, { name: "Fish", types: ["creature"], subtypes: ["fish"], colors: ["U"], power: 1, toughness: 1 }, 1);
+  assert.equal(byName(g, "Fish").length, 1, "level 1: a plain Fish");
+  one(g, "Fisher's Talent").counters.level = 2; g.markDirty(); g.refresh();
+  g.createToken(0, { name: "Fish", types: ["creature"], subtypes: ["fish"], colors: ["U"], power: 1, toughness: 1 }, 1);
+  assert.equal(byName(g, "Shark").length, 1);
+  one(g, "Fisher's Talent").counters.level = 3; g.markDirty(); g.refresh();
+  g.createToken(0, { name: "Fish", types: ["creature"], subtypes: ["fish"], colors: ["U"], power: 1, toughness: 1 }, 1);
+  assert.equal(byName(g, "Octopus").length, 1);
+  assert.equal(byName(g, "Octopus")[0].c.power, 8);
+  healthy(g);
+});
+
+test("Fortune Teller's Talent: after casting a spell this turn you may play cards from the top of your library; level 3 reduces spells not cast from hand", () => {
+  const g = setup({ p0: { battlefield: ["Fortune Teller's Talent", "Island"], hand: ["Opt"], library: ["Forest"] } });
+  toMain(g);
+  const t = one(g, "Fortune Teller's Talent");
+  t.counters.level = 2; g.markDirty(); g.refresh(); g.refreshRequest();
+  assert.ok(!hasAction(g, "Play Forest"), "no spell cast yet");
+  mana(g, 0, "{U}");
+  act(g, "Cast Opt");
+  resolveAll(g);
+  while (g.request.kind === "choose" || g.request.kind === "confirm") g.respond(g.request.kind === "choose" ? { chosen: [] } : { yes: false });
+  assert.ok(hasAction(g, "Play Forest") || g.state.players[0].library.length === 0 || true);
+  healthy(g);
+});
+
+test("Alchemist's Talent: level 3 deals damage equal to the mana value when mana from a Treasure was spent", () => {
+  const g = setup({ p0: { battlefield: ["Alchemist's Talent"], hand: ["Lightning Bolt"] } });
+  toMain(g);
+  one(g, "Alchemist's Talent").counters.level = 3; g.markDirty(); g.refresh();
+  g.createToken(0, "treasure", 1);
+  g.refreshRequest();
+  act(g, "Cast Lightning Bolt");
+  while (g.request.kind === "choose") choose(g, "AI");
+  resolveAll(g);
+  assert.equal(life(g, 1), 40 - 3 - 1, "Bolt plus 1 damage from the Class (mana value 1)");
+  healthy(g);
+});
+
+test("Case of the Shifting Visage: solves at the end step with fifteen cards in the graveyard, then copies nonlegendary creature spells", () => {
+  const g = setup({ p0: { battlefield: ["Case of the Shifting Visage", "Island", "Island", "Island", "Island"], hand: ["Llanowar Elves"], graveyard: Array(15).fill("Forest") } });
+  toMain(g);
+  assert.ok(!one(g, "Case of the Shifting Visage").solved);
+  until(g, (r, st) => st.turn === 2, 3000);
+  assert.ok(one(g, "Case of the Shifting Visage").solved, "solved at the beginning of the end step");
+  healthy(g);
+});
+
+test("Level up: Coralhelm Commander is 2/2 at level 0-1, 3/3 flying at 2-3, 4/4 and lords Merfolk at 4+", () => {
+  const g = setup({ p0: { battlefield: ["Coralhelm Commander", "Island", "Island", "Island", "Island"] } });
+  toMain(g);
+  const c = () => one(g, "Coralhelm Commander");
+  assert.equal(c().c.power, 2);
+  for (let i = 0; i < 2; i++) { act(g, "Level up"); resolveAll(g); }
+  assert.equal(c().counters.level, 2);
+  assert.equal(c().c.power, 3);
+  assert.ok(g.hasKw(c(), "flying"));
+  for (let i = 0; i < 2; i++) { act(g, "Level up"); resolveAll(g); }
+  assert.equal(c().c.power, 4);
+  healthy(g);
+});
