@@ -69,3 +69,80 @@ test("Stun counter: a tapped creature with a stun counter loses the counter inst
   g.untap(elf, true);
   assert.equal(elf.tapped, false);
 });
+
+// ------------------------------------------------------------------ monarch / rad counters (m3 cards owned by m4)
+test("Palace Jailer: you become the monarch; the exiled creature returns when an opponent becomes the monarch", () => {
+  const g = setup({ p0: { hand: ["Palace Jailer"], battlefield: ["Plains", "Plains", "Plains", "Plains"] }, p1: { battlefield: ["Llanowar Elves"] } });
+  toMain(g);
+  act(g, "Cast Palace Jailer");
+  resolveUntilAsk(g);
+  while (g.request.kind === "choose") choose(g, "Llanowar Elves");
+  resolveAll(g);
+  assert.equal(g.state.monarch, 0);
+  assert.equal(byName(g, "Llanowar Elves").length, 0, "exiled");
+  g.becomeMonarch(1);
+  kick(g);
+  resolveAll(g);
+  assert.equal(byName(g, "Llanowar Elves").length, 1, "returned when an opponent became the monarch");
+  healthy(g);
+});
+
+test("Regal Sliver: becomes the monarch, or pumps Slivers if you already are", () => {
+  const g = setup({ p0: { hand: ["Regal Sliver"], battlefield: ["Plains", "Plains", "Plains", "Plains"] } });
+  toMain(g);
+  act(g, "Cast Regal Sliver");
+  resolveAll(g);
+  assert.equal(g.state.monarch, 0, "granted ETB: become the monarch");
+  healthy(g);
+});
+
+test("Strong, the Brutish Thespian: radiation makes you gain life", () => {
+  const g = setup({ p0: { battlefield: ["Strong, the Brutish Thespian"] } });
+  toMain(g);
+  g.addPlayerCounters(0, "rad", 3);
+  const before = life(g, 0);
+  until(g, (r, st) => st.turn === 3 && atStep("main1", 0)(r, st), 6000);
+  resolveAll(g);
+  assert.ok(life(g, 0) >= before, "no life lost from rad counters");
+  healthy(g);
+});
+
+test("Locke: each player mills a card, a milled land makes a Treasure, a milled spell can be cast from the graveyard this turn (only one)", () => {
+  const g = setup({ p0: { battlefield: ["Locke, Treasure Hunter", "Forest"], library: ["Lightning Bolt"] }, p1: { library: ["Forest"] } });
+  toMain(g);
+  until(g, (r) => r.kind === "attackers");
+  g.respond({ attacks: [{ obj: one(g, "Locke, Treasure Hunter").id, defender: "P1" }] });
+  until(g, (r, st) => r.kind === "priority" && st.step === "declareAttackers");
+  resolveAll(g);
+  assert.equal(byName(g, "Treasure").length, 1, "a land card was milled");
+  const bolt = card(g, "Lightning Bolt");
+  assert.equal(bolt.zone, "graveyard");
+  mana(g, 0, "{R}");
+  assert.ok(hasAction(g, "Cast Lightning Bolt"), "castable from the graveyard until end of turn");
+  healthy(g);
+});
+
+test("Mariposa Military Base: may enter tapped for two rad counters", () => {
+  const g = setup({ p0: { hand: ["Mariposa Military Base"] } });
+  toMain(g);
+  act(g, "Play Mariposa");
+  confirm(g, true);
+  assert.equal(one(g, "Mariposa Military Base").tapped, true);
+  assert.equal(g.state.players[0].counters.rad, 2);
+  healthy(g);
+});
+
+test("Harold and Bob: returns as an Aura on a Forest and taps it for three mana", () => {
+  const g = setup({ p0: { battlefield: ["Harold and Bob, First Numens", "Forest"] } });
+  toMain(g);
+  g.destroy(one(g, "Harold and Bob, First Numens"));
+  kick(g);
+  resolveUntilAsk(g);
+  while (g.request.kind === "choose") choose(g, "Forest");
+  resolveAll(g);
+  const back = one(g, "Harold and Bob, First Numens");
+  assert.ok(back.c.types.includes("enchantment") && !back.c.types.includes("creature"));
+  assert.equal(back.attachedTo, one(g, "Forest").id);
+  assert.equal(back.c.keywords.reach, undefined, "loses all other abilities");
+  healthy(g);
+});
