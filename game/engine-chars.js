@@ -184,6 +184,7 @@ export const charMethods = {
         if (ce.until === "sourceControlled") { const cs = st.objects[ce.sourceId]; if (!cs || cs.zone !== "battlefield" || cs.controller !== ce.controller) continue; } // "for as long as you control <source>"
         ctl = ce.controller;
       }
+      if (st.monarch != null) for (const a of bf) if (a.attachedTo === o.id && this.baseAbilities(a).some((ab) => ab.kind === "static" && ab.effect?.type === "monarchControls")) ctl = st.monarch; // Fealty to the Realm
       if (o.controller !== ctl) { o.controller = ctl; }
     }
     // gather statics
@@ -248,6 +249,8 @@ export const charMethods = {
         }
       } else if (t === "activateAsHaste") {
         for (const o of bf) if (this._affects(s, o)) o.c.activateAsHaste = true;
+      } else if (t === "cantBeBlockedBy" || t === "cantBeBlockedWhileDefenderHas") {
+        for (const o of bf) if (this._affects(s, o)) { if (t === "cantBeBlockedBy") (o.c.cantBeBlockedBy ||= []).push(s.st); else o.c.cantBeBlockedWhileDefenderHas = s.st.counter || "rad"; }
       } else if (t === "cantBlock" || t === "cantAttack" || t === "mustAttack" || t === "cantBeBlocked" || t === "cantBeCountered" || t === "mustBlock") {
         for (const o of bf) if (this._affects(s, o)) {
           if (t === "cantBeBlocked") (o.c.unblockable ||= []).push(s.st.exceptBy || null);

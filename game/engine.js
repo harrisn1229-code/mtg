@@ -610,9 +610,13 @@ export class Game {
     for (let i = 0; i < n && pl.library.length; i++) {
       const o = this.state.objects[pl.library[pl.library.length - 1]];
       this.moveObj(o, "graveyard", { quiet: true });
+      o.milledTurn = this.state.turn;
       out.push(o);
     }
-    if (out.length) this.log(`${pl.name} mills ${out.map((o) => o.c.name).join(", ")}`);
+    if (out.length) {
+      this.log(`${pl.name} mills ${out.map((o) => o.c.name).join(", ")}`);
+      this.milledEvents(p, out);
+    }
     return out;
   }
   discardCard(o) {
@@ -814,6 +818,14 @@ export class Game {
       const o = st.objects[targetId];
       if (!o || o.zone !== "battlefield") return 0;
       if (this.protectedFrom(o, src) && !this._noPrevent) { this.log(`Damage to ${o.c.name} is prevented (protection)`); return 0; }
+      const dtc = this._statics.find((s) => s.st.type === "damageToCounters" && s.src && s.src.id === o.id && (o.counters[s.st.kind || "+1/+1"] | 0) > 0);
+      if (dtc) { // Bloatfly Swarm: prevent the damage, remove that many counters, each player gets a rad counter for each removed
+        const k = dtc.st.kind || "+1/+1", m = Math.min(n, o.counters[k] | 0);
+        this.log(`${o.c.name}: damage is prevented; ${m} ${k} counter${m > 1 ? "s" : ""} removed instead`);
+        this.addCounters(o, k, -m);
+        if (dtc.st.giveRad) for (const q of st.players) if (!q.lost) this.addPlayerCounters(q.idx, "rad", m);
+        return 0;
+      }
       if (o.counters.shield > 0) { this.addCounters(o, "shield", -1); this.log(`${o.c.name}: a shield counter is removed instead of damage being dealt`); return 0; } // CR 122.1c
       this.emit({ t: "damage", source: src.id, target: targetId, amount: n, combat: !!opts.combat, text: `${srcName} deals ${n} damage to ${o.c.name}` });
       const isCre = o.c.types.includes("creature");
@@ -1011,6 +1023,7 @@ export class Game {
         if (!whoObj(on.who, evt.obj)) return false;
         if (on.filter && !this.matches(evt.obj, on.filter, ctx, "*")) return false;
         if (evt.type === "attacks" && on.alone && !evt.alone) return false;
+        if (evt.type === "attacks" && on.defending === "you" && evt.player !== ctrl) return false; // "attacks you or a planeswalker you control"
         if (evt.type === "leaves" && on.to && on.to !== evt.to) return false;
         if (evt.type === "counterAdded" && on.kind && on.kind !== evt.kind) return false;
         if (evt.type === "tapped" && on.forMana != null && !!on.forMana !== !!evt.forMana) return false;
@@ -1043,6 +1056,7 @@ export class Game {
         if (step && step !== evt.step) return false;
         if (on.first && evt.step === "main1" && evt.mainIndex > 0) return false;
         const w = on.whose ?? on.who ?? "each";
+        if (w === "monarch") return this.state.monarch != null && evt.player === this.state.monarch;
         if (delayed && delayed.turn === this.state.turn && delayed.step === evt.step) return false;
         if (delayed && on.next === "turn" && delayed.turn === this.state.turn) return false;
         return whoPlayer(w, evt.player);
@@ -1064,6 +1078,16 @@ export class Game {
         if (on.who == null || on.who === "you" || on.who === "opponent" || on.who === "each") { if (!whoPlayer(on.who ?? "each", evt.player)) return false; }
         else if (!whoObj(on.who, evt.obj)) return false;
         if (on.filter && !this.matches(evt.obj, on.filter, ctx, "*")) return false;
+        return true;
+      case "becameMonarch": return whoPlayer(on.who, evt.player);
+      case "milledCards": // batch: "whenever one or more nonland cards are milled"
+        if (!whoPlayer(on.who ?? "each", evt.player)) return false;
+        if (on.nonland && !evt.nonland) return false;
+        this._evtOverride = { ...evt, amount: on.nonland ? evt.nonland : evt.objs.length };
+        return true;
+      case "milled": // per card: "whenever a player mills a nonland card"
+        if (!whoPlayer(on.who ?? "each", evt.player)) return false;
+        if (on.nonland && evt.obj.def.types.includes("land")) return false;
         return true;
       case "chapter":
         if (!whoObj(on.who ?? "self", evt.obj)) return false;
@@ -1662,7 +1686,11 @@ export class Game {
     const st = this.state;
     const keep = (e) => !(e.until === kind && (player == null || e.you === player));
     st.effects = st.effects.filter(keep);
-    if (st.delayed.some((d) => d.until)) st.delayed = st.delayed.filter((d) => !(d.until === kind && (player == null || d.controller === player)));
+    if (st.delayed.some((d) => d.until || d.untilEndOfTurnOf != null)) {
+      st.delayed = st.delayed.filter((d) => !(d.until === kind && (player == null || d.controller === player)));
+      if (kind === "yourNextTurn") for (const d of st.delayed) if (d.untilEndOfTurnOf === player && d.armedTurn == null) d.armedTurn = st.turn; // that player's turn has begun
+      if (kind === "endOfTurn") st.delayed = st.delayed.filter((d) => d.armedTurn !== st.turn);
+    }
     const before = st.controlEffects.length;
     st.controlEffects = st.controlEffects.filter(keep);
     if (before !== st.controlEffects.length) for (const id of st.battlefield) st.objects[id].sick = st.objects[id].sick; // controller recomputed in refresh

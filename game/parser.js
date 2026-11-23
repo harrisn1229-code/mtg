@@ -352,6 +352,7 @@ function parseBeginText(text) {
   }
   if ((m = t.match(/^combat on your turn$/i))) return mk("beginCombat", "you");
   if ((m = t.match(/^each combat$/i))) return mk("beginCombat", "each");
+  if (/^the monarch's end step$/i.test(t)) return mk("end", "monarch");
   if ((m = t.match(/^the end step$/i))) return mk("end", "each");
   fail("begin step: " + text);
 }

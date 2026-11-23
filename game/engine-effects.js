@@ -201,6 +201,7 @@ export const effectMethods = {
       case "life": { const ps = P(C.who); return ps.some((p) => cmp(this.state.players[p].life, C.op || "<=", this.amount(C.n ?? 0, ctx))); }
       case "handSize": { const ps = P(C.who); return ps.some((p) => cmp(this.state.players[p].hand.length, C.op || ">=", this.amount(C.n ?? 0, ctx))); }
       case "yourTurn": return this.state.active === ctx.you;
+      case "monarch": { const m = this.state.monarch; const w = C.who ?? "you"; return w === "none" ? m == null : w === "opponent" ? m != null && m !== ctx.you : w === "any" ? m != null : m === ctx.you; }
       case "notYourTurn": case "opponentTurn": return this.state.active !== ctx.you;
       case "kicked": return !!ctx.kicked;
       case "counters": {
@@ -285,6 +286,8 @@ export const effectMethods = {
 
 // ------------------------------------------------------------------ ops
 const OPS = {
+  *becomeMonarch$(e, ctx) { for (const p of yield* this.whoPlayers$(e.who ?? "you", ctx)) this.becomeMonarch(p); }, // library m4
+  *getRadCounters$(e, ctx) { const n = this.amount(e.amount ?? 1, ctx); for (const p of yield* this.whoPlayers$(e.who ?? "you", ctx)) this.addPlayerCounters(p, "rad", n); },
   *damage$(e, ctx) {
     const n = this.amount(e.amount, ctx);
     let src = ctx.source;
@@ -327,7 +330,10 @@ const OPS = {
   *mill$(e, ctx) {
     const ps = yield* this.whoPlayers$(e.who, ctx);
     const out = [];
+    this._millBatch = []; // simultaneous mills trigger "one or more cards are milled" once
     for (const p of ps) out.push(...this.mill(p, this.amount(e.amount ?? 1, ctx)).map((o) => o.id));
+    const grp = this._millBatch; this._millBatch = null;
+    this.fireMilled(grp);
     ctx.it = out; ctx.prev = out.length;
   },
   *gainLife$(e, ctx) {

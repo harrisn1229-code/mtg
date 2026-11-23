@@ -52,6 +52,8 @@ export const m4Methods = {
     if (st.monarch === p) return;
     st.monarch = p;
     this.emit({ t: "monarch", player: p, text: `${this.pname(p)} becomes the monarch` });
+    this.markDirty();
+    this.fireTrigger({ type: "becameMonarch", player: p });
   },
   /** A creature dealt combat damage to the monarch: its controller becomes the monarch (a trigger). */
   monarchHit(src, p) {
@@ -79,7 +81,11 @@ export const m4Methods = {
             const me = g.state.players[ctx.you];
             const milled = g.mill(ctx.you, me.counters.rad | 0);
             const n = milled.filter((o) => !o.def.types.includes("land")).length;
-            if (n) { g.loseLife(ctx.you, n); g.addPlayerCounters(ctx.you, "rad", -n); }
+            if (n) {
+              if (g._statics.some((s) => s.st.type === "radGain" && s.you === ctx.you)) g.gainLife(ctx.you, n); // Strong, the Brutish Thespian
+              else g.loseLife(ctx.you, n);
+              g.addPlayerCounters(ctx.you, "rad", -n);
+            }
           } }, null);
       }
     }
@@ -90,10 +96,11 @@ export const m4Methods = {
 
   // ================================================================ temporary triggers
   /** "Until <your next turn | end of turn>, whenever <on>, <run>" — a persistent delayed trigger that expires with the effect clock. */
-  addTempTrigger(on, run, ctx, until = "yourNextTurn") {
+  addTempTrigger(on, run, ctx, until = "yourNextTurn", opts = {}) {
     this.addDelayed(on, null, ctx, false, run);
     const d = this.state.delayed[this.state.delayed.length - 1];
-    d.until = until;
+    if (until === "endOfPlayerTurn") d.untilEndOfTurnOf = opts.player; // "until the end of <that player>'s next turn"
+    else d.until = until;
     return d;
   },
 
@@ -135,4 +142,53 @@ export const m4Methods = {
     return attacks.filter((at) => per(at) <= 0 || keep.includes(at));
   },
   parseCost(str) { return parseManaCost(str); },
+
+  // ================================================================ "milled" events
+  /** Fire the mill triggers for `cards` just milled from p's library: one `milled` per card, then one batch `milledCards` (CR 701.17). Batched across players inside mill$ ops. */
+  milledEvents(p, cards) {
+    if (this._millBatch) { this._millBatch.push({ p, cards }); return; }
+    this.fireMilled([{ p, cards }]);
+  },
+  fireMilled(groups) {
+    for (const { p, cards } of groups) for (const o of cards) this.fireTrigger({ type: "milled", obj: o, player: p });
+    const all = groups.flatMap((g2) => g2.cards);
+    if (!all.length) return;
+    this.fireTrigger({ type: "milledCards", objs: all, nonland: all.filter((o) => !o.def.types.includes("land")).length, player: groups[0].p });
+  },
+
+  // ================================================================ activation cost modifiers
+  /** The cost of activating `ab` of `o` for player p after modifiers: `cost.costReduce:{amount}` (Mariposa Military Base, Crown of Gondor with `cond`)
+   *  and statics {type:"activateCostMod", filter, amount, firstPerTurn} (Tezzeret: the first activated ability of an artifact each turn). */
+  effCost(o, ab, p) {
+    const cost = ab.cost || {};
+    let delta = 0;
+    const ctx = { source: o, you: p, quiet: true };
+    if (cost.costReduce && cost.mana && (!cost.costReduce.cond || this.evalCond(cost.costReduce.cond, ctx))) delta -= this.amount(cost.costReduce.amount, ctx);
+    for (const s of this._statics) {
+      if (s.st.type !== "activateCostMod" || s.you !== p || o.zone !== "battlefield") continue;
+      if (s.st.filter && !this.matches(o, s.st.filter, { source: s.src, you: s.you }, "*")) continue;
+      if (s.st.firstPerTurn) { const t = this.state.actTally; if (t && t.turn === this.state.turn && (t[p + ":" + (s.st.key || "")] | 0) > 0) continue; }
+      delta += this.amount(s.st.amount ?? -1, { source: s.src, you: s.you });
+    }
+    if (!delta || !cost.mana) return cost;
+    const c = parseManaCost(cost.mana);
+    c.generic = Math.max(0, c.generic + delta);
+    return { ...cost, mana: costToStringLocal(c) };
+  },
+  /** Remember that p activated an ability of `o` (Tezzeret's "first … each turn"). */
+  noteActivation(p, o) {
+    const st = this.state;
+    if (!st.actTally || st.actTally.turn !== st.turn) st.actTally = { turn: st.turn };
+    for (const s of this._statics) if (s.st.type === "activateCostMod" && s.st.firstPerTurn && s.you === p && (!s.st.filter || this.matches(o, s.st.filter, { source: s.src, you: s.you }, "*"))) st.actTally[p + ":" + (s.st.key || "")] = (st.actTally[p + ":" + (s.st.key || "")] | 0) + 1;
+  },
 };
+
+function costToStringLocal(c) {
+  let s = "";
+  if (c.generic) s += `{${c.generic}}`;
+  if (c.x) s += "{X}".repeat(c.x);
+  for (const k of ["W", "U", "B", "R", "G", "C"]) s += `{${k}}`.repeat(c[k] | 0);
+  for (const h of c.hybrid || []) s += `{${h.join("/")}}`;
+  for (const ph of c.phyrexian || []) s += `{${ph}/P}`;
+  return s || "{0}";
+}

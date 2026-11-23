@@ -247,7 +247,7 @@ export const actionMethods = {
     if (o.zone !== zone) return false;
     if (zone === "battlefield" ? o.controller !== p : o.owner !== p) return false;
     if (ab.sorcery && !sorc) return false;
-    const cost = ab.cost || {};
+    const cost = this.effCost(o, ab, p);
     if (ab.limit === "turn" && o.activations && o.activations.turn === st.turn && (o.activations[i] | 0) >= 1) return false;
     if (cost.loyalty != null || ab.loyalty) {
       if (!sorc) return false;
@@ -621,7 +621,7 @@ export const actionMethods = {
     const ctx = { source: o, you: p, x: 0 };
     let modes = null, modeTargets = null;
     if (ab.modes && ab.modes.modes) { const r = yield* this.chooseModes$(p, ab.modes, o, ctx); if (!r) return; modes = r.modes; modeTargets = r.modeTargets; }
-    const cost = ab.cost || {};
+    const cost = this.effCost(o, ab, p);
     const mc = parseManaCost(cost.mana || "");
     if (mc.x || cost.x || cost.loyalty === "-x" || cost.loyalty === "-X" || cost.removeCounters?.n === "x" || cost.sacCount === "x" || cost.sacCount === "X") {
       let max = 0;
@@ -640,6 +640,7 @@ export const actionMethods = {
     const ok = yield* this.payCost$(p, cost, ctx, { spend });
     if (!ok) return;
     if (ab.limit === "turn") { if (!o.activations || o.activations.turn !== st.turn) o.activations = { turn: st.turn }; o.activations[act.ability] = (o.activations[act.ability] | 0) + 1; }
+    this.noteActivation(p, o);
     if (ab.synthetic === "cycle") { this.log(`${this.pname(p)} cycles ${o.c.name}`); this.fireTrigger({ type: "cycled", obj: o, player: p }); }
     const a = this.newAbilityObj(o, p, ab, { ...ctx }, { targets, modes, modeTargets, specs: ab.targets || [] });
     const tgt = a.targets.length ? ` targeting ${a.targets.map((id) => this.nameOf(id)).join(", ")}` : "";
@@ -652,7 +653,8 @@ export const actionMethods = {
   *activateManaAbility$(p, o, idx, colors, auto) {
     const ab = o.c.abilities[idx];
     if (!ab) return false;
-    const cost = ab.cost || {};
+    const cost = this.effCost(o, ab, p);
+    this.noteActivation(p, o);
     const ctx = { source: o, you: p, manaChoice: colors || null, x: 0, manaAbility: true };
     if (!auto && cost.mana) {
       const c = parseManaCost(cost.mana);

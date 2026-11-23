@@ -49,7 +49,11 @@ export const combatMethods = {
       if (o.controller !== a || !o.c.types.includes("creature") || o.tapped) continue;
       if (o.sick && !this.hasKw(o, "haste")) continue;
       if (this.hasKw(o, "defender") || o.c.cantAttack) continue;
-      out.push({ obj: o.id, defenders: [...defenders] });
+      // "can't attack you" statics (Fealty to the Realm, Champions of Minas Tirith)
+      let defs = defenders;
+      for (const s of this._statics) if (s.st.type === "cantAttackYou" && s.you !== a && this._affects(s, o)) defs = defs.filter((d) => d !== pid(s.you));
+      if (!defs.length) continue;
+      out.push({ obj: o.id, defenders: [...defs] });
     }
     return out;
   },
@@ -90,6 +94,8 @@ export const combatMethods = {
       if (!this.matches(b, ex, { source: a, you: a.controller })) return false;
     }
     if (this.protectedFrom(a, b)) return false;
+    for (const x of a.c.cantBeBlockedBy || []) if (x.byMonarch && this.state.monarch === b.controller) return false; // Azure Fleet Admiral
+    if (a.c.cantBeBlockedWhileDefenderHas && (this.state.players[b.controller]?.counters[a.c.cantBeBlockedWhileDefenderHas] | 0) > 0) return false; // Nightkin Ambusher
     for (const t of ["plains", "island", "swamp", "mountain", "forest"]) // landwalk
       if (this.hasKw(a, t + "walk") && this.state.battlefield.some((id) => { const l = this.state.objects[id]; return l.controller === b.controller && l.c.types.includes("land") && l.c.subtypes.includes(t); })) return false;
     const art = b.c.types.includes("artifact");
