@@ -23,7 +23,6 @@ export const m2Methods = {
     for (const o of bf) {
       const c = o.c;
       if (o.goads && o.goads.length) c.goaded = o.goads.map((g) => g.by);
-      if (o.suspected) { c.suspected = true; c.cantBlock = true; if (!c.keywords.menace) c.keywords.menace = true; }
       if (o.faceDown && o.cloaked && !c.keywords.ward) c.keywords.ward = "{2}";
       // keywords granted by statics/effects that carry abilities of their own (myriad, exalted, fabricate, ...)
       const base = this.faceDef(o).keywords || {};
@@ -50,7 +49,6 @@ export const m2Methods = {
   /** Extra filter keys for matches(): goaded, suspected, parity, anyCounters, entered, crewed, monstrous, tokenCopy. */
   m2Matches(o, f, c) {
     if (f.goaded != null && !!(c.goaded && c.goaded.length) !== !!f.goaded) return false;
-    if (f.suspected != null && !!o.suspected !== !!f.suspected) return false;
     if (f.parity && ((c.cmc | 0) % 2 === 0) !== (f.parity === "even")) return false;
     if (f.anyCounters != null) { const n = Object.entries(o.counters || {}).some(([k, v]) => k !== "loyalty" && v > 0); if (n !== !!f.anyCounters) return false; }
     if (f.enteredThisTurn != null && !!(o.enteredTurn === this.state.turn && o.zone === "battlefield") !== !!f.enteredThisTurn) return false;
@@ -82,7 +80,7 @@ export const m2Methods = {
     return false;
   },
   /** Reset per-incarnation fields when a permanent leaves the battlefield. */
-  m2Left(o) { o.goads = null; o.suspected = false; o.monstrous = false; o.exerted = false; o.cloaked = false; o.enlisted = null; o.attackedPlayers = null; o.squad = 0; },
+  m2Left(o) { o.goads = null; o.monstrous = false; o.exerted = false; o.cloaked = false; o.enlisted = null; o.attackedPlayers = null; o.squad = 0; },
 
   // ================================================================ combat hooks
   /** Defenders `o` may attack (statics: can't attack you / a player it already attacked / this extra combat's restriction). */
