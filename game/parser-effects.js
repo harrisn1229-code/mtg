@@ -293,6 +293,9 @@ export function parseCond(text, ctx = {}) {
   if (/^you do$/i.test(t)) return { type: "did" };
   if (/^(?:you don't|the player doesn't|that player doesn't|they don't)$/i.test(t)) return { type: "not", c: { type: "did" } };
   if (/^it's your turn$/i.test(t) || /^it is your turn$/i.test(t)) return { type: "yourTurn" };
+  if (/^you(?:'re| are) the monarch$/i.test(t)) return { type: "monarch", who: "you" };
+  if (/^there is no monarch$/i.test(t)) return { type: "monarch", who: "none" };
+  if (/^an opponent is the monarch$/i.test(t)) return { type: "monarch", who: "opponent" };
   if (/^it's not your turn$/i.test(t)) return { type: "not", c: { type: "yourTurn" } };
   if (/^(?:~|this spell|it) was kicked$/i.test(t)) return { type: "kicked" };
   if ((m = t.match(/^you control a commander$/i))) return { type: "control", filter: { isCommander: true, controller: "you" }, op: ">=", n: 1 };
@@ -453,7 +456,7 @@ const SUBJ_RES = [
   /^(its (?:controller|owner)|that (?:creature|permanent|spell|card|land|artifact|token)'s (?:controller|owner))\b/i,
 ];
 const VERB3 = { draws: "draw", discards: "discard", loses: "lose", gains: "gain", mills: "mill", sacrifices: "sacrifice", creates: "create", scries: "scry", surveils: "surveil",
-  reveals: "reveal", searches: "search", puts: "put", exiles: "exile", returns: "return", adds: "add", chooses: "choose", shuffles: "shuffle", untaps: "untap", taps: "tap", pays: "pay", looks: "look", controls: "control", deals: "deal", may: "may" };
+  reveals: "reveal", searches: "search", puts: "put", exiles: "exile", returns: "return", adds: "add", chooses: "choose", shuffles: "shuffle", untaps: "untap", taps: "tap", pays: "pay", looks: "look", controls: "control", deals: "deal", may: "may", becomes: "become", gets: "get" };
 
 function splitSubject(c, ctx) {
   for (const re of SUBJ_RES) {
@@ -889,6 +892,9 @@ function playerRules(who, c, ctx, hadSubject) {
   const withWho = (e) => { e.who = who; return e; };
   { const r3 = m3Player(who, c, ctx); if (r3) return r3; } // library batch m3: monarch, energy, rad, investigate, manifest, discover
 
+  // the monarch / rad counters (library m4)
+  if (/^become the monarch$/i.test(c)) return [{ op: "becomeMonarch", who }];
+  if ((m = c.match(new RegExp(`^get (${NUM_RE}) rad counters?$`, "i")))) return [{ op: "getRadCounters", who, amount: amt(m[1], ctx) }];
   // draw
   if ((m = c.match(/^draw (.+?)(?: cards?)?$/i)) || false) {
     let body = c.replace(/^draw /i, "");

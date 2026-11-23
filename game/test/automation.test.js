@@ -760,3 +760,11 @@ test("Generalised: cascade casts the first cheaper nonland card free; afterlife 
   assert.equal(sp.length, 1); assert.ok(g.hasKw(sp[0], "flying"));
   healthy(g);
 });
+
+test("Gríma Wormtongue: your opponents can't gain life, you still can", () => {
+  const g = setup();
+  place(g, 0, "battlefield", "Gríma Wormtongue");
+  assert.equal(g.gainLife(1, 5), 0, "opponent gains nothing");
+  assert.equal(g.state.players[1].life, 40);
+  assert.ok(g.gainLife(0, 3) > 0, "controller still gains life");
+});

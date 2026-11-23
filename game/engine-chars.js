@@ -65,6 +65,8 @@ function synthAbilities(d) {
     out.push({ kind: "activated", synthetic: "unearth", zone: "graveyard", sorcery: true, cost: { mana: costStr(kw.unearth) }, effects: [{ op: "_unearth" }], text: `Unearth ${costStr(kw.unearth)}` });
   if (kw.suspend && typeof kw.suspend === "object") // upkeep: remove a time counter; when the last is removed, cast it without paying its mana cost (CR 702.62)
     out.push({ kind: "triggered", synthetic: "suspend", zone: "exile", on: { event: "beginStep", step: "upkeep", whose: "you" }, condition: { type: "_suspended" }, effects: [{ op: "_suspendTick" }], text: `Suspend ${kw.suspend.n}` });
+  if (kw.levelUp) // "Level up {cost}": {cost}: put a level counter on this. Level up only as a sorcery.
+    out.push({ kind: "activated", synthetic: "levelUp", sorcery: true, cost: { mana: costStr(kw.levelUp) }, effects: [{ op: "addCounters", what: "self", kind: "level", amount: 1 }], text: `Level up ${costStr(kw.levelUp)}` });
   if (kw.cascade)
     out.push({ kind: "triggered", synthetic: "cascade", zone: "stack", on: { event: "cast", who: "self" }, effects: [{ op: "_cascade" }], text: "Cascade" });
   if (kw.increment) // "Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature."
@@ -115,6 +117,7 @@ export const charMethods = {
   /** The CardDef currently describing obj (face-aware, copy-aware). */
   faceDef(o) {
     if (o.faceDown && (o.zone === "battlefield" || o.zone === "stack" || o.zone === "phased")) return o.faceDownWard ? FACE_DOWN_WARD_DEF : FACE_DOWN_DEF;
+    if (o.formDef) return o.formDef; // library m4: the object is a different card form while on the battlefield (Harold and Bob's Aura form)
     if (o.mergeDef) return o.mergeDef;
     const d = o.copyDef || o.def;
     if (o.face && d.faces && d.faces[o.face]) return d.faces[o.face];
@@ -145,6 +148,11 @@ export const charMethods = {
       loyalty: d.loyalty, keywords: { ...d.keywords }, cost: d.cost, cmc: d.cmc, text: d.text, img: d.img || o.img || null,
       unparsed: d.unparsed, abilities: this.baseAbilities(o), identity: d.identity,
     };
+    if (o.zone !== "battlefield") for (const ab of d.abilities || []) if (ab.kind === "static" && ab.effect?.type === "typesOffBattlefield") { // Grist: "as long as ~ isn't on the battlefield, it's a 1/1 Insect creature in addition to its other types"
+      for (const t of ab.effect.addTypes || []) if (!c.types.includes(t)) c.types.push(t);
+      for (const t of ab.effect.addSubtypes || []) if (!c.subtypes.includes(t)) c.subtypes.push(t);
+      if (c.power == null) { c.power = ab.effect.power; c.toughness = ab.effect.toughness; }
+    }
     if (c.keywords.changeling) c.allCreatureTypes = true;
     if (c.keywords.devoid) c.colors = [];
     if (o.zone === "stack" && o.x != null && d.cost && /\{X\}/i.test(d.cost)) c.cmc = d.cmc + o.x * (d.cost.match(/\{X\}/gi) || []).length;
@@ -181,7 +189,12 @@ export const charMethods = {
     // controllers (layer 2) first: control-changing effects in timestamp order
     for (const o of bf) {
       let ctl = o.baseController ?? o.owner;
-      for (const ce of st.controlEffects) if (ce.objId === o.id) ctl = ce.controller;
+      for (const ce of st.controlEffects) if (ce.objId === o.id) {
+        if (ce.until === "sourceOnBattlefield") { const cs = st.objects[ce.sourceId]; if (!cs || cs.zone !== "battlefield") continue; }
+        if (ce.until === "sourceControlled") { const cs = st.objects[ce.sourceId]; if (!cs || cs.zone !== "battlefield" || cs.controller !== ce.controller) continue; } // "for as long as you control <source>"
+        ctl = ce.controller;
+      }
+      if (st.monarch != null) for (const a of bf) if (a.attachedTo === o.id && this.baseAbilities(a).some((ab) => ab.kind === "static" && ab.effect?.type === "monarchControls")) ctl = st.monarch; // Fealty to the Realm
       if (o.controller !== ctl) { o.controller = ctl; }
     }
     // gather statics
@@ -190,6 +203,10 @@ export const charMethods = {
       for (const ab of this.baseAbilities(o)) if (ab.kind === "static" && ab.effect && typeof ab.effect === "object") statics.push({ src: o, st: ab.effect, cond: ab.condition, ts: o.ts, you: o.controller, own: true });
       if (o.c && o.c.abilities !== this.baseAbilities(o)) // granted static abilities (e.g. by equipment)
         for (const ab of o.c.abilities) if (ab.kind === "static" && ab.effect && ab._granted) statics.push({ src: o, st: ab.effect, cond: ab.condition, ts: o.ts + 0.5, you: o.controller, own: true });
+    }
+    if (st.emblems) for (const id of st.emblems) { // emblems' static abilities (library m4)
+      const o = st.objects[id];
+      if (o) for (const ab of this.baseAbilities(o)) if (ab.kind === "static" && ab.effect && typeof ab.effect === "object") statics.push({ src: o, st: ab.effect, cond: ab.condition, ts: o.ts, you: o.owner, own: true });
     }
     for (const e of st.effects) {
       const src = st.objects[e.sourceId] || e.sourceSnap || null;
@@ -225,6 +242,7 @@ export const charMethods = {
         for (const t of s.st.addSubtypes || []) if (!c.subtypes.includes(t)) c.subtypes.push(String(t).toLowerCase());
         if (s.st.allCreatureTypes) c.allCreatureTypes = true;
         if (s.st.colors) c.colors = s.st.colors.map(colorLetter).filter(Boolean);
+        for (const col of s.st.addColors || []) { const L = colorLetter(col); if (L && !c.colors.includes(L)) c.colors.push(L); }
       }
     }
     // pass 2: abilities / keywords / rule flags
@@ -243,6 +261,8 @@ export const charMethods = {
         }
       } else if (t === "activateAsHaste") {
         for (const o of bf) if (this._affects(s, o)) o.c.activateAsHaste = true;
+      } else if (t === "cantBeBlockedBy" || t === "cantBeBlockedWhileDefenderHas") {
+        for (const o of bf) if (this._affects(s, o)) { if (t === "cantBeBlockedBy") (o.c.cantBeBlockedBy ||= []).push(s.st); else o.c.cantBeBlockedWhileDefenderHas = s.st.counter || "rad"; }
       } else if (t === "cantBlock" || t === "cantAttack" || t === "mustAttack" || t === "cantBeBlocked" || t === "cantBeCountered" || t === "mustBlock") {
         for (const o of bf) if (this._affects(s, o)) {
           if (t === "cantBeBlocked") (o.c.unblockable ||= []).push(s.st.exceptBy || null);
@@ -349,6 +369,7 @@ export const charMethods = {
     if (f.owner && !relMatch(o.owner, f.owner, you, this)) return false;
     if (f.token != null && !!o.token !== !!f.token) return false;
     if (f.nontoken && o.token) return false;
+    if (f.colored != null && ((c.colors || []).length > 0) !== !!f.colored) return false; // "one or more colors"
     if (f.colors && f.colors.length && !colorMatch(c.colors, f.colors)) return false;
     if (f.notColors && f.notColors.length && colorMatch(c.colors, f.notColors)) return false;
     if (f.cmc && typeof f.cmc === "object" && !cmp(c.cmc, f.cmc.op, this.amount(f.cmc.n, ctx))) return false;
@@ -360,6 +381,7 @@ export const charMethods = {
     if (f.keywords && f.keywords.length && !f.keywords.every((k) => this.hasKw(o, k))) return false;
     if (f.notKeywords && f.notKeywords.some((k) => this.hasKw(o, k))) return false;
     if (f.name != null && (Array.isArray(f.name) ? !f.name.includes(c.name) : c.name !== f.name)) return false;
+    if (f.milledThisTurn && o.milledTurn !== this.state.turn) return false; // library m4: "milled this turn"
     if (f.isCommander != null && !!o.isCommander !== !!f.isCommander) return false;
     if (f.ringBearer != null && this.isRingBearer(o) !== !!f.ringBearer) return false;
     if (f.counters && typeof f.counters === "object" && !((o.counters?.[f.counters.kind] | 0) > 0)) return false;

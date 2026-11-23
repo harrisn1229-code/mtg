@@ -9,6 +9,17 @@ const pid = (i) => "P" + i;
 const PERM = ["artifact", "battle", "creature", "enchantment", "land", "planeswalker"];
 const isPerm = (d) => d.types.some((t) => PERM.includes(t));
 
+/** "Spend mana as though it were mana of any color" ("color": colorless still can't pay a colored symbol) / "of any type" (colored symbols become generic). */
+function spendAsCost(c, how) {
+  const out = { ...c, hybrid: [...(c.hybrid || [])] };
+  for (const k of ["W", "U", "B", "R", "G"]) {
+    for (let i = 0; i < (out[k] | 0); i++) { if (how === "type") out.generic += 1; else out.hybrid.push(["W", "U", "B", "R", "G"]); }
+    out[k] = 0;
+  }
+  if (how === "type") { out.generic += out.C | 0; out.C = 0; out.generic += out.hybrid.length; out.hybrid = []; }
+  return out;
+}
+
 export const actionMethods = {
   // ---------------------------------------------------------------- enumeration
   /** Internal action list for player p (each has objRef). Only legal + affordable actions. */
@@ -40,8 +51,13 @@ export const actionMethods = {
       }
     };
     for (const id of pl.hand) castFrom(O(id), "hand");
+    const ptop = this.playFromTopObj(p); // library m4: "you may play cards from the top of your library"
+    if (ptop) {
+      if (ptop.def.types.includes("land")) { if (sorc && pl.landsPlayed < pl.landsPerTurn) acts.push({ type: "land", obj: ptop.id, objRef: ptop, label: `Play ${ptop.def.name}`, zone: "library" }); }
+      else castFrom(ptop, "library");
+    }
     for (const id of pl.command) castFrom(O(id), "command");
-    for (const id of pl.graveyard) castFrom(O(id), "graveyard");
+    for (const q of st.players) for (const id of q.graveyard) { const go = O(id); if (q.idx === p || this.mayCastGy(go, p)) castFrom(go, "graveyard"); } // library m4: mayCastGy = "until end of turn, you may cast that card from the graveyard"
     for (const q of st.players) for (const id of q.exile) { const o = O(id); if ((o.owner === p && o.onAdventure) || this.mayPlayFromExile(o, p) || this.m1ExileCastable(o, p)) castFrom(o, "exile"); }
     this.m1Actions(p, sources, sorc, acts);
     // activated abilities
@@ -80,6 +96,7 @@ export const actionMethods = {
     return acts;
   },
 
+  mayCastGy(o, p) { const m = o && o.zone === "graveyard" ? o.mayCastGy : null; return !!(m && m.player === p && this.state.turn <= m.untilTurn); },
   mayPlayFromExile(o, p) {
     const m = o && o.zone === "exile" ? o.mayPlay : null;
     return !!(m && m.player === p && (m.untilTurn == null || this.state.turn <= m.untilTurn));
@@ -98,7 +115,7 @@ export const actionMethods = {
   castVariants(o, zone, p) {
     const d = o.def;
     const out = [];
-    if (zone !== "command" && o.owner !== p && !this.mayPlayFromExile(o, p)) return out;
+    if (zone !== "command" && o.owner !== p && !this.mayPlayFromExile(o, p) && !this.mayCastGy(o, p)) return out;
     const castable = (fd) => fd && !fd.types.includes("land") && fd.cost != null && (fd.cost !== "" || (fd.types.length && !isPerm(fd) && false));
     const kw = this.m1Kws(o, p, d);
     const cs = (v) => (typeof v === "string" ? v : v && typeof v === "object" ? v.cost || v.mana || "" : null);
@@ -110,21 +127,24 @@ export const actionMethods = {
         if (cs(kw.overload)) out.push({ variant: "overload", face: 0 });
         out.push(...this.altVariants(o, d, p));
       }
-      if (this.hasStaticOn(d, "castFree", { source: o, you: p })) out.push({ variant: "free", face: 0 });
+      if (this.hasStaticOn(d, "castFree", { source: o, you: p }) || (castable(d) && this.castsFreeFromHand(p))) out.push({ variant: "free", face: 0 });
       if (d.faces && d.faces[1]) {
         if (d.layout === "adventure" && castable(d.faces[1])) out.push({ variant: "adventure", face: 1 });
         else if (d.layout === "mdfc" && castable(d.faces[1])) out.push({ variant: "face1", face: 1 });
       }
+    } else if (zone === "library") {
+      if (castable(d) && this.playFromTopObj(p) === o) out.push({ variant: "normal", face: 0 }, ...this.altVariants(o, d, p));
     } else if (zone === "command") {
       if (o.isCommander && o.owner === p && castable(d)) out.push({ variant: "commander", face: 0 });
     } else if (zone === "graveyard") {
       if (cs(kw.flashback)) out.push({ variant: "flashback", face: 0 });
       if (cs(kw.escape)) out.push({ variant: "escape", face: 0 });
-      if (castable(d) && !this.m1NoGraveyardNormal(o, d) && d.abilities.some((a) => a.kind === "static" && a.effect?.type === "castFrom" && a.effect.zone === "graveyard" && (!a.condition || this.evalCond(a.condition, { source: o, you: p, quiet: true }))))
+      if (castable(d) && this.mayCastGy(o, p)) out.push({ variant: "normal", face: 0 }, ...this.altVariants(o, d, p));
+      else if (castable(d) && !this.m1NoGraveyardNormal(o, d) && d.abilities.some((a) => a.kind === "static" && a.effect?.type === "castFrom" && a.effect.zone === "graveyard" && (!a.condition || this.evalCond(a.condition, { source: o, you: p, quiet: true }))))
         out.push({ variant: "normal", face: 0 }, ...this.altVariants(o, d, p));
     } else if (zone === "exile") {
       if (o.onAdventure && castable(d)) out.push({ variant: "normal", face: 0 });
-      else if (this.mayPlayFromExile(o, p) && castable(d)) out.push({ variant: o.mayPlay.free ? "free" : "normal", face: 0 }, ...(o.mayPlay.free ? [] : this.altVariants(o, d, p)));
+      else if (this.mayPlayFromExile(o, p) && castable(d)) out.push({ variant: o.mayPlay.free ? "free" : "normal", face: 0, ...(o.mayPlay.spendAs ? { spendAs: o.mayPlay.spendAs } : {}) }, ...(o.mayPlay.free ? [] : this.altVariants(o, d, p)));
     }
     this.m1Variants(o, zone, p, d, out);
     return out;
@@ -180,6 +200,7 @@ export const actionMethods = {
       const who = s.st.who || "you";
       if (who === "you" && s.you !== p) continue;
       if (who === "opponent" && s.you === p) continue;
+      if (s.st.notFromHand && o.zone === "hand") continue; // "spells you cast from anywhere other than your hand"
       if (s.st.filter && !this.matches(view, s.st.filter, { source: s.src, you: s.you }, "*")) continue;
       if (s.st.fromZones && !s.st.fromZones.includes(o.zone)) continue;
       if (s.st.notFromZone && s.st.notFromZone === o.zone) continue;
@@ -193,6 +214,7 @@ export const actionMethods = {
       delta += per * this.amount(a.effect.amount ?? -1, ctx);
     }
     if (delta) c.generic = Math.max(0, c.generic + delta);
+    if (v.spendAs) c = spendAsCost(c, v.spendAs);
     return c;
   },
 
@@ -248,7 +270,7 @@ export const actionMethods = {
     if (o.zone !== zone) return false;
     if (zone === "battlefield" ? o.controller !== p : o.owner !== p) return false;
     if (ab.sorcery && !sorc) return false;
-    const cost = ab.cost || {};
+    const cost = this.effCost(o, ab, p);
     if (ab.limit === "turn" && o.activations && o.activations.turn === st.turn && (o.activations[i] | 0) >= 1) return false;
     if (cost.loyalty != null || ab.loyalty) {
       if (!sorc) return false;
@@ -446,7 +468,7 @@ export const actionMethods = {
       if (o.zone !== "stack" || (o.isAbility && !spec.ability) || (src && o.id === src.id)) return false;
       if (spec.spellFilter && !this.matches(o, spec.spellFilter, mctx, "*")) return false;
     } else if (what === "any") {
-      if (o.zone !== "battlefield" || !(hasType(o.c, "creature") || hasType(o.c, "planeswalker"))) return false;
+      if (o.zone !== "battlefield" || !(hasType(o.c, "creature") || hasType(o.c, "planeswalker") || hasType(o.c, "battle"))) return false;
     } else {
       if (o.isAbility) return false;
       const zone = spec.zone || (typeof what === "object" ? what.zone : null) || "battlefield";
@@ -471,6 +493,21 @@ export const actionMethods = {
       const min = this.specMin(spec, ctx), max = Math.min(this.specMax(spec, ctx), cands.length);
       if (cands.length < min) return null;
       if (max <= 0) { out.push([]); continue; }
+      if (spec.totalCmc != null) { // "…with total mana value N or less": pick one at a time among the cards that still fit
+        const picked = [];
+        let left = spec.totalCmc | 0;
+        while (picked.length < max) {
+          const fit = cands.filter((id) => !picked.includes(id) && ((this.state.objects[id]?.def?.cmc | 0) <= left));
+          if (!fit.length) break;
+          const options1 = fit.map((id) => ({ id, label: this.objLabel(this.state.objects[id], p), type: "object" }));
+          const ch1 = yield* this.choose$(p, { prompt: `Choose target ${picked.length + 1} for ${src?.c?.name || "ability"} (total mana value ${left} or less; none to stop)`, options: options1, min: 0, max: 1, reason: "target", source: src?.id, hint: { kind: "target", index: i, spec, effects: effects || [], chosen: out.map((x) => [...x]) } });
+          if (!ch1.length) break;
+          picked.push(ch1[0].id);
+          left -= this.state.objects[ch1[0].id]?.def?.cmc | 0;
+        }
+        out.push(picked);
+        continue;
+      }
       const options = cands.map((id) => ({ id, label: isPid(id) ? this.pname(+id.slice(1)) : this.objLabel(this.state.objects[id], p), type: isPid(id) ? "player" : "object" }));
       const ch = yield* this.choose$(p, { prompt: `Choose ${min === max ? (max === 1 ? "a target" : max + " targets") : min > 0 ? `${min}–${max} targets` : `up to ${max} target${max === 1 ? "" : "s"}`} for ${src?.c?.name || "ability"}${spec.text ? ` (${spec.text})` : ""}`, options, min, max, reason: "target", source: src?.id, hint: { kind: "target", index: i, spec, effects: effects || [], chosen: out.map((x) => [...x]) } });
       out.push(ch.map((c) => c.id));
@@ -485,6 +522,12 @@ export const actionMethods = {
     let mx = ms.max ?? ms.min ?? 1;
     if (ms.maxIf && ms.maxIf.cond && this.evalCond(ms.maxIf.cond, { ...ctx, source: src, you: p, quiet: true })) mx = Math.max(mx, ms.maxIf.max | 0);
     const min = Math.min(ms.min ?? 1, modes.length), max = Math.min(mx, avail.length);
+    if (ms.random) { // "choose one at random": the engine's rng, before targets are chosen
+      const i = Math.floor(this.rng() * modes.length);
+      this.log(`${src?.c?.name || "Ability"}: random mode — ${modes[i].text || i + 1}`);
+      const t = modes[i].targets?.length ? yield* this.chooseTargets$(p, modes[i].targets, src, ctx, modes[i].effects) : [];
+      return t ? { modes: [i], modeTargets: [t] } : null;
+    }
     if (avail.length < min || max <= 0) return null;
     const ch = yield* this.choose$(p, { prompt: `Choose ${min === max ? min : `${min}–${max}`} mode${max > 1 ? "s" : ""} for ${src?.c?.name || "spell"}`, options: avail.map((i) => ({ id: "m" + i, label: modes[i].text || `Mode ${i + 1}`, type: "mode" })), min, max, reason: "mode", source: src?.id, hint: { kind: "mode", modes } });
     const picked = ch.map((c) => +c.id.slice(1)).sort((a, b) => a - b);
@@ -588,6 +631,7 @@ export const actionMethods = {
     o.faceDown = v.variant === "morph";
     o.faceDownWard = o.faceDown && o.def.keywords?.disguise != null;
     o.manaSpent = spent.n;
+    { const pl2 = st.players[p]; const tm = pl2.treasureMana | 0; if (tm > 0 && spent.n > 0) { o.treasureSpent = true; pl2.treasureMana = Math.max(0, tm - spent.n); } else o.treasureSpent = false; }
     o._division = division;
     o._targets = targets; o._targetSpecs = specs; o._modes = modes; o._modeTargets = modeTargets;
     o._sacrificed = ctx.sacrificed || [];
@@ -597,9 +641,10 @@ export const actionMethods = {
     this.markDirty();
     st.spellsThisTurn++;
     this.m2Cast(p, fd);
+    { const pc = st.players[p]; pc.castsT = pc.castsT && pc.castsT.turn === st.turn ? { turn: st.turn, n: pc.castsT.n + 1 } : { turn: st.turn, n: 1 }; }
     const tgt = o.targets.length ? ` targeting ${o.targets.map((id) => this.nameOf(id)).join(", ")}` : "";
     this.emit({ t: "cast", obj: o.id, player: p, targets: [...o.targets], from, variant: v.variant, manaSpent: spent.n, text: `${pl.name} casts ${o.faceDown ? "a face-down creature spell" : o.c.name}${x ? ` (X=${x})` : ""}${v.variant === "kicked" ? " (kicked)" : v.variant === "mutate" ? " for its mutate cost" : v.variant === "spectacle" ? " for its spectacle cost" : ""}${tgt}` });
-    this.fireTrigger({ type: "cast", obj: o, player: p, manaSpent: spent.n });
+    this.fireTrigger({ type: "cast", obj: o, player: p, manaSpent: spent.n, treasure: o.treasureSpent ? 1 : 0 });
     this.m1AfterCast(o, p, m1p.rec);
     this.afterTargeting(o);
     this.fireOnSpend(spent.units, spend, p);
@@ -616,7 +661,7 @@ export const actionMethods = {
     const ctx = { source: o, you: p, x: 0 };
     let modes = null, modeTargets = null;
     if (ab.modes && ab.modes.modes) { const r = yield* this.chooseModes$(p, ab.modes, o, ctx); if (!r) return; modes = r.modes; modeTargets = r.modeTargets; }
-    const cost = ab.cost || {};
+    const cost = this.effCost(o, ab, p);
     const mc = parseManaCost(cost.mana || "");
     if (mc.x || cost.x || cost.loyalty === "-x" || cost.loyalty === "-X" || cost.removeCounters?.n === "x" || cost.sacCount === "x" || cost.sacCount === "X") {
       let max = 0;
@@ -636,6 +681,7 @@ export const actionMethods = {
     const ok = yield* this.payCost$(p, cost, ctx, { spend });
     if (!ok) return;
     if (ab.limit === "turn") { if (!o.activations || o.activations.turn !== st.turn) o.activations = { turn: st.turn }; o.activations[act.ability] = (o.activations[act.ability] | 0) + 1; }
+    this.noteActivation(p, o);
     if (ab.synthetic === "cycle") { this.log(`${this.pname(p)} cycles ${o.c.name}`); this.fireTrigger({ type: "cycled", obj: o, player: p }); }
     const a = this.newAbilityObj(o, p, ab, { ...ctx }, { targets, modes, modeTargets, specs: ab.targets || [] });
     const tgt = a.targets.length ? ` targeting ${a.targets.map((id) => this.nameOf(id)).join(", ")}` : "";
@@ -648,19 +694,22 @@ export const actionMethods = {
   *activateManaAbility$(p, o, idx, colors, auto) {
     const ab = o.c.abilities[idx];
     if (!ab) return false;
-    const cost = ab.cost || {};
+    const cost = this.effCost(o, ab, p);
+    this.noteActivation(p, o);
     const ctx = { source: o, you: p, manaChoice: colors || null, x: 0, manaAbility: true };
     if (!auto && cost.mana) {
       const c = parseManaCost(cost.mana);
       if (!(yield* this.payMana$(p, { ...c, x: 0 }, { exclude: new Set([o.id]), spend: { kind: "ability", source: o, player: p }, protect: o.id }))) return false;
     }
     this._manaTrig = [];
+    const trBefore = o.c.subtypes.includes("treasure") ? this.poolCount(p) : -1; // Alchemist's Talent: remember how much of the pool came from a Treasure
     if (cost.tap) { if (o.tapped) return false; o.tapped = true; this.markDirty(); this.emit({ t: "tap", obj: o.id, mana: true, silent: !!auto, text: `${o.c.name} is tapped for mana` }); this.fireTrigger({ type: "tapped", obj: o, forMana: true, player: p }); }
     const rest = { ...cost }; delete rest.mana; delete rest.tap;
     if (Object.keys(rest).length) { if (!(yield* this.payCost$(p, rest, ctx, { skipMana: true }))) return false; }
     if (typeof ab.run === "function") yield* ab.run(this, ctx);
     else yield* this.runEffects$(ab.effects || [], ctx);
     yield* this.runManaTriggers$();
+    if (trBefore >= 0) { const pl = this.state.players[p]; pl.treasureMana = (pl.treasureMana | 0) + Math.max(0, this.poolCount(p) - trBefore); }
     if (ab.limit === "turn") { if (!o.activations || o.activations.turn !== this.state.turn) o.activations = { turn: this.state.turn }; o.activations[idx] = (o.activations[idx] | 0) + 1; }
     return true;
   },

@@ -54,6 +54,7 @@ export const effectMethods = {
       case "event": {
         const ev = ctx.event || {};
         const w = ref.what || "object";
+        if (w === "player" && (ev.type === "dealsCombatDamage" || ev.type === "dealsDamage") && typeof ev.target === "string" && isPid(ev.target)) return [ev.target]; // "deals damage to a player, that player …" is the damaged player
         if (w === "player") return ev.player != null ? [pid(ev.player)] : ev.obj ? [pid(ev.obj.controller)] : [];
         if (w === "source") return ev.source ? [ev.source.id] : [];
         if (w === "target") return ev.target ? [ev.target] : [];
@@ -204,8 +205,11 @@ export const effectMethods = {
       case "life": { const ps = P(C.who); return ps.some((p) => cmp(this.state.players[p].life, C.op || "<=", this.amount(C.n ?? 0, ctx))); }
       case "handSize": { const ps = P(C.who); return ps.some((p) => cmp(this.state.players[p].hand.length, C.op || ">=", this.amount(C.n ?? 0, ctx))); }
       case "yourTurn": return this.state.active === ctx.you;
+      case "solved": { const s = ctx.source && (this.state.objects[ctx.source.id] || ctx.source); return !!s && !!s.solved; } // Cases
+      case "castSpellThisTurn": { const t = this.state.players[ctx.you]?.castsT; return !!t && t.turn === this.state.turn && t.n >= (C.n ?? 1); } // "as long as you've cast a spell this turn"
+      case "monarch": { const m = this.state.monarch; const w = C.who ?? "you"; return w === "none" ? m == null : w === "opponent" ? m != null && m !== ctx.you : w === "any" ? m != null : m === ctx.you; }
       case "notYourTurn": case "opponentTurn": return this.state.active !== ctx.you;
-      case "kicked": return !!ctx.kicked;
+      case "kicked": return !!ctx.kicked || !!(ctx.source && (this.state.objects[ctx.source.id] || ctx.source).kicked); // library m4: "when ~ enters, if it was kicked" (the source remembers)
       case "counters": {
         const ids = this.refsSync(C.what ?? "self", ctx);
         const o = ids.length ? this.lkiOf(ids[0], ctx) : null;
@@ -292,6 +296,8 @@ export const effectMethods = {
 
 // ------------------------------------------------------------------ ops
 export const OPS = {
+  *becomeMonarch$(e, ctx) { for (const p of yield* this.whoPlayers$(e.who ?? "you", ctx)) this.becomeMonarch(p); }, // library m4
+  *getRadCounters$(e, ctx) { const n = this.amount(e.amount ?? 1, ctx); for (const p of yield* this.whoPlayers$(e.who ?? "you", ctx)) this.addPlayerCounters(p, "rad", n); },
   *damage$(e, ctx) {
     const n = this.amount(e.amount, ctx);
     let src = ctx.source;
@@ -334,7 +340,10 @@ export const OPS = {
   *mill$(e, ctx) {
     const ps = yield* this.whoPlayers$(e.who, ctx);
     const out = [];
+    this._millBatch = []; // simultaneous mills trigger "one or more cards are milled" once
     for (const p of ps) out.push(...this.mill(p, this.amount(e.amount ?? 1, ctx)).map((o) => o.id));
+    const grp = this._millBatch; this._millBatch = null;
+    this.fireMilled(grp);
     ctx.it = out; ctx.prev = out.length;
   },
   *gainLife$(e, ctx) {

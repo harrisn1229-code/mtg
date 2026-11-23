@@ -6,7 +6,7 @@ export const combatMethods = {
   defenderPlayer(def) {
     if (isPid(def)) return +def.slice(1);
     const o = this.state.objects[def];
-    return o ? o.controller : null;
+    return o ? (o.c?.types.includes("battle") && o.protector != null ? o.protector : o.controller) : null; // a Battle is defended by its protector
   },
 
   *combatPhase$() {
@@ -43,6 +43,7 @@ export const combatMethods = {
       defenders.push(pid(q));
       for (const id of st.battlefield) { const o = st.objects[id]; if (o.controller === q && o.c.types.includes("planeswalker")) defenders.push(o.id); }
     }
+    for (const id of st.battlefield) { const b = st.objects[id]; if (b && b.c.types.includes("battle") && b.protector !== a && !b.lki) defenders.push(b.id); } // library m4: anyone but the protector may attack a Battle
     const out = [];
     if (!defenders.length) return out;
     for (const id of st.battlefield) {
@@ -50,7 +51,12 @@ export const combatMethods = {
       if (o.controller !== a || !o.c.types.includes("creature") || o.tapped) continue;
       if (o.sick && !this.hasKw(o, "haste")) continue;
       if (this.hasKw(o, "defender") || o.c.cantAttack) continue;
-      const ds = this.m2Defenders(o, [...defenders]);
+      // "can't attack you" statics (Fealty to the Realm, Champions of Minas Tirith)
+      let defs = defenders;
+      for (const s of this._statics) if (s.st.type === "cantAttackYou" && s.you !== a && this._affects(s, o)) defs = defs.filter((d) => d !== pid(s.you));
+      const dirQ = this.attackDirDefenders(a); // Teyo: only the nearest opponent in the chosen direction (and their planeswalkers)
+      if (dirQ != null) defs = defs.filter((d) => d === pid(dirQ) || this.state.objects[d]?.controller === dirQ);
+      const ds = this.m2Defenders(o, [...defs]);
       if (ds.length) out.push({ obj: o.id, defenders: ds });
     }
     return out;
@@ -68,6 +74,11 @@ export const combatMethods = {
       if (o.c.mustAttack && !attacks.some((x) => x.obj === c.obj)) attacks.push({ obj: c.obj, defender: c.defenders[0] });
     }
     attacks = this.m2FixAttacks(cands, attacks); // goaded creatures / creatures this combat must attack
+    for (const c of cands) for (const s of this._statics) if (s.st.type === "mustAttackObj" && s.you !== a && c.defenders.includes(s.st.obj)) { // Gideon Jura: attacks him if able
+      const i = attacks.findIndex((x) => x.obj === c.obj);
+      if (i >= 0) attacks[i] = { ...attacks[i], defender: s.st.obj }; else attacks.push({ obj: c.obj, defender: s.st.obj });
+    }
+    attacks = yield* this.attackTax$(a, attacks); // library m4: "can't attack you unless … pays"
     const list = [];
     for (const at of attacks) {
       const o = st.objects[at.obj];
@@ -84,17 +95,25 @@ export const combatMethods = {
       if (!e) continue;
       this.fireTrigger({ type: "attacks", obj: o, defender: e.defender, player: this.defenderPlayer(e.defender), alone: list.length === 1 });
     }
+    { // library m4: "whenever a player attacks you with one or more creatures" — one batch event per defending player
+      const per = new Map();
+      for (const o of list) { const e = st.combat.attackers.find((x) => x.obj === o.id); const dp = this.defenderPlayer(e.defender); if (dp != null) per.set(dp, (per.get(dp) | 0) + 1); }
+      for (const [dp, count] of per) this.fireTrigger({ type: "attackedPlayer", player: dp, attacker: a, count, amount: count });
+    }
   },
 
   canBlock(b, a) {
     if (b.c.noBlockControllers && b.c.noBlockControllers.includes(a.controller)) return false;
     if (this.hasKw(a, "flying") && !this.hasKw(b, "flying") && !this.hasKw(b, "reach")) return false;
     if (this.hasKw(a, "shadow") && !this.hasKw(b, "shadow")) return false;
+    for (const x of a.c.cantBeBlockedBy || []) if (x.greaterPower && (b.c.power | 0) > (a.c.power | 0)) return false; // Locke, Treasure Hunter
     for (const ex of a.c.unblockable || []) {
       if (ex == null) return false;
       if (!this.matches(b, ex, { source: a, you: a.controller })) return false;
     }
     if (this.protectedFrom(a, b)) return false;
+    for (const x of a.c.cantBeBlockedBy || []) if (x.byMonarch && this.state.monarch === b.controller) return false; // Azure Fleet Admiral
+    if (a.c.cantBeBlockedWhileDefenderHas && (this.state.players[b.controller]?.counters[a.c.cantBeBlockedWhileDefenderHas] | 0) > 0) return false; // Nightkin Ambusher
     for (const t of ["plains", "island", "swamp", "mountain", "forest"]) // landwalk
       if (this.hasKw(a, t + "walk") && this.state.battlefield.some((id) => { const l = this.state.objects[id]; return l.controller === b.controller && l.c.types.includes("land") && l.c.subtypes.includes(t); })) return false;
     const art = b.c.types.includes("artifact");

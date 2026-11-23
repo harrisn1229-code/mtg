@@ -111,6 +111,13 @@ export const H = { CAPS, out, plus, spellOf, without, T, isPermanentC, cap, topC
 
 export default {
   // ------------------------------------------------------------------------------------------------ A
+  // ------------------------------------------------------------------------------------------------ G
+  // "Your opponents can't gain life." — the parser misses this line; the engine has the cantGainLife player static (gainLife checks it).
+  "Gríma Wormtongue": {
+    patch(def) {
+      return out(def, { abilities: plus(def, { kind: "static", effect: { type: "cantGainLife", who: "opponent" }, text: "Your opponents can't gain life." }) });
+    },
+  },
   "Anger of the Gods": {
     patch(def) {
       return out(def, { spell: spellOf(def, {
