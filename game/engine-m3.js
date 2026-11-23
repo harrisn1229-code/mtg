@@ -205,7 +205,7 @@ export const m3Methods = {
     if ("enteredThisTurn" in A) { let n = 0; for (const e of this.tstat(ctx.you).entered) if (!A.enteredThisTurn || this.matches(e, A.enteredThisTurn, ctx, "*")) n++; return n; }
     if ("diedThisTurn" in A) { let n = 0; for (const e of this.diedThisTurn()) if (!A.diedThisTurn || this.matches(e, A.diedThisTurn, ctx, "*")) n++; return n; }
     if ("permsToGraveThisTurn" in A) return this.permsToGraveThisTurn();
-    if ("greatestCountOf" in A) { let m = 0; for (const p of this.alivePlayers(true)) m = Math.max(m, this.find(A.greatestCountOf, { ...ctx, you: p }).filter((o) => o.controller === p).length); return m; }
+    if ("greatestCountOf" in A) { let m = 0; for (const q of this.opponentsOf(ctx.you)) m = Math.max(m, this.find(A.greatestCountOf, ctx).filter((o) => o.controller === q).length); return m; }
     return undefined;
   },
   /** "does this trigger match" for the m3 event types. */
@@ -378,8 +378,12 @@ export function installM3(Game) {
     }
     return orig.call(this, p, cost, src, ctx, opts);
   });
+  wrap("discardCard", (orig) => function (o) { if (this._discLog) this._discLog.push(o); return orig.call(this, o); });
   wrap("payCost$", (orig) => function* (p, cost, ctx = {}, opts = {}) {
-    if (!(yield* orig.call(this, p, cost, ctx, opts))) return false;
+    const savedLog = this._discLog; this._discLog = [];
+    let ok;
+    try { ok = yield* orig.call(this, p, cost, ctx, opts); ctx.discarded = this._discLog; } finally { this._discLog = savedLog; }
+    if (!ok) return false;
     if (cost && typeof cost === "object" && cost.energy != null) {
       const n = cost.energy === "x" ? (ctx.x | 0) : this.amount(cost.energy, ctx);
       this.payEnergy(p, n);
