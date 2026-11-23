@@ -386,6 +386,7 @@ export class Game {
     return {
       id: o.id, owner: o.owner, controller: o.controller, zone: "battlefield", c: o.c, counters: { ...o.counters }, token: o.token,
       isCommander: o.isCommander, tapped: o.tapped, damage: o.damage, def: o.def, face: o.face, attachedTo: o.attachedTo, lki: true, ts: o.ts,
+      attacking: !!(this.state.combat && this.state.combat.attackers.some((a) => a.obj === o.id)), dmgBy: o.dmgBy || null,
       copyDef: o.copyDef || null, mergeDef: o.mergeDef || null, faceDown: !!o.faceDown, pile: o.pile ? [...o.pile] : null, chosen: o.chosen || null,
     };
   }
@@ -688,6 +689,7 @@ export class Game {
   }
   untap(o, silent) {
     if (!o || o.zone !== "battlefield" || !o.tapped) return false;
+    if ((o.counters["stun"] | 0) > 0) { this.addCounters(o, "stun", -1); this.log(`${o.c.name} loses a stun counter instead of untapping`); return false; } // CR 122.1g
     o.tapped = false;
     this.markDirty();
     this.emit({ t: "untap", obj: o.id, text: `${o.c.name} untaps`, ...(silent ? { silent: true } : {}) });
@@ -811,6 +813,7 @@ export class Game {
       if (isCre) {
         if (this.hasKw(src, "wither") || this.hasKw(src, "infect")) this.addCounters(o, "-1/-1", n);
         else o.damage += n;
+        { const dm = (o.dmgBy && o.dmgBy.turn === st.turn) ? o.dmgBy : (o.dmgBy = { turn: st.turn }); dm[srcCtrl] = (dm[srcCtrl] | 0) + n; } // damage by controller this turn (Grothama)
         if (this.hasKw(src, "deathtouch")) o.deathtouched = true;
       }
       this.markDirty();

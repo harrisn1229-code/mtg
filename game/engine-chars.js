@@ -218,6 +218,7 @@ export const charMethods = {
       for (const o of bf) if (this._affects(s, o)) {
         const c = o.c;
         if (s.st.setTypes) c.types = [...s.st.setTypes];
+        if (s.st.setSubtypes) c.subtypes = s.st.setSubtypes.map((x) => String(x).toLowerCase());
         for (const t of s.st.addTypes || []) if (!c.types.includes(t)) c.types.push(String(t).toLowerCase());
         for (const t of s.st.addSubtypes || []) if (!c.subtypes.includes(t)) c.subtypes.push(String(t).toLowerCase());
         if (s.st.allCreatureTypes) c.allCreatureTypes = true;

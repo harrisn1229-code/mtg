@@ -87,6 +87,7 @@ export const combatMethods = {
   },
 
   canBlock(b, a) {
+    if (b.c.noBlockControllers && b.c.noBlockControllers.includes(a.controller)) return false;
     if (this.hasKw(a, "flying") && !this.hasKw(b, "flying") && !this.hasKw(b, "reach")) return false;
     if (this.hasKw(a, "shadow") && !this.hasKw(b, "shadow")) return false;
     for (const ex of a.c.unblockable || []) {

@@ -37,10 +37,13 @@ export const m2Methods = {
     }
     for (const s of act) {
       const t = s.st.type;
-      if (t !== "goaded" && t !== "cantAttackPlayer" && t !== "noReattack") continue;
+      if (t !== "goaded" && t !== "cantAttackPlayer" && t !== "noReattack" && t !== "cantBlockControlledBy" && t !== "mustAttackPlayer") continue;
       for (const o of bf) if (this._affects(s, o)) {
-        if (t === "goaded") (o.c.goaded ||= []).push(s.you);
-        else if (t === "cantAttackPlayer") (o.c.noAttackPlayers ||= []).push(s.st.who === "opponent" ? -1 : s.you);
+        const by = s.st.by ?? s.you;
+        if (t === "goaded") (o.c.goaded ||= []).push(by);
+        else if (t === "cantAttackPlayer") (o.c.noAttackPlayers ||= []).push(s.st.who === "opponent" ? -1 : by);
+        else if (t === "cantBlockControlledBy") (o.c.noBlockControllers ||= []).push(by);
+        else if (t === "mustAttackPlayer") { o.c.mustAttack = true; o.c.attackPlayer = s.st.player; }
         else o.c.noReattack = true;
       }
     }
@@ -108,8 +111,12 @@ export const m2Methods = {
       const o = st.objects[c.obj];
       const goaded = o.c.goaded && o.c.goaded.length ? o.c.goaded : null;
       let i = out.findIndex((x) => x.obj === c.obj);
-      if (!goaded && !must.has(c.obj)) continue;
-      const allowed = goaded ? c.defenders.filter((d) => isPid(d) && !goaded.includes(+d.slice(1))) : [];
+      if (!goaded && !must.has(c.obj) && o.c.attackPlayer == null) continue;
+      let allowed = goaded ? c.defenders.filter((d) => isPid(d) && !goaded.includes(+d.slice(1))) : [];
+      if (o.c.attackPlayer != null && c.defenders.includes(pid(o.c.attackPlayer))) { // "attacks <player> this turn if able"
+        if (i < 0) out.push({ obj: c.obj, defender: pid(o.c.attackPlayer) }); else out[i] = { ...out[i], defender: pid(o.c.attackPlayer) };
+        continue;
+      }
       if (i < 0) { out.push({ obj: c.obj, defender: allowed[0] ?? c.defenders[0] }); continue; }
       if (goaded && allowed.length && !allowed.includes(out[i].defender)) out[i] = { ...out[i], defender: allowed[0] };
     }
@@ -160,6 +167,7 @@ export const m2Methods = {
     }
     this.markDirty();
     this.refresh();
+    if (list.length) this.fireTrigger({ type: "attackDeclared", player: st.active, count: list.length }); // "whenever you attack"
   },
 
   /** Run additional combat phases queued by effects ("after this phase, there is an additional combat phase"). */
@@ -207,9 +215,15 @@ export const m2Methods = {
   /** Mana string of a cost after `reduce` (ability cost reduction: {per:Amount, amount:-N, ifTargets?:cond}). */
   reducedMana(cost, src, p, ctx) {
     const r = cost.reduce;
-    if (!r || !cost.mana) return cost.mana;
+    if (!cost.mana) return cost.mana;
     const c = parseManaCost(cost.mana);
     const cctx = { source: src, you: p, quiet: true };
+    if (src && src.zone === "battlefield") for (const s of this._statics || []) { // "Activated abilities of Foods you control cost {1} less to activate."
+      if (s.st.type !== "abilityCostMod" || s.you !== p) continue;
+      if (s.st.filter && !this.matches(src, s.st.filter, { source: s.src, you: s.you }, "*")) continue;
+      c.generic = Math.max(0, c.generic + (s.st.amount | 0));
+    }
+    if (!r) return costToString(c);
     let n = r.per != null ? this.amount(r.per, cctx) * -(r.amount ?? -1) : -(r.amount ?? -1);
     if (r.if) {
       const t = ctx && ctx._chosenTargets;
@@ -228,7 +242,7 @@ export const m2Methods = {
         if (!whoObj(on.who, evt.obj)) return false;
         if (on.filter && !this.matches(evt.obj, on.filter, { source: s, you: ctrl, event: evt }, "*")) return false;
         return true;
-      case "coinWon": case "coinFlip": case "radMilled":
+      case "attackDeclared": case "coinWon": case "coinFlip": case "radMilled":
         return whoPlayer(on.who, evt.player);
       default: return false;
     }
@@ -258,6 +272,8 @@ export const m2Methods = {
         const ids = (C.targets || ctx.targets || []).flat();
         return ids.length >= 2 && ids.every((id) => st.objects[id]?.controller === ctx.you);
       }
+      case "stepIs": return st.step === C.step && (C.opponentTurn ? st.active !== ctx.you : true);
+      case "artifactEnteredThisTurn": return st.players[ctx.you]?.artTurn === st.turn;
       case "oppDamaged": return this.opponentsOf(ctx.you).some((p) => st.players[p].damagedThisTurn);
       case "creatureDiedThisTurn": return !!st.creatureDied;
       case "castNoncreatureAtLeast": return (st.players[ctx.you].noncreatureCast | 0) >= (C.n | 0);
@@ -322,6 +338,7 @@ export const m2Methods = {
   /** Applied from applyEntersReplacements: counters/haste chosen as it entered, "enters with N additional counters" grants. */
   m2ApplyEntry(o, entry) {
     o.enteredTurn = this.state.turn;
+    if (o.c.types.includes("artifact")) this.state.players[o.controller].artTurn = this.state.turn;
     if (entry && entry.counters) for (const [k, n] of Object.entries(entry.counters)) if (n) o.counters[k] = (o.counters[k] | 0) + n;
     if (entry && entry.haste) this.addEffect({ type: "pump", power: 0, toughness: 0, keywords: ["haste"] }, { source: o, you: o.controller }, { objIds: [o.id], until: null });
     for (const s of this._statics || []) {

@@ -671,6 +671,7 @@ export function parseClauses(s, ctx) {
 function parseClause(c, ctx) {
   c = c.trim().replace(/^then,?\s+/i, "").replace(/[.]$/, "");
   let m;
+  if ((m = c.match(/^you get ((?:\{E\})+)$/i))) return [{ op: "addCounters", what: "you", kind: "energy", amount: m[1].length / 3 }];
   if (/^it's still an? \w+$/i.test(c)) return [];
   if ((m = c.match(/^until end of turn, (.+)$/i)) && !/ becomes /i.test(c)) return parseClause(m[1] + " until end of turn", ctx);
   if ((m = c.match(/^until end of turn, ~ becomes an? (\d+)\/(\d+) ([a-z ]+?)(?:creature)(?: with (.+))?$/i))) {
@@ -1028,7 +1029,6 @@ function imperativeRules(c, ctx) {
   if ((m = c.match(/^goad (.+)$/i)) && !/ (?:that|each) (?:had|has)\b/i.test(c)) return [{ op: "goad", what: objRef(m[1], ctx) }];
   if ((m = c.match(/^monstrosity (\d+|x)$/i))) return [{ op: "_monstrosity", amount: /^x$/i.test(m[1]) ? "x" : +m[1] }];
   if (/^populate$/i.test(c)) return [{ op: "populate" }];
-  if ((m = c.match(/^you get ((?:\{E\})+)$/i))) return [{ op: "addCounters", what: "you", kind: "energy", amount: m[1].length / 3 }];
   if (/^flip a coin$/i.test(c)) return [{ op: "flipCoin" }];
   if ((m = c.match(/^adapt (\d+)$/i))) return [{ op: "if", cond: { type: "counters", what: "self", kind: "+1/+1", op: "==", n: 0 }, then: [{ op: "addCounters", what: "self", kind: "+1/+1", amount: +m[1] }] }];
   if (/^choose a creature type$/i.test(c)) return [{ op: "chooseCreatureType" }];

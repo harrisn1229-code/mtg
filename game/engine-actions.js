@@ -209,6 +209,7 @@ export const actionMethods = {
     const instant = fd.types.includes("instant") || this.hasKw({ c: { keywords: fd.keywords } }, "flash") || (pl.flashSorceries && fd.types.includes("sorcery"));
     if (!instant && !sorc) return null;
     const ctx = { source: o, you: p, quiet: true };
+    if (fd.castRestrict && !this.evalCond(fd.castRestrict, ctx)) return null; // "Cast this spell only during ..."
     if (fd.spell?.modes && v.variant !== "overload") {
       const ms = fd.spell.modes;
       const avail = (ms.modes || []).filter((m) => (m.targets || []).every((t) => this.targetCandidates(t, o, p, ctx).length >= this.specMin(t, ctx)));
@@ -265,7 +266,7 @@ export const actionMethods = {
     const st = this.state;
     const pl = st.players[p];
     if (Array.isArray(cost.oneOf) && cost.oneOf.length) return cost.oneOf.some((c) => this.canPayCost(p, c, src, ctx, opts));
-    if (cost.reduce && cost.mana) cost = { ...cost, mana: this.reducedMana(cost, src, p, ctx), reduce: null };
+    if (cost.mana && (cost.reduce || (src && src.zone === "battlefield" && this._statics.some((s) => s.st.type === "abilityCostMod")))) cost = { ...cost, mana: this.reducedMana(cost, src, p, ctx), reduce: null };
     if (cost.crew != null && !this.crewOk(p, cost.crew, src)) return false;
     if (cost.energy && !this.energyOk(p, cost.energy)) return false;
     if (cost.tap) { if (!src || src.zone !== "battlefield" || !this.tapReady(src, p)) return false; }
@@ -340,7 +341,7 @@ export const actionMethods = {
       if (!(yield* this.payCost$(p, rest, ctx, opts))) return false;
       return yield* this.payCost$(p, pick, ctx, opts);
     }
-    if (cost.reduce && cost.mana) cost = { ...cost, mana: this.reducedMana(cost, src, p, ctx), reduce: null };
+    if (cost.mana && (cost.reduce || (src && src.zone === "battlefield" && this._statics.some((s) => s.st.type === "abilityCostMod")))) cost = { ...cost, mana: this.reducedMana(cost, src, p, ctx), reduce: null };
     if (cost.mana && !opts.skipMana) {
       const c = parseManaCost(cost.mana);
       const x = c.x ? (ctx.x | 0) : 0;
