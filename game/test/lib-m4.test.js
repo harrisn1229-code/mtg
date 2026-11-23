@@ -414,3 +414,236 @@ test("AI: answers Read ahead, Siege protector and pile choices without stalling"
   assert.ok(one(g, "Love Song of Night and Day").counters.lore >= 1);
   healthy(g);
 });
+
+// ------------------------------------------------------------------ more cards
+test("Fealty to the Realm: the monarch controls the enchanted creature, which attacks each combat and can't attack you", () => {
+  const g = setup({ p0: { hand: ["Fealty to the Realm"], battlefield: ["Island", "Island", "Island", "Island", "Island"] }, p1: { battlefield: ["Llanowar Elves"] } });
+  toMain(g);
+  act(g, "Cast Fealty to the Realm");
+  while (g.request.kind === "choose") choose(g, "Llanowar Elves");
+  resolveAll(g);
+  assert.equal(g.state.monarch, 0);
+  assert.equal(one(g, "Llanowar Elves").controller, 0, "the monarch (you) controls it");
+  g.becomeMonarch(1); g.refresh();
+  assert.equal(one(g, "Llanowar Elves").controller, 1, "control follows the crown");
+  healthy(g);
+});
+
+test("Éomer, King of Rohan: enters with +1/+1 counters for each other Human; target player becomes the monarch", () => {
+  const g = setup({ p0: { hand: ["Éomer, King of Rohan"], battlefield: ["Plains", "Plains", "Plains", "Mountain", "Plains", "Palace Jailer", "Palace Jailer"] }, p1: { battlefield: ["Llanowar Elves"] } });
+  toMain(g);
+  mana(g, 0, "{3}{R}{W}");
+  act(g, "Cast Éomer");
+  resolveUntilAsk(g);
+  while (g.request.kind === "choose") choose(g, g.request.options[0].label);
+  resolveAll(g);
+  assert.equal(one(g, "Éomer, King of Rohan").counters["+1/+1"], 2);
+  healthy(g);
+});
+
+test("Champions of Minas Tirith: the monarch taxes attackers (hand size); unpaid -> they can't attack you this combat", () => {
+  const g = setup({ p0: { battlefield: ["Champions of Minas Tirith"] }, p1: { battlefield: ["Llanowar Elves"], hand: ["Forest", "Forest", "Forest"] }, first: 1 });
+  g.becomeMonarch(0);
+  let said = false;
+  until(g, (r, st) => { if (st.step === "beginCombat" && st.stack.length) said = true; return st.step === "main2" || st.step === "end"; }, 3000);
+  assert.equal(byName(g, "Llanowar Elves")[0].tapped, false, "it didn't attack (it can't pay {3})");
+  assert.ok(said, "the tax trigger went on the stack");
+  healthy(g);
+});
+
+test("Struggle for Project Purity (Enclave): attackers get twice that many rad counters; rad counters mill at your precombat main", () => {
+  const g = setup({ p0: { hand: ["Struggle for Project Purity"], battlefield: ["Island", "Island", "Island", "Island"] }, p1: { battlefield: ["Palace Jailer", "Palace Jailer"] } });
+  toMain(g);
+  act(g, "Cast Struggle for Project Purity");
+  resolveUntilAsk(g);
+  while (g.request.kind === "choose") choose(g, "Enclave");
+  resolveAll(g);
+  assert.equal(one(g, "Struggle for Project Purity").chosen.mode, "enclave");
+  until(g, (r) => r.kind === "attackers" && r.player === 1, 6000);
+  g.respond({ attacks: byName(g, "Palace Jailer").map((o) => ({ obj: o.id, defender: "P0" })) });
+  kick(g);
+  resolveAll(g);
+  assert.equal(g.state.players[1].counters.rad | 0, 4, "two attackers -> four rad counters");
+  healthy(g);
+});
+
+test("Rad counters: at your precombat main mill that many cards, lose 1 life and a rad counter for each nonland card", () => {
+  const g = setup({ p0: { library: ["Lightning Bolt", "Forest", "Lightning Bolt"] } });
+  g.addPlayerCounters(0, "rad", 3);
+  until(g, (r, st) => st.turn >= 1 && st.step === "main1" && r.kind === "priority" && r.player === 0, 3000);
+  resolveAll(g);
+  const pl = g.state.players[0];
+  assert.equal(pl.graveyard.length, 3, "three cards milled");
+  assert.equal(pl.counters.rad | 0, 1, "two nonland cards removed two rad counters");
+  assert.equal(life(g, 0), 38);
+  healthy(g);
+});
+
+test("Wise Mothman / Mirelurk Queen: nonland cards milled trigger them (once each turn for the Queen)", () => {
+  const g = setup({ p0: { battlefield: ["The Wise Mothman", "Mirelurk Queen"], library: ["Lightning Bolt", "Lightning Bolt", "Lightning Bolt"] } });
+  toMain(g);
+  g.mill(0, 2);
+  kick(g);
+  resolveUntilAsk(g);
+  while (g.request.kind === "choose") g.respond({ chosen: [0] });
+  resolveAll(g);
+  assert.equal(one(g, "Mirelurk Queen").counters["+1/+1"], 1);
+  g.mill(0, 1);
+  kick(g);
+  resolveUntilAsk(g);
+  while (g.request.kind === "choose") g.respond({ chosen: [] });
+  resolveAll(g);
+  assert.equal(one(g, "Mirelurk Queen").counters["+1/+1"], 1, "only once each turn");
+  healthy(g);
+});
+
+test("Tamiyo, Field Researcher -2: tapped permanents don't untap during their controller's next untap step", () => {
+  const g = setup({ p0: { battlefield: ["Tamiyo, Field Researcher"] }, p1: { battlefield: ["Llanowar Elves"] } });
+  toMain(g);
+  loy(g, "Tamiyo, Field Researcher", "-2");
+  while (g.request.kind === "choose") choose(g, "Llanowar Elves");
+  resolveAll(g);
+  assert.equal(one(g, "Llanowar Elves").tapped, true);
+  until(g, (r, st) => st.turn === 2 && st.step === "main1", 3000);
+  assert.equal(one(g, "Llanowar Elves").tapped, true, "stayed tapped through its controller's untap step");
+  healthy(g);
+});
+
+test("Sorin, Lord of Innistrad -6 destroys and reanimates under your control; Calix -3 exiles until the enchantment leaves", () => {
+  const g = setup({ p0: { battlefield: ["Sorin, Lord of Innistrad"] }, p1: { battlefield: ["Llanowar Elves"] } });
+  toMain(g);
+  one(g, "Sorin, Lord of Innistrad").counters.loyalty = 6; g.refreshRequest();
+  loy(g, "Sorin, Lord of Innistrad", "-6");
+  while (g.request.kind === "choose") choose(g, "Llanowar Elves");
+  resolveAll(g);
+  assert.equal(one(g, "Llanowar Elves").controller, 0, "returned under your control");
+  const h = setup({ p0: { battlefield: ["Calix, Destiny's Hand", "Court of Ire"] }, p1: { battlefield: ["Llanowar Elves"] } });
+  toMain(h);
+  loy(h, "Calix, Destiny's Hand", "-3");
+  while (h.request.kind === "choose") choose(h, h.request.options.some((o) => /Llanowar/.test(o.label)) ? "Llanowar Elves" : "Court of Ire");
+  resolveAll(h);
+  assert.equal(byName(h, "Llanowar Elves").length, 0, "exiled");
+  h.destroy(one(h, "Court of Ire"));
+  kick(h);
+  resolveAll(h);
+  assert.equal(byName(h, "Llanowar Elves").length, 1, "back when the enchantment left the battlefield");
+  healthy(h);
+});
+
+test("Jace, Mirror Mage: kicked, it makes a non-legendary copy with loyalty 1", () => {
+  const g = setup({ p0: { hand: ["Jace, Mirror Mage"], battlefield: ["Island", "Island", "Island", "Island", "Island"] } });
+  toMain(g);
+  act(g, "kicked");
+  resolveAll(g);
+  const jaces = byName(g, "Jace, Mirror Mage");
+  assert.equal(jaces.length, 2, "Jace and its token copy");
+  const tok = jaces.find((o) => o.token);
+  assert.equal(tok.counters.loyalty, 1);
+  assert.ok(!tok.c.supertypes.includes("legendary"));
+  assert.ok(jaces.find((o) => !o.token).c.supertypes.includes("legendary"));
+  healthy(g);
+});
+
+test("Vivien Reid +1: look at four, take a creature or land, the rest go to the bottom", () => {
+  const g = setup({ p0: { battlefield: ["Vivien Reid"], library: ["Lightning Bolt", "Lightning Bolt", "Forest", "Lightning Bolt"] } });
+  toMain(g);
+  const lib0 = g.state.players[0].library.length;
+  loy(g, "Vivien Reid", "+1");
+  resolveUntilAsk(g);
+  while (g.request.kind === "choose") choose(g, "Forest");
+  resolveAll(g);
+  assert.equal(zoneNames(g, 0, "hand").includes("Forest"), true);
+  assert.equal(g.state.players[0].library.length, lib0 - 1);
+  healthy(g);
+});
+
+test("Crown of Gondor: equip costs {3} less while you are the monarch", () => {
+  const g = setup({ p0: { battlefield: ["Crown of Gondor", "Llanowar Elves", "Forest"] } });
+  toMain(g);
+  const eq = () => g.request.actions.find((a) => /Equip/.test(a.label));
+  assert.ok(!eq(), "{4} with one land: can't equip");
+  g.becomeMonarch(0); g.refreshRequest();
+  assert.ok(eq(), "{1} while the monarch");
+  healthy(g);
+});
+
+test("Garruk, Cursed Huntsman 0: two Wolves; when a Wolf dies Garruk gets a loyalty counter", () => {
+  const g = setup({ p0: { battlefield: ["Garruk, Cursed Huntsman"] } });
+  toMain(g);
+  loy(g, "Garruk, Cursed Huntsman", "0");
+  resolveAll(g);
+  const wolves = byName(g, "Wolf");
+  assert.equal(wolves.length, 2);
+  const l0 = counters(g, "Garruk, Cursed Huntsman", "loyalty");
+  g.destroy(wolves[0]);
+  kick(g);
+  resolveAll(g);
+  assert.equal(counters(g, "Garruk, Cursed Huntsman", "loyalty"), l0 + 1);
+  healthy(g);
+});
+
+test("Liliana, Death's Majesty -3: reanimates a creature as a black Zombie in addition", () => {
+  const g = setup({ p0: { battlefield: ["Liliana, Death's Majesty"], graveyard: ["Llanowar Elves"] } });
+  toMain(g);
+  loy(g, "Liliana, Death's Majesty", "-3");
+  while (g.request.kind === "choose") choose(g, "Llanowar Elves");
+  resolveAll(g);
+  const e = one(g, "Llanowar Elves");
+  assert.ok(e.c.subtypes.includes("zombie") && e.c.colors.includes("B") && e.c.colors.includes("G"));
+  healthy(g);
+});
+
+test("Ugin, the Ineffable +1: a 2/2 Spirit; when it leaves, the exiled card goes to your hand", () => {
+  const g = setup({ p0: { battlefield: ["Ugin, the Ineffable"], library: ["Lightning Bolt"] } });
+  toMain(g);
+  loy(g, "Ugin, the Ineffable", "+1");
+  resolveAll(g);
+  const sp = one(g, "Spirit");
+  assert.equal(zoneNames(g, 0, "exile").includes("Lightning Bolt"), true);
+  g.destroy(sp);
+  kick(g);
+  resolveAll(g);
+  assert.equal(zoneNames(g, 0, "hand").includes("Lightning Bolt"), true);
+  healthy(g);
+});
+
+test("Chandra, Awakened Inferno +2: each opponent gets an emblem that pings them each upkeep", () => {
+  const g = setup({ p0: { battlefield: ["Chandra, Awakened Inferno"] } });
+  toMain(g);
+  loy(g, "Chandra, Awakened Inferno", "+2");
+  resolveAll(g);
+  assert.equal(g.emblemsOf(1).length, 1);
+  const l1 = life(g, 1);
+  until(g, (r, st) => st.turn === 2 && st.step === "main1", 3000);
+  resolveAll(g);
+  assert.equal(life(g, 1), l1 - 1);
+  healthy(g);
+});
+
+test("Sarkhan the Masterless: each Dragon deals 1 damage to a creature that attacks you", () => {
+  const g = setup({ p0: { battlefield: ["Sarkhan the Masterless"] }, p1: { battlefield: ["Llanowar Elves"] } });
+  toMain(g);
+  loy(g, "Sarkhan the Masterless", "-3");
+  resolveAll(g);
+  assert.equal(byName(g, "Dragon").length, 1);
+  until(g, (r) => r.kind === "attackers" && r.player === 1, 6000);
+  g.respond({ attacks: [{ obj: one(g, "Llanowar Elves").id, defender: "P0" }] });
+  kick(g);
+  resolveAll(g);
+  assert.equal(byName(g, "Llanowar Elves").length, 0, "1 damage from the Dragon kills the 1/1");
+  healthy(g);
+});
+
+test("Jace, Architect of Thought -2: the opponent separates three cards into piles and you take one", () => {
+  const g = setup({ p0: { battlefield: ["Jace, Architect of Thought"], library: ["Lightning Bolt", "Forest", "Lightning Bolt"] } });
+  toMain(g);
+  one(g, "Jace, Architect of Thought").counters.loyalty = 4; g.refreshRequest();
+  loy(g, "Jace, Architect of Thought", "-2");
+  let n = 0;
+  while (n++ < 12 && (g.request.kind === "choose" || g.request.kind === "priority" && g.state.stack.length)) {
+    if (g.request.kind === "choose") g.respond(g.request.player === 1 ? aiAnswer(g) : { chosen: Array.from({ length: g.request.min }, (_, i) => i) });
+    else g.respond({ type: "pass" });
+  }
+  assert.ok(g.state.players[0].hand.length + g.state.players[0].library.length >= 3);
+  healthy(g);
+});

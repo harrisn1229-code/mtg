@@ -206,7 +206,7 @@ export const effectMethods = {
       case "castSpellThisTurn": { const t = this.state.players[ctx.you]?.castsT; return !!t && t.turn === this.state.turn && t.n >= (C.n ?? 1); } // "as long as you've cast a spell this turn"
       case "monarch": { const m = this.state.monarch; const w = C.who ?? "you"; return w === "none" ? m == null : w === "opponent" ? m != null && m !== ctx.you : w === "any" ? m != null : m === ctx.you; }
       case "notYourTurn": case "opponentTurn": return this.state.active !== ctx.you;
-      case "kicked": return !!ctx.kicked;
+      case "kicked": return !!ctx.kicked || !!(ctx.source && (this.state.objects[ctx.source.id] || ctx.source).kicked); // library m4: "when ~ enters, if it was kicked" (the source remembers)
       case "counters": {
         const ids = this.refsSync(C.what ?? "self", ctx);
         const o = ids.length ? this.lkiOf(ids[0], ctx) : null;
