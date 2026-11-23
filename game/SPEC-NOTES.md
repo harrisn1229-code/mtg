@@ -215,3 +215,12 @@ Cards still to do are split into batches in `lib-ov/batches.json` (`m1`–`m4` =
 **Mechanics batches (m1–m4)** add the mechanic to the engine/parser (and AI decisions, and UI labels if a new prompt or zone needs one), then
 automate the batch's cards. Keep changes additive and local (new helpers/branches, no refactors) because several batches are merged together;
 note what you added under a short "Library automation: <batch>" subsection below.
+
+### Library automation: m3
+
+Player resources, designations and keyword actions live in `engine-m3.js` (`installM3(Game)` wraps existing methods, no edits to other engine files beyond small hooks) and `parser-m3.js`; per-card overrides in `lib-ov/m3.js`; unautomated cards listed in `lib-ov/m3.requests.md`. Monarch and rad counters belong to m4.
+
+- Energy: `g.getEnergy(p,n,src)`, `g.payEnergy(p,n)`, cost key `cost.energy` (number or "x"), statics `energyMod{add,mul}`; ops `energy`, `payEnergy`.
+- Voting: `yield* g.vote$({source,you,options,score,secret})` returns `{byVoter,tally,winners,winner,order}` and fires `votesFinished`. AI uses `score(voter,optId)`.
+- Other keyword actions: `investigate`, `discover$`, `manifest$(p,n,{cloak,cards,owner})` (face-down infra reused, `faceDownWard` for cloak/disguise), dredge, ascend (`blessing` condition), stun counters, crimes (`crime` event), explore-twice and surveil-extra statics, `attackBatch` event, per-turn stats `g.tstat(p)`.
+- Known deviations: Academy Manufactor applies once per create; Teval's Judgment tracks modes per trigger.

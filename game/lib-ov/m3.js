@@ -54,7 +54,16 @@ export default {
     }, "{T}, Discard a card: Draw a card. If the discarded card was a creature card, amass Orcs 1."),
   ]),
   "Voracious Fell Beast": fix(["each opponent sacrifices a creature of their choice"], [
-    trig(SELF_ENTERS, [{ op: "sacrifice", who: "opponent", filter: { types: ["creature"] }, amount: 1 }, { op: "createToken", token: "food", amount: { prev: true } }], "When this creature enters, each opponent sacrifices a creature of their choice. Create a Food token for each creature sacrificed this way."),
+    trigRun(SELF_ENTERS, function* (g, ctx) {
+      let n = 0;
+      for (const q of g.opponentsOf(ctx.you)) {
+        const cands = g.find({ types: ["creature"] }, ctx).filter((o) => o.controller === q);
+        if (!cands.length) continue;
+        const [c] = yield* g.chooseObjects$(q, cands, { prompt: "Sacrifice a creature", min: 1, max: 1, reason: "sacrifice", source: ctx.source?.id });
+        if (c && g.sacrifice(c) !== false) n++;
+      }
+      if (n) g.createToken(ctx.you, "food", n, { source: ctx.source });
+    }, "When this creature enters, each opponent sacrifices a creature of their choice. Create a Food token for each creature sacrificed this way."),
   ]),
   "Grishnákh, Brash Instigator": fix(["amass Orcs 2. When you do"], [
     trigRun(SELF_ENTERS, function* (g, ctx) {
@@ -935,5 +944,14 @@ export default {
       g.addCounters(s, "+1/+1", 1);
       g.addEffect({ type: "asType", addSubtypes: ["dragon"], keywords: { flying: true } }, ctx, { objIds: [s.id], until: "endOfTurn" });
     }, "Whenever a Dragon you control enters, put a +1/+1 counter on Sarkhan. Until end of turn, Sarkhan becomes a Dragon in addition to his other types and gains flying."),
+  ]),
+  "Francisco, Fowl Marauder": fix(["Whenever one or more Pirates you control deal damage"], [
+    trig({ event: "dealsDamage", who: { types: ["creature"], subtypes: ["pirate"], controller: "you" }, to: "player", batch: true }, [{ op: "explore", what: "self" }], "Whenever one or more Pirates you control deal damage to a player, Francisco explores."),
+  ]),
+  "Malcolm, Keen-Eyed Navigator": fix(["Whenever one or more Pirates you control deal damage"], [
+    trigRun({ event: "dealsDamage", who: { types: ["creature"], subtypes: ["pirate"], controller: "you" }, to: "player", batch: true }, function* (g, ctx) {
+      const hit = new Set((ctx.event.targets || [ctx.event.target]).filter((t) => isPid(t) && +t.slice(1) !== ctx.you));
+      if (hit.size) g.createToken(ctx.you, "treasure", hit.size, { source: ctx.source });
+    }, "Whenever one or more Pirates you control deal damage to your opponents, you create a Treasure token for each opponent dealt damage."),
   ]),
 };
