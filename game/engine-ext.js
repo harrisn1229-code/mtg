@@ -32,7 +32,7 @@ export const extMethods = {
   /** The "as enters" statics of a def (copy first, then the rest). */
   entryStatics(d) {
     return (d?.abilities || []).filter((a) => a && a.kind === "static" && a.effect && (a.effect.type === "asEntersCopy" || a.effect.type === "asEntersChoose" ||
-      (a.effect.type === "entersTapped" && (a.effect.affects == null || a.effect.affects === "self") && (a.effect.unlessPay || a.effect.unless?.type === "hasInHand"))));
+      (a.effect.type === "entersTapped" && (a.effect.affects == null || a.effect.affects === "self") && (a.effect.unlessPay || a.effect.optionalTapped || a.effect.unless?.type === "hasInHand"))));
   },
 
   /** Ask the replacement-effect choices a permanent makes as it enters. Returns an `entry` record for moveObj. */
@@ -69,7 +69,9 @@ export const extMethods = {
           entry.chosen.mode = ch[0]?.id || opts2[0]?.id;
         }
       } else if (e.type === "entersTapped") {
-        if (e.unlessPay) {
+        if (e.optionalTapped) {
+          if (yield* this.confirm$(p, `${d.name}: have it enter tapped${e.optionalTapped.rad ? ` and get ${e.optionalTapped.rad} rad counters` : ""}?`, o.id, { kind: "optionalTapped", rad: e.optionalTapped.rad || 0 })) entry.tapped = true;
+        } else if (e.unlessPay) {
           const life = +(e.unlessPay.life || 0);
           const pl = this.state.players[p];
           const can = !pl.lifeLocked && pl.life >= life && (!e.unlessPay.mana || this.canPayMana(p, parseManaCost(e.unlessPay.mana)));

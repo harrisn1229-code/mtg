@@ -113,6 +113,7 @@ export const charMethods = {
   /** The CardDef currently describing obj (face-aware, copy-aware). */
   faceDef(o) {
     if (o.faceDown && (o.zone === "battlefield" || o.zone === "stack" || o.zone === "phased")) return FACE_DOWN_DEF;
+    if (o.formDef) return o.formDef; // library m4: the object is a different card form while on the battlefield (Harold and Bob's Aura form)
     if (o.mergeDef) return o.mergeDef;
     const d = o.copyDef || o.def;
     if (o.face && d.faces && d.faces[o.face]) return d.faces[o.face];
@@ -227,6 +228,7 @@ export const charMethods = {
       for (const o of bf) if (this._affects(s, o)) {
         const c = o.c;
         if (s.st.setTypes) c.types = [...s.st.setTypes];
+        if (s.st.setSubtypes) c.subtypes = [...s.st.setSubtypes];
         for (const t of s.st.addTypes || []) if (!c.types.includes(t)) c.types.push(String(t).toLowerCase());
         for (const t of s.st.addSubtypes || []) if (!c.subtypes.includes(t)) c.subtypes.push(String(t).toLowerCase());
         if (s.st.allCreatureTypes) c.allCreatureTypes = true;
@@ -367,6 +369,7 @@ export const charMethods = {
     if (f.keywords && f.keywords.length && !f.keywords.every((k) => this.hasKw(o, k))) return false;
     if (f.notKeywords && f.notKeywords.some((k) => this.hasKw(o, k))) return false;
     if (f.name != null && (Array.isArray(f.name) ? !f.name.includes(c.name) : c.name !== f.name)) return false;
+    if (f.milledThisTurn && o.milledTurn !== this.state.turn) return false; // library m4: "milled this turn"
     if (f.isCommander != null && !!o.isCommander !== !!f.isCommander) return false;
     if (f.ringBearer != null && this.isRingBearer(o) !== !!f.ringBearer) return false;
     if (f.counters && typeof f.counters === "object" && !((o.counters?.[f.counters.kind] | 0) > 0)) return false;

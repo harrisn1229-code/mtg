@@ -52,7 +52,7 @@ export const actionMethods = {
     };
     for (const id of pl.hand) castFrom(O(id), "hand");
     for (const id of pl.command) castFrom(O(id), "command");
-    for (const id of pl.graveyard) castFrom(O(id), "graveyard");
+    for (const q of st.players) for (const id of q.graveyard) { const go = O(id); if (q.idx === p || this.mayCastGy(go, p)) castFrom(go, "graveyard"); } // library m4: mayCastGy = "until end of turn, you may cast that card from the graveyard"
     for (const q of st.players) for (const id of q.exile) { const o = O(id); if ((o.owner === p && o.onAdventure) || this.mayPlayFromExile(o, p)) castFrom(o, "exile"); }
     // activated abilities
     const actFrom = (o) => {
@@ -88,6 +88,7 @@ export const actionMethods = {
     return acts;
   },
 
+  mayCastGy(o, p) { const m = o && o.zone === "graveyard" ? o.mayCastGy : null; return !!(m && m.player === p && this.state.turn <= m.untilTurn); },
   mayPlayFromExile(o, p) {
     const m = o && o.zone === "exile" ? o.mayPlay : null;
     return !!(m && m.player === p && (m.untilTurn == null || this.state.turn <= m.untilTurn));
@@ -106,7 +107,7 @@ export const actionMethods = {
   castVariants(o, zone, p) {
     const d = o.def;
     const out = [];
-    if (zone !== "command" && o.owner !== p && !this.mayPlayFromExile(o, p)) return out;
+    if (zone !== "command" && o.owner !== p && !this.mayPlayFromExile(o, p) && !this.mayCastGy(o, p)) return out;
     const castable = (fd) => fd && !fd.types.includes("land") && fd.cost != null && (fd.cost !== "" || (fd.types.length && !isPerm(fd) && false));
     const kw = d.keywords || {};
     const cs = (v) => (typeof v === "string" ? v : v && typeof v === "object" ? v.cost || v.mana || "" : null);
@@ -127,7 +128,8 @@ export const actionMethods = {
     } else if (zone === "graveyard") {
       if (cs(kw.flashback)) out.push({ variant: "flashback", face: 0 });
       if (cs(kw.escape)) out.push({ variant: "escape", face: 0 });
-      if (castable(d) && d.abilities.some((a) => a.kind === "static" && a.effect?.type === "castFrom" && a.effect.zone === "graveyard" && (!a.condition || this.evalCond(a.condition, { source: o, you: p, quiet: true }))))
+      if (castable(d) && this.mayCastGy(o, p)) out.push({ variant: "normal", face: 0 }, ...this.altVariants(o, d, p));
+      else if (castable(d) && d.abilities.some((a) => a.kind === "static" && a.effect?.type === "castFrom" && a.effect.zone === "graveyard" && (!a.condition || this.evalCond(a.condition, { source: o, you: p, quiet: true }))))
         out.push({ variant: "normal", face: 0 }, ...this.altVariants(o, d, p));
     } else if (zone === "exile") {
       if (o.onAdventure && castable(d)) out.push({ variant: "normal", face: 0 });

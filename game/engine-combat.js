@@ -84,11 +84,17 @@ export const combatMethods = {
       const e = st.combat.attackers.find((x) => x.obj === o.id);
       this.fireTrigger({ type: "attacks", obj: o, defender: e.defender, player: this.defenderPlayer(e.defender), alone: list.length === 1 });
     }
+    { // library m4: "whenever a player attacks you with one or more creatures" — one batch event per defending player
+      const per = new Map();
+      for (const o of list) { const e = st.combat.attackers.find((x) => x.obj === o.id); const dp = this.defenderPlayer(e.defender); if (dp != null) per.set(dp, (per.get(dp) | 0) + 1); }
+      for (const [dp, count] of per) this.fireTrigger({ type: "attackedPlayer", player: dp, attacker: a, count, amount: count });
+    }
   },
 
   canBlock(b, a) {
     if (this.hasKw(a, "flying") && !this.hasKw(b, "flying") && !this.hasKw(b, "reach")) return false;
     if (this.hasKw(a, "shadow") && !this.hasKw(b, "shadow")) return false;
+    for (const x of a.c.cantBeBlockedBy || []) if (x.greaterPower && (b.c.power | 0) > (a.c.power | 0)) return false; // Locke, Treasure Hunter
     for (const ex of a.c.unblockable || []) {
       if (ex == null) return false;
       if (!this.matches(b, ex, { source: a, you: a.controller })) return false;

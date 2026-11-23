@@ -430,7 +430,7 @@ export class Game {
       o.tapped = false; o.damage = 0; o.deathtouched = false; o.counters = {}; o.sick = false; o.echoDue = false;
       o.controller = o.owner; o.baseController = o.owner; o.loyaltyUsed = null; o.activations = null;
       if (o.pile && o.pile.length > 1) o._leftPile = o.pile.filter((id) => id !== o.id);
-      o.pile = null; o.mergeDef = null; o.chosen = null; o.phasedIndirect = false; o.phasedController = null;
+      o.pile = null; o.mergeDef = null; o.formDef = null; o.medModes = null; o.chosen = null; o.phasedIndirect = false; o.phasedController = null;
       if (!o.token) o.copyDef = null;
     }
     if (o.faceDown && !(from === "stack" && to === "battlefield") && !(from === "exile" && to === "exile")) {
@@ -473,7 +473,7 @@ export class Game {
       } else pl[to].push(o.id);
       if (!opts.keepFace) o.face = 0;
       if (to !== "exile") o.onAdventure = false;
-      o.mayPlay = null;
+      o.mayPlay = null; o.mayCastGy = null;
       o.x = null; o.kicked = false; o.targets = []; o.castVariant = null;
       o.c = this.baseC(o);
       if (o.isCommander && to !== "command" && !opts.cmdAsked) o.cmdPending = true;
@@ -537,7 +537,8 @@ export class Game {
       const e = ab.effect;
       if (e.type === "entersTapped" && (e.affects == null || e.affects === "self")) {
         let tapped;
-        if (e.unlessPay) tapped = !(entry && entry.untapped);
+        if (e.optionalTapped) { tapped = !!(entry && entry.tapped); if (tapped && e.optionalTapped.rad) this.addPlayerCounters(o.controller, "rad", e.optionalTapped.rad); } // Mariposa Military Base
+        else if (e.unlessPay) tapped = !(entry && entry.untapped);
         else if (e.unless && e.unless.type === "hasInHand" && entry && entry.done && !entry.fallback) tapped = !entry.untapped;
         else if (e.unless) { let unless = false; try { unless = this.evalCond(e.unless, ctx); } catch { unless = false; } tapped = !unless; }
         else tapped = true;
@@ -916,6 +917,7 @@ export class Game {
         if (!ok) { this._evtOverride = null; continue; }
         const ctx = { source: s, you: ctrl, event: evt, quiet: true };
         if (ab.condition) { let c = false; try { c = this.evalCond(ab.condition, { ...ctx, event: this._evtOverride || evt }); } catch { c = false; } if (!c) { this._evtOverride = null; continue; } }
+        if (ab.oncePerTurn) { const tt = (s.trigTurns ||= {}); const key = ab.text || ""; if (tt[key] === st.turn) { this._evtOverride = null; continue; } tt[key] = st.turn; } // library m4: "This ability triggers only once each turn."
         const times = 1 + this.triggerDoubling(evt, ctrl);
         const ev2 = this._evtOverride || evt;
         this._evtOverride = null;
@@ -1080,6 +1082,7 @@ export class Game {
         if (on.filter && !this.matches(evt.obj, on.filter, ctx, "*")) return false;
         return true;
       case "becameMonarch": return whoPlayer(on.who, evt.player);
+      case "attackedPlayer": return (on.defending !== "you" || evt.player === ctrl) && (on.attacker == null || whoPlayer(on.attacker, evt.attacker));
       case "milledCards": // batch: "whenever one or more nonland cards are milled"
         if (!whoPlayer(on.who ?? "each", evt.player)) return false;
         if (on.nonland && !evt.nonland) return false;

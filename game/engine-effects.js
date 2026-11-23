@@ -53,6 +53,7 @@ export const effectMethods = {
       case "event": {
         const ev = ctx.event || {};
         const w = ref.what || "object";
+        if (w === "player" && (ev.type === "dealsCombatDamage" || ev.type === "dealsDamage") && typeof ev.target === "string" && isPid(ev.target)) return [ev.target]; // "deals damage to a player, that player …" is the damaged player
         if (w === "player") return ev.player != null ? [pid(ev.player)] : ev.obj ? [pid(ev.obj.controller)] : [];
         if (w === "source") return ev.source ? [ev.source.id] : [];
         if (w === "target") return ev.target ? [ev.target] : [];

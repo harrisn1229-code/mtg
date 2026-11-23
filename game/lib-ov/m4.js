@@ -34,6 +34,8 @@ function withLoyalty(def, abs) {
 const walker = (...abs) => ({ patch: (def) => out(def, { abilities: withLoyalty(def, abs) }) });
 const plus = (def, ...abs) => [...(def.abilities || []), ...abs];
 const SAGA_ONLY = (def) => out(def, {});
+/** Add abilities to whatever the parser produced (the card's other lines stay); every unparsed line is considered handled. */
+const plusAbs = (...abs) => ({ patch: (def) => out(def, { abilities: [...(def.abilities || []), ...abs] }) });
 
 const tok = (name, types, subtypes, colors, power, toughness, keywords) => ({ name, types, subtypes, colors, power, toughness, ...(keywords ? { keywords } : {}) });
 /** Chosen-by-you opponent-neutral choose: first of `objs` by AI/human via chooseObjects$. */
@@ -484,4 +486,268 @@ export default {
       if (ch.length) yield* g.drawCards$(ctx.you, ch.length);
     } }],
   })),
+  // ================================================================ monarch / rad counter cards (batch m3, owned by m4)
+  "Champions of Minas Tirith": plusAbs({
+    kind: "triggered", on: { event: "beginStep", step: "beginCombat", whose: "opponent" }, condition: { type: "monarch", who: "you" },
+    text: "At the beginning of combat on each opponent's turn, if you're the monarch, that opponent may pay {X}, where X is the number of cards in their hand. If they don't, they can't attack you this combat.",
+    effects: [{ op: "championsTax", run: function* (g, ctx) {
+      const opp = g.state.active, n = g.state.players[opp].hand.length;
+      let paid = n === 0;
+      if (!paid) {
+        const cost = { ...g.parseCost(`{${n}}`), x: 0 };
+        if (g.canPayMana(opp, cost) && (yield* g.confirm$(opp, `Pay {${n}} so your creatures can attack ${g.pname(ctx.you)} this combat?`, ctx.source?.id, { kind: "tax", amount: n }))) { yield* g.payMana$(opp, cost); paid = true; }
+      }
+      if (paid) return;
+      g.log(`${g.pname(opp)} can't attack ${g.pname(ctx.you)} this combat`);
+      g.addEffect({ type: "cantAttackYou" }, ctx, { objIds: g.find({ types: ["creature"] }, ctx).filter((o) => o.controller === opp).map((o) => o.id), until: "endOfTurn" });
+    } }],
+  }),
+
+  "Archivist of Gondor": plusAbs({
+    kind: "triggered", on: { event: "dealsCombatDamage", who: { isCommander: true, controller: "you" }, to: "player" }, condition: { type: "monarch", who: "none" },
+    text: "When your commander deals combat damage to a player, if there is no monarch, you become the monarch.", effects: [{ op: "becomeMonarch", who: "you" }],
+  }),
+
+  "Fealty to the Realm": plusAbs(
+    { kind: "static", effect: { type: "monarchControls", affects: "enchanted" }, text: "The monarch controls enchanted creature." },
+    { kind: "static", effect: { type: "mustAttack", affects: "enchanted" }, text: "Enchanted creature attacks each combat if able." },
+    { kind: "static", effect: { type: "cantAttackYou", affects: "enchanted" }, text: "Enchanted creature can't attack you." }),
+
+  "Éomer, King of Rohan": plusAbs({
+    kind: "static", effect: { type: "entersWithCounters", kind: "+1/+1", amount: { count: { types: ["creature"], subtypes: ["human"], controller: "you", other: true } } },
+    text: "Éomer enters with a +1/+1 counter on it for each other Human you control." }),
+
+  "Forth Eorlingas!": { patch: (def) => out(def, { spell: { ...(def.spell || {}), effects: [...(def.spell?.effects || []), { op: "forthEorlingas", run: function* (g, ctx) {
+    g.addTempTrigger({ event: "dealsCombatDamage", who: { types: ["creature"], controller: "you" }, to: "player", batch: true }, function* (g2, c2) { g2.becomeMonarch(c2.you); }, ctx, "endOfTurn");
+  } }] } }) },
+
+  "Crown of Gondor": plusAbs({
+    kind: "activated", synthetic: "equip", sorcery: true, cost: { mana: "{4}", costReduce: { amount: 3, cond: { type: "monarch", who: "you" } } },
+    targets: [{ what: { types: ["creature"], controller: "you", other: true } }], effects: [{ op: "attach", what: "self", to: { ref: "target", i: 0 } }],
+    text: "Equip {4}. This ability costs {3} less to activate if you're the monarch." }),
+
+  "Court of Ire": { patch: (def) => out(def, { abilities: def.abilities.map((a) => a.kind === "triggered" && a.on?.event === "beginStep" && a.on.step === "upkeep" ? {
+    ...a, effects: [{ op: "courtOfIre", run: function* (g, ctx) {
+      const t = ctx.targets?.[0]?.[0];
+      if (t == null) return;
+      g.dealDamage(ctx.source, t, g.state.monarch === ctx.you ? 7 : 2);
+    } }] } : a) }) },
+
+  "Palace Jailer": plusAbs({
+    kind: "triggered", on: { event: "enters", who: "self" }, targets: [{ what: { types: ["creature"], controller: "opponent" } }],
+    text: "When this creature enters, exile target creature an opponent controls until an opponent becomes the monarch.",
+    effects: [{ op: "jailerExile", run: function* (g, ctx) {
+      const id = ctx.targets?.[0]?.[0];
+      const o = id && g.obj(id);
+      if (!o || o.zone !== "battlefield") return;
+      yield* g.runEffects$([{ op: "exile", what: id }], ctx);
+      const x = g.obj(id);
+      if (!x || x.zone !== "exile") return;
+      const ts = x.ts;
+      g.addDelayed({ event: "becameMonarch", who: "opponent" }, null, ctx, true, function* (g2) {
+        const y = g2.obj(id);
+        if (y && y.zone === "exile" && y.ts === ts) yield* g2.moveTo$(y, "battlefield", { controller: y.owner });
+      });
+    } }],
+  }),
+
+  "Regal Behemoth": plusAbs({
+    kind: "triggered", on: { event: "tapped", who: { types: ["land"], controller: "you" }, forMana: true }, condition: { type: "monarch", who: "you" }, manaTrigger: true,
+    text: "Whenever you tap a land for mana while you're the monarch, add an additional one mana of any color.", effects: [{ op: "addMana", mana: { any: 1 }, who: "you" }] }),
+
+  "Azure Fleet Admiral": plusAbs({ kind: "static", effect: { type: "cantBeBlockedBy", affects: "self", byMonarch: true }, text: "This creature can't be blocked by creatures the monarch controls." }),
+
+  "Regal Sliver": plusAbs({
+    kind: "static", text: "Sliver creatures you control have \"When this creature enters, Slivers you control get +1/+1 until end of turn if you're the monarch. Otherwise, you become the monarch.\"",
+    effect: { type: "pump", affects: { types: ["creature"], subtypes: ["sliver"], controller: "you" }, abilities: [{
+      kind: "triggered", on: { event: "enters", who: "self" }, text: "When this creature enters, Slivers you control get +1/+1 until end of turn if you're the monarch. Otherwise, you become the monarch.",
+      effects: [{ op: "regalSliver", run: function* (g, ctx) {
+        if (g.state.monarch === ctx.you) g.addEffect({ type: "pump", power: 1, toughness: 1 }, ctx, { objIds: g.find({ types: ["creature"], subtypes: ["sliver"], controller: "you" }, ctx).map((o) => o.id), until: "endOfTurn" });
+        else g.becomeMonarch(ctx.you);
+      } }] }] } }),
+
+  "Marchesa's Decree": plusAbs({
+    kind: "triggered", on: { event: "attacks", who: { types: ["creature"] }, defending: "you" },
+    text: "Whenever a creature attacks you or a planeswalker you control, that creature's controller loses 1 life.",
+    effects: [{ op: "decree", run: function* (g, ctx) { const o = ctx.event?.obj; if (o) g.loseLife(o.controller, 1); } }] }),
+
+  // ---- rad counters
+  "The Wise Mothman": plusAbs({
+    kind: "triggered", on: { event: "milledCards", who: "each", nonland: true }, targets: [{ what: { types: ["creature"] }, min: 0, max: { event: "amount" } }],
+    text: "Whenever one or more nonland cards are milled, put a +1/+1 counter on each of up to X target creatures, where X is the number of nonland cards milled this way.",
+    effects: [{ op: "addCounters", what: { ref: "target", i: 0 }, kind: "+1/+1", amount: 1 }] }),
+
+  "The Master, Transcendent": plusAbs({
+    kind: "activated", cost: { tap: true }, targets: [{ what: { zone: "graveyard", types: ["creature"], milledThisTurn: true }, zone: "graveyard" }],
+    text: "{T}: Put target creature card in a graveyard that was milled this turn onto the battlefield under your control. It's a green Mutant with base power and toughness 3/3.",
+    effects: [{ op: "masterReanimate", run: function* (g, ctx) {
+      const o = g.obj(ctx.targets?.[0]?.[0]);
+      if (!o || o.zone !== "graveyard") return;
+      yield* g.moveTo$(o, "battlefield", { controller: ctx.you });
+      if (o.zone === "battlefield") g.addEffect({ type: "asType", setSubtypes: ["mutant"], colors: ["G"], power: 3, toughness: 3 }, ctx, { objIds: [o.id], until: "forever" });
+    } }] }),
+
+  "Mirelurk Queen": plusAbs({
+    kind: "triggered", on: { event: "milledCards", who: "each", nonland: true }, oncePerTurn: true,
+    text: "Whenever one or more nonland cards are milled, draw a card, then put a +1/+1 counter on this creature. This ability triggers only once each turn.",
+    effects: [{ op: "draw", who: "you", amount: 1 }, { op: "addCounters", what: "self", kind: "+1/+1", amount: 1 }] }),
+
+  "Screeching Scorchbeast": plusAbs({
+    kind: "triggered", on: { event: "milledCards", who: "each", nonland: true },
+    text: "Whenever one or more nonland cards are milled, you may create that many 2/2 black Zombie Mutant creature tokens. Do this only once each turn.",
+    effects: [{ op: "scorchbeast", run: function* (g, ctx) {
+      const src = g.obj(ctx.source?.id);
+      const n = ctx.event?.amount | 0;
+      if (!src || !n || src.scorchTurn === g.state.turn) return;
+      if (!(yield* g.confirm$(ctx.you, `Create ${n} 2/2 Zombie Mutant token${n > 1 ? "s" : ""}? (once each turn)`, ctx.source?.id, { kind: "may" }))) return;
+      src.scorchTurn = g.state.turn;
+      g.createToken(ctx.you, tok("Zombie Mutant", ["creature"], ["zombie", "mutant"], ["B"], 2, 2), n);
+    } }] }),
+
+  "Feral Ghoul": plusAbs({
+    kind: "triggered", on: { event: "dies", who: "self" }, text: "When this creature dies, each opponent gets a number of rad counters equal to its power.",
+    effects: [{ op: "getRadCounters", who: "opponent", amount: { powerOf: "self" } }] }),
+
+  "Nuclear Fallout": { patch: (def) => out(def, { spell: { ...(def.spell || {}), effects: [{ op: "nuclearFallout", run: function* (g, ctx) {
+    const x = ctx.x | 0;
+    const ids = g.find({ types: ["creature"] }, ctx).map((o) => o.id);
+    if (ids.length && x) g.addEffect({ type: "pump", power: -2 * x, toughness: -2 * x }, ctx, { objIds: ids, until: "endOfTurn" });
+    for (const q of g.alivePlayers(true)) g.addPlayerCounters(q, "rad", x);
+  } }] } }) },
+
+  "Strong, the Brutish Thespian": plusAbs({ kind: "static", effect: { type: "radGain" }, text: "You gain life rather than lose life from radiation." }),
+
+  "Bloatfly Swarm": plusAbs({ kind: "static", effect: { type: "damageToCounters", kind: "+1/+1", giveRad: true }, text: "If damage would be dealt to this creature while it has a +1/+1 counter on it, prevent that damage, remove that many +1/+1 counters from it, then give each player a rad counter for each +1/+1 counter removed this way." }),
+
+  "Nightkin Ambusher": plusAbs({ kind: "static", effect: { type: "cantBeBlockedWhileDefenderHas", affects: "self", counter: "rad" }, text: "This creature can't be blocked as long as defending player has a rad counter." }),
+
+  "Contaminated Drink": { patch: (def) => out(def, { spell: { ...(def.spell || {}), effects: [{ op: "contaminatedDrink", run: function* (g, ctx) {
+    const x = ctx.x | 0;
+    yield* g.drawCards$(ctx.you, x);
+    g.addPlayerCounters(ctx.you, "rad", Math.ceil(x / 2));
+  } }] } }) },
+
+  "Glowing One": { patch: (def) => out(def, { abilities: [...def.abilities.filter((a) => !(a.kind === "triggered" && a.effects?.[0]?.op === "getRadCounters")), {
+    kind: "triggered", on: { event: "dealsCombatDamage", who: "self", to: "player" }, text: "Whenever this creature deals combat damage to a player, they get four rad counters.",
+    effects: [{ op: "getRadCounters", who: { ref: "event", what: "target" }, amount: 4 }] }, {
+    kind: "triggered", on: { event: "milled", who: "each", nonland: true }, text: "Whenever a player mills a nonland card, you gain 1 life.", effects: [{ op: "gainLife", who: "you", amount: 1 }] }] }) },
+
+  "Vexing Radgull": plusAbs({
+    kind: "triggered", on: { event: "dealsCombatDamage", who: "self", to: "player" },
+    text: "Whenever this creature deals combat damage to a player, that player gets two rad counters if they don't have any rad counters. Otherwise, proliferate.",
+    effects: [{ op: "radgull", run: function* (g, ctx) {
+      const t = ctx.event?.target;
+      const p = typeof t === "string" && /^P\d+$/.test(t) ? +t.slice(1) : null;
+      if (p == null) return;
+      if ((g.state.players[p].counters.rad | 0) === 0) g.addPlayerCounters(p, "rad", 2);
+      else yield* g.runEffects$([{ op: "proliferate" }], ctx);
+    } }] }),
+
+  "Infesting Radroach": { patch: (def) => out(def, { abilities: [...def.abilities, {
+    kind: "triggered", on: { event: "dealsCombatDamage", who: "self", to: "player" }, text: "Whenever this creature deals combat damage to a player, they get that many rad counters.",
+    effects: [{ op: "getRadCounters", who: { ref: "event", what: "target" }, amount: { event: "amount" } }] }, {
+    kind: "triggered", zone: "graveyard", on: { event: "milled", who: "opponent", nonland: true }, text: "Whenever an opponent mills a nonland card, if this creature is in your graveyard, you may return it to your hand.",
+    effects: [{ op: "radroachReturn", run: function* (g, ctx) {
+      const o = g.obj(ctx.source?.id);
+      if (!o || o.zone !== "graveyard" || o.owner !== ctx.you) return;
+      if (yield* g.confirm$(ctx.you, `Return ${o.def.name} to your hand?`, o.id, { kind: "may" })) yield* g.moveTo$(o, "hand");
+    } }] }] }) },
+
+  "Tato Farmer": plusAbs({
+    kind: "activated", cost: { tap: true }, targets: [{ what: { zone: "graveyard", types: ["land"], milledThisTurn: true }, zone: "graveyard" }],
+    text: "{T}: Put target land card in a graveyard that was milled this turn onto the battlefield tapped under your control.",
+    effects: [{ op: "tatoReanimate", run: function* (g, ctx) { const o = g.obj(ctx.targets?.[0]?.[0]); if (o && o.zone === "graveyard") yield* g.moveTo$(o, "battlefield", { controller: ctx.you, tapped: true }); } }] }),
+
+  "Mariposa Military Base": { patch: (def) => out(def, { abilities: [{ kind: "static", effect: { type: "entersTapped", affects: "self", optionalTapped: { rad: 2 } }, text: "You may have this land enter tapped. If you do, you get two rad counters." },
+    ...def.abilities.filter((a) => a.kind === "activated" && a.mana), {
+    kind: "activated", cost: { mana: "{5}", tap: true, costReduce: { amount: { countersOn: "you", kind: "rad" } } }, text: "{5}, {T}: Draw a card. This ability costs {1} less to activate for each rad counter you have.",
+    effects: [{ op: "draw", who: "you", amount: 1 }] }] }) },
+
+  "Nuka-Nuke Launcher": plusAbs({
+    kind: "triggered", on: { event: "attacks", who: "equipped" }, text: "Whenever equipped creature attacks, until the end of defending player's next turn, that player gets two rad counters whenever they cast a spell.",
+    effects: [{ op: "nukaNuke", run: function* (g, ctx) {
+      const dp = ctx.event?.player;
+      if (dp == null) return;
+      g.addTempTrigger({ event: "cast", who: "each" }, function* (g2, c2) { if (c2.event?.player === dp) g2.addPlayerCounters(dp, "rad", 2); }, ctx, "endOfPlayerTurn", { player: dp });
+    } }] }),
+
+  "Struggle for Project Purity": { patch: (def) => out(def, { abilities: [
+    { kind: "static", effect: { type: "asEntersChoose", choice: "mode", options: [
+      { id: "brotherhood", label: "Brotherhood — At the beginning of your upkeep, each opponent draws a card. You draw a card for each card drawn this way." },
+      { id: "enclave", label: "Enclave — Whenever a player attacks you with one or more creatures, that player gets twice that many rad counters." }] }, text: "As this enchantment enters, choose Brotherhood or Enclave." },
+    { kind: "triggered", on: { event: "beginStep", step: "upkeep", whose: "you" }, condition: { type: "chosen", key: "mode", value: "brotherhood" }, text: "Brotherhood — At the beginning of your upkeep, each opponent draws a card. You draw a card for each card drawn this way.",
+      effects: [{ op: "brotherhood", run: function* (g, ctx) {
+        let n = 0;
+        for (const q of g.apnap(g.opponentsOf(ctx.you))) { const before = g.state.players[q].hand.length; yield* g.drawCards$(q, 1); if (g.state.players[q].hand.length > before) n++; }
+        if (n) yield* g.drawCards$(ctx.you, n);
+      } }] },
+    { kind: "triggered", on: { event: "attackedPlayer", defending: "you" }, condition: { type: "chosen", key: "mode", value: "enclave" }, text: "Enclave — Whenever a player attacks you with one or more creatures, that player gets twice that many rad counters.",
+      effects: [{ op: "enclave", run: function* (g, ctx) { const e = ctx.event; if (e) g.addPlayerCounters(e.attacker, "rad", 2 * (e.count | 0)); } }] },
+  ] }) },
+
+  "Harold and Bob, First Numens": { patch: (def) => {
+    const dies = def.abilities.find((a) => a.kind === "triggered" && a.on?.event === "dies");
+    return out(def, { abilities: [...def.abilities.filter((a) => a !== dies), {
+      kind: "triggered", on: { event: "dies", who: "self" }, condition: dies?.condition,
+      text: "When Harold and Bob dies, if it was a creature, return it to the battlefield. It's an Aura enchantment with enchant Forest you control and \"Enchanted Forest has '{T}: Add three mana of any one color. You get two rad counters.'\" Harold and Bob loses all other abilities.",
+      effects: [{ op: "haroldAura", run: function* (g, ctx) {
+        const o = g.obj(ctx.source?.id);
+        if (!o || o.zone !== "graveyard") return;
+        const forests = g.find({ types: ["land"], subtypes: ["forest"], controller: "you" }, ctx);
+        if (!forests.length) return; // it can't enter as an Aura with nothing to enchant: it stays in the graveyard (CR 303.4g)
+        const [f] = yield* g.chooseObjects$(ctx.you, forests, { prompt: "Harold and Bob returns as an Aura — enchant which Forest you control?", min: 1, max: 1, reason: "target", source: o.id });
+        o.formDef = { ...o.def, types: ["enchantment"], subtypes: ["aura"], power: undefined, toughness: undefined, keywords: {}, unparsed: [], abilities: [{
+          kind: "static", text: "Enchanted Forest has \"{T}: Add three mana of any one color. You get two rad counters.\"",
+          effect: { type: "pump", affects: "enchanted", abilities: [{ kind: "activated", mana: true, cost: { tap: true }, text: "{T}: Add three mana of any one color. You get two rad counters.",
+            effects: [{ op: "addMana", mana: { any: 3 } }, { op: "getRadCounters", who: "you", amount: 2 }] }] } }] };
+        yield* g.moveTo$(o, "battlefield", { controller: ctx.you, attachTo: (f || forests[0]).id });
+      } }] }] });
+  } },
+
+  "Survivor's Med Kit": { patch: (def) => out(def, { abilities: [{
+    kind: "activated", cost: { mana: "{1}", tap: true }, text: "{1}, {T}: Choose one that hasn't been chosen — • Stimpak — Draw a card. • Fancy Lads Snack Cakes — Create a Food token. • RadAway — Target player loses all rad counters. Sacrifice this artifact.",
+    effects: [{ op: "medKit", run: function* (g, ctx) {
+      const o = g.obj(ctx.source?.id);
+      if (!o || o.zone !== "battlefield") return;
+      const used = (o.medModes ||= []);
+      const left = [{ id: "stimpak", label: "Stimpak — Draw a card." }, { id: "snack", label: "Fancy Lads Snack Cakes — Create a Food token." }, { id: "radaway", label: "RadAway — Target player loses all rad counters. Sacrifice this artifact." }].filter((m) => !used.includes(m.id));
+      if (!left.length) return;
+      const [m] = left.length === 1 ? [left[0]] : yield* g.choose$(ctx.you, { prompt: "Survivor's Med Kit — choose one that hasn't been chosen", options: left.map((x) => ({ id: x.id, label: x.label, type: "mode" })), min: 1, max: 1, reason: "mode", source: o.id });
+      used.push(m.id);
+      if (m.id === "stimpak") yield* g.drawCards$(ctx.you, 1);
+      else if (m.id === "snack") g.createToken(ctx.you, "food", 1);
+      else {
+        const opts = g.alivePlayers(true).map((q) => ({ id: "P" + q, label: g.pname(q) + (g.state.players[q].counters.rad ? ` (${g.state.players[q].counters.rad} rad)` : ""), type: "player" }));
+        const [t] = yield* g.choose$(ctx.you, { prompt: "RadAway — target player loses all rad counters", options: opts, min: 1, max: 1, reason: "target", source: o.id });
+        const q = +String(t?.id || "P" + ctx.you).slice(1);
+        g.addPlayerCounters(q, "rad", -(g.state.players[q].counters.rad | 0));
+        g.sacrifice(o);
+      }
+    } }] }] }) },
+
+  "Locke, Treasure Hunter": { patch: (def) => out(def, { abilities: [...def.abilities,
+    { kind: "static", effect: { type: "cantBeBlockedBy", affects: "self", greaterPower: true }, text: "Locke can't be blocked by creatures with greater power." },
+    { kind: "triggered", on: { event: "attacks", who: "self" }, text: "Mug — Whenever Locke attacks, each player mills a card. If a land card was milled this way, create a Treasure token. Until end of turn, you may cast a spell from among those cards.",
+      effects: [{ op: "mug", run: function* (g, ctx) {
+        const cards = [];
+        for (const q of g.apnap(g.alivePlayers(true))) cards.push(...g.mill(q, 1));
+        if (cards.some((o) => o.def.types.includes("land"))) g.createToken(ctx.you, "treasure", 1);
+        const spells = cards.filter((o) => o.zone === "graveyard" && !o.def.types.includes("land"));
+        if (!spells.length) return;
+        const ids = spells.map((o) => o.id);
+        for (const o of spells) o.mayCastGy = { player: ctx.you, untilTurn: g.state.turn };
+        g.addTempTrigger({ event: "cast", who: "you" }, function* (g2, c2) { if (ids.includes(c2.event?.obj?.id)) for (const id of ids) { const x = g2.obj(id); if (x) x.mayCastGy = null; } }, ctx, "endOfTurn"); // "a spell": only one of them
+      } }] }] }) },
+
+  "Cache Grab": { patch: (def) => out(def, { spell: { ...(def.spell || {}), effects: [{ op: "cacheGrab", run: function* (g, ctx) {
+    const milled = g.mill(ctx.you, 4);
+    const perms = milled.filter((o) => o.zone === "graveyard" && o.def.types.some((t) => ["artifact", "battle", "creature", "enchantment", "land", "planeswalker"].includes(t)));
+    let picked = null;
+    if (perms.length) {
+      [picked] = yield* g.chooseObjects$(ctx.you, perms, { prompt: "Cache Grab — you may put a permanent card from among the milled cards into your hand", min: 0, max: 1, reason: "return", source: ctx.source?.id });
+      if (picked) yield* g.moveTo$(picked, "hand");
+    }
+    const squirrel = g.find({ types: ["creature"], subtypes: ["squirrel"], controller: "you" }, ctx).length > 0 || (picked && picked.zone === "hand" && picked.def.subtypes.includes("squirrel"));
+    if (squirrel) g.createToken(ctx.you, "food", 1);
+  } }] } }) },
 };

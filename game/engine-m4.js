@@ -150,6 +150,7 @@ export const m4Methods = {
     this.fireMilled([{ p, cards }]);
   },
   fireMilled(groups) {
+    for (const { cards } of groups) for (const o of cards) o.milledTurn = this.state.turn;
     for (const { p, cards } of groups) for (const o of cards) this.fireTrigger({ type: "milled", obj: o, player: p });
     const all = groups.flatMap((g2) => g2.cards);
     if (!all.length) return;
