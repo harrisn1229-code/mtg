@@ -1022,11 +1022,9 @@ function imperativeRules(c, ctx) {
   }
   if (/^copy (?:that|this|the triggering) ability$/i.test(c)) return [{ op: "copyAbility", what: { ref: "event", what: "ability" } }];
   if (/^proliferate$/i.test(c)) return [{ op: "proliferate" }];
-  // library batch m2: goad / suspect / monstrosity / investigate / populate / flip a coin
+  // library batch m2: goad / monstrosity / populate / flip a coin
   if ((m = c.match(/^goad (.+)$/i)) && !/ (?:that|each) (?:had|has)\b/i.test(c)) return [{ op: "goad", what: objRef(m[1], ctx) }];
-  if ((m = c.match(/^suspect (.+)$/i))) return [{ op: "suspect", what: objRef(m[1], ctx) }];
   if ((m = c.match(/^monstrosity (\d+|x)$/i))) return [{ op: "_monstrosity", amount: /^x$/i.test(m[1]) ? "x" : +m[1] }];
-  if (/^investigate$/i.test(c)) return [{ op: "createToken", who: "you", token: "clue", amount: 1 }];
   if (/^populate$/i.test(c)) return [{ op: "populate" }];
   if (/^flip a coin$/i.test(c)) return [{ op: "flipCoin" }];
   if ((m = c.match(/^adapt (\d+)$/i))) return [{ op: "if", cond: { type: "counters", what: "self", kind: "+1/+1", op: "==", n: 0 }, then: [{ op: "addCounters", what: "self", kind: "+1/+1", amount: +m[1] }] }];

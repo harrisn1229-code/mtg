@@ -392,13 +392,6 @@ const ops = {
     for (const o of objs) if (o.goads && o.goads.length) { o.goads = null; this.log(`${o.c.name} is no longer goaded`); }
     this.markDirty();
   },
-  *suspect$(e, ctx) {
-    const objs = this.objsOf(yield* this.refs$(e.what ?? { ref: "target", i: 0 }, ctx)).filter((o) => o.zone === "battlefield");
-    for (const o of objs) { o.suspected = true; this.log(`${o.c.name} becomes suspected`); this.fireTrigger({ type: "suspected", obj: o, player: ctx.you }); }
-    this.markDirty(); this.refresh();
-    ctx.it = objs.map((o) => o.id);
-  },
-
   *_myriad$(e, ctx) {
     const src = ctx.source && this.state.objects[ctx.source.id];
     const st = this.state;
