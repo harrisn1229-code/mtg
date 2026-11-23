@@ -291,17 +291,18 @@ test("Fisher's Talent: Fish become Sharks at level 2 and Octopuses at level 3", 
   healthy(g);
 });
 
-test("Fortune Teller's Talent: after casting a spell this turn you may play cards from the top of your library; level 3 reduces spells not cast from hand", () => {
-  const g = setup({ p0: { battlefield: ["Fortune Teller's Talent", "Island"], hand: ["Opt"], library: ["Forest"] } });
+test("Fortune Teller's Talent: after casting a spell this turn you may play cards from the top of your library", () => {
+  const g = setup({ p0: { battlefield: ["Fortune Teller's Talent"], hand: ["Lightning Bolt"], library: ["Forest"] } });
   toMain(g);
-  const t = one(g, "Fortune Teller's Talent");
-  t.counters.level = 2; g.markDirty(); g.refresh(); g.refreshRequest();
-  assert.ok(!hasAction(g, "Play Forest"), "no spell cast yet");
-  mana(g, 0, "{U}");
-  act(g, "Cast Opt");
+  one(g, "Fortune Teller's Talent").counters.level = 2; g.markDirty(); g.refresh(); g.refreshRequest();
+  assert.ok(!hasAction(g, "Play Forest"), "no spell cast yet this turn");
+  mana(g, 0, "{R}");
+  act(g, "Cast Lightning Bolt");
+  while (g.request.kind === "choose") choose(g, "AI");
   resolveAll(g);
-  while (g.request.kind === "choose" || g.request.kind === "confirm") g.respond(g.request.kind === "choose" ? { chosen: [] } : { yes: false });
-  assert.ok(hasAction(g, "Play Forest") || g.state.players[0].library.length === 0 || true);
+  assert.ok(hasAction(g, "Play Forest"), "the top card of the library can be played");
+  act(g, "Play Forest");
+  assert.equal(byName(g, "Forest").length, 1);
   healthy(g);
 });
 
