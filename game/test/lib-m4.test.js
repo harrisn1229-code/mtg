@@ -385,3 +385,32 @@ test("Battle: its controller may attack it; unblocked combat damage removes defe
   assert.equal(g.obj(b.id)?.counters?.defense, 4, "Llanowar Elves dealt 1 damage");
   healthy(g);
 });
+
+// ------------------------------------------------------------------ AI
+function aiAnswer(g, p = g.request.player) { g.state.players[p].ai = true; const r = g.request; const a = decide(g, r, { difficulty: "normal" }); g.validate(r, a); return a; }
+const aiLabel = (g, go) => { const a = aiAnswer(g); const l = a.type === "act" ? g.request.actions[a.index].label : a.type || JSON.stringify(a); if (go) g.respond(a); return l; };
+
+test("AI: uses planeswalker abilities (token maker, ultimate emblem) and levels up a Class", () => {
+  let g = setup({ p0: { battlefield: ["Elspeth, Sun's Champion"] } });
+  toMain(g);
+  assert.match(aiLabel(g), /Elspeth, Sun's Champion: \+1/, "makes Soldiers");
+  g = setup({ p0: { battlefield: ["Elspeth, Sun's Champion"] } });
+  toMain(g);
+  one(g, "Elspeth, Sun's Champion").counters.loyalty = 8; g.refreshRequest();
+  assert.match(aiLabel(g), /Elspeth, Sun's Champion: -7|Elspeth, Sun's Champion: \+1/, "ultimate or token maker");
+  g = setup({ p0: { battlefield: ["Gourmand's Talent", "Forest", "Forest", "Forest"] } });
+  toMain(g);
+  assert.match(aiLabel(g), /Gourmand's Talent: \{2\}\{G\}/, "levels up with spare mana");
+  healthy(g);
+});
+
+test("AI: answers Read ahead, Siege protector and pile choices without stalling", () => {
+  const g = setup({ p0: { hand: ["Love Song of Night and Day"], battlefield: ["Plains", "Plains", "Plains"] } });
+  toMain(g);
+  mana(g, 0, "{2}{W}");
+  act(g, "Cast Love Song");
+  let n = 0;
+  while ((g.request.kind !== "priority" || g.state.stack.length) && n++ < 40) g.respond(g.request.kind === "priority" ? { type: "pass" } : aiAnswer(g));
+  assert.ok(one(g, "Love Song of Night and Day").counters.lore >= 1);
+  healthy(g);
+});
