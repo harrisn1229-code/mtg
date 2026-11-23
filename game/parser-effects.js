@@ -231,7 +231,8 @@ export function parseCost(text) {
   if (!parts.length) fail("empty cost");
   for (const p of parts) {
     let m;
-    if (/^(?:\{[^}]+\})+$/.test(p) && p !== "{T}" && p !== "{Q}") {
+    if (/^(?:\{E\})+$/.test(p)) cost.energy = (cost.energy || 0) + p.length / 3; // energy counters
+    else if (/^(?:\{[^}]+\})+$/.test(p) && p !== "{T}" && p !== "{Q}") {
       cost.mana = (cost.mana || "") + p;
       if (/\{X\}/i.test(p)) cost.x = true;
     } else if (p === "{T}") cost.tap = true;
@@ -259,6 +260,7 @@ export function parseCost(text) {
       else if ((m = w.match(/^an? (.+) card$/i))) cost.discard = parseFilter(m[1] + " card");
       else fail("discard cost");
     } else if ((m = p.match(/^pay (\d+|x) life$/i))) cost.life = num(m[1]);
+    else if ((m = p.match(/^pay ((?:\{E\})+)$/i))) cost.energy = (cost.energy || 0) + m[1].length / 3;
     else if ((m = p.match(/^pay ((?:\{[^}]+\})+)$/i))) cost.mana = (cost.mana || "") + m[1];
     else if ((m = p.match(/^exile (.+?) from your graveyard$/i))) {
       const w = m[1].trim();
@@ -1026,6 +1028,7 @@ function imperativeRules(c, ctx) {
   if ((m = c.match(/^goad (.+)$/i)) && !/ (?:that|each) (?:had|has)\b/i.test(c)) return [{ op: "goad", what: objRef(m[1], ctx) }];
   if ((m = c.match(/^monstrosity (\d+|x)$/i))) return [{ op: "_monstrosity", amount: /^x$/i.test(m[1]) ? "x" : +m[1] }];
   if (/^populate$/i.test(c)) return [{ op: "populate" }];
+  if ((m = c.match(/^you get ((?:\{E\})+)$/i))) return [{ op: "addCounters", what: "you", kind: "energy", amount: m[1].length / 3 }];
   if (/^flip a coin$/i.test(c)) return [{ op: "flipCoin" }];
   if ((m = c.match(/^adapt (\d+)$/i))) return [{ op: "if", cond: { type: "counters", what: "self", kind: "+1/+1", op: "==", n: 0 }, then: [{ op: "addCounters", what: "self", kind: "+1/+1", amount: +m[1] }] }];
   if (/^choose a creature type$/i.test(c)) return [{ op: "chooseCreatureType" }];

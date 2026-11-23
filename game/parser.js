@@ -109,6 +109,7 @@ function kwItem(item, kws) {
   return false;
 }
 function tryKeywordLine(L) {
+  { const pm = L.match(/^partner with (.+)$/i); if (pm) return { kws: { partnerWith: pm[1].trim().replace(/[.]$/, "") } }; }
   const first = L.split(/,\s*|\s+/)[0].toLowerCase();
   const items = splitTop(L, /,\s+/);
   const kws = {};
