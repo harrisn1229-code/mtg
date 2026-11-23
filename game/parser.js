@@ -44,12 +44,14 @@ function selfify(text, names) {
 
 const SIMPLE_KW = new Set(["flying", "first strike", "double strike", "deathtouch", "defender", "haste", "hexproof", "indestructible", "lifelink", "menace", "reach",
   "trample", "vigilance", "flash", "fear", "intimidate", "skulk", "shadow", "infect", "wither", "persist", "undying", "changeling", "devoid", "prowess", "shroud",
-  "horsemanship", "exploit", "delve", "partner", "split second", "cascade", "storm", "convoke", "rebound", "myriad", "evolve", "riot", "dethrone", "afterlife 1", "increment"]);
+  "horsemanship", "exploit", "delve", "partner", "split second", "cascade", "storm", "convoke", "rebound", "myriad", "evolve", "riot", "dethrone", "afterlife 1", "increment",
+  "exalted", "battle cry", "mentor", "training", "melee", "ravenous", "living weapon", "undaunted", "enlist", "station"]);
 const IGNORED_KW = new Set(["partner"]);
 // accepted but inert in the engine unless it implements them
-const KW_ACCEPT = new Set([...KEYWORD_SET, "exploit", "delve", "partner", "increment"]);
+const KW_ACCEPT = new Set([...KEYWORD_SET, "exploit", "delve", "partner", "increment", "ravenous", "living weapon", "undaunted", "enlist", "station"]);
 const UNSUPPORTED_KW_RE = /^(?:disguise|hideaway|storm|cascade|convoke|affinity|bestow|crew|saddle|banding|phasing|ninjutsu|suspend|madness|buyback|surge|emerge|prototype|read ahead|level up|boast|foretell|daybound|nightbound|ravenous|casualty|squad|offspring|more than meets|living weapon|rebound|soulbond|fabricate|dash|evoke|unearth|embalm|eternalize|miracle|replicate|retrace|jump-start|aftermath|multikicker|entwine|escalate|champion|fading|vanishing|cumulative upkeep|devour|modular|sunburst|graft|bloodthirst|haunt|amplify|hexproof from|protection from (?!(?:white|blue|black|red|green)))/i;
 
+const cap1 = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 function kwItem(item, kws) {
   const t = item.trim().replace(/[.]$/, "");
   const lt = t.toLowerCase();
@@ -63,6 +65,20 @@ function kwItem(item, kws) {
   }
   if ((m = t.match(/^(equip|cycling|flashback|kicker|echo|overload) ((?:\{[^}]+\})+)$/i))) { kws[m[1].toLowerCase()] = m[2]; return true; }
   if ((m = t.match(/^(annihilator|toxic) (\d+)$/i))) { kws[m[1].toLowerCase()] = +m[2]; return true; }
+  // library batch m2: creature / combat keywords with a value
+  if ((m = t.match(/^(crew|fabricate|mobilize|afflict) (\d+)$/i))) { kws[m[1].toLowerCase()] = +m[2]; return true; }
+  if ((m = t.match(/^squad (\{[^}]+\}(?:\{[^}]+\})*)$/i))) { kws.squad = { mana: m[1] }; return true; }
+  if ((m = t.match(/^squad\s*[—-]\s*(.+)$/i))) { // "Squad—{1}, Discard a card."
+    let cost; try { cost = parseCost(m[1]); } catch (e) { if (e instanceof Fail) return false; throw e; }
+    kws.squad = cost; return true;
+  }
+  if ((m = t.match(/^partner with (.+)$/i))) { kws.partnerWith = m[1].trim(); return true; }
+  if ((m = t.match(/^devour (?:(\w+) )?(\d+)$/i))) {
+    const what = m[1] ? m[1].toLowerCase() : "creature";
+    kws.devour = { n: +m[2], label: m[1] ? cap1(m[1]) : "", filter: what === "creature" ? { types: ["creature"] } : { subtypes: [what] } };
+    return true;
+  }
+  if (/^myriad$/i.test(t) && kws.myriad) { kws.myriad = 2; return true; } // "Myriad, myriad"
   if ((m = t.match(/^escape-((?:\{[^}]+\})+), exile (\w+) other cards? from your graveyard$/i))) { kws.escape = m[1]; kws.escapeExile = num(m[2]); return true; }
   if ((m = t.match(/^(mutate|morph|megamorph|spectacle|unearth) ((?:\{[^}]+\})+)$/i))) { kws[m[1].toLowerCase()] = m[2]; return true; }
   if ((m = t.match(/^afterlife (\d+)$/i))) { kws.afterlife = +m[1]; return true; }
@@ -97,7 +113,7 @@ function tryKeywordLine(L) {
   const items = splitTop(L, /,\s+/);
   const kws = {};
   // looks like a keyword line only if the first item is (or begins like) a keyword
-  const startsKw = items.length && (SIMPLE_KW.has(items[0].trim().toLowerCase()) || /^(?:ward|protection from|equip|cycling|flashback|kicker|echo|overload|annihilator|toxic|escape-|mutate|morph|megamorph|spectacle|craft with|afterlife|unearth|cascade|basic landcycling|(?:plains|island|swamp|mountain|forest)(?:walk|cycling))\b/i.test(items[0]) || UNSUPPORTED_KW_RE.test(items[0].trim()));
+  const startsKw = items.length && (SIMPLE_KW.has(items[0].trim().toLowerCase()) || /^(?:ward|protection from|equip|cycling|flashback|kicker|echo|overload|annihilator|toxic|crew|fabricate|mobilize|afflict|squad|partner with|devour|escape-|mutate|morph|megamorph|spectacle|craft with|afterlife|unearth|cascade|basic landcycling|(?:plains|island|swamp|mountain|forest)(?:walk|cycling))\b/i.test(items[0]) || UNSUPPORTED_KW_RE.test(items[0].trim()));
   if (/^flashback\s*[—-]/i.test(L)) { const kws2 = {}; return kwItem(L, kws2) ? { kws: kws2 } : { unparsed: true }; }
   if (!startsKw) return null;
   for (const it of items) {
@@ -563,6 +579,13 @@ function parseStaticLine(L, text, def, mkCtx) {
   if ((m = s.match(/^~'s power and toughness are each equal to (.+)$/i))) {
     const a = expr(m[1], { flags: {}, last: null });
     return [st({ type: "setPT", power: a, toughness: a })];
+  }
+  // library batch m2: "Enchanted/Equipped creature <grants> and is goaded"
+  if ((m = s.match(/^((?:enchanted|equipped) creature .+?),? and is goaded$/i)) && !/^(?:enchanted|equipped) creature is /i.test(m[1])) {
+    const who = /^enchanted/i.test(m[1]) ? "enchanted" : "equipped";
+    let inner = null;
+    try { inner = parseStaticLine(m[1] + ".", text, def, mkCtx); } catch (e) { if (!(e instanceof Fail)) throw e; }
+    if (inner) return [...inner, st({ type: "goaded", affects: who }, condition)];
   }
   // pump / keyword grants
   const subjRe = /^(~|equipped creature|enchanted creature|enchanted land|.+? you control|.+?)\s+/;

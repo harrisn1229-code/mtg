@@ -11,6 +11,7 @@ export const combatMethods = {
 
   *combatPhase$() {
     const st = this.state;
+    this.m2BeginCombat();
     yield* this.beginStep$("beginCombat");
     if (this.over) return;
     yield* this.step$("declareAttackers");
@@ -49,7 +50,8 @@ export const combatMethods = {
       if (o.controller !== a || !o.c.types.includes("creature") || o.tapped) continue;
       if (o.sick && !this.hasKw(o, "haste")) continue;
       if (this.hasKw(o, "defender") || o.c.cantAttack) continue;
-      out.push({ obj: o.id, defenders: [...defenders] });
+      const ds = this.m2Defenders(o, [...defenders]);
+      if (ds.length) out.push({ obj: o.id, defenders: ds });
     }
     return out;
   },
@@ -60,11 +62,12 @@ export const combatMethods = {
     const cands = this.attackCandidates(a);
     if (!cands.length) return;
     const ans = yield { kind: "attackers", player: a, prompt: "Declare attackers", candidates: cands };
-    const attacks = [...ans.attacks];
+    let attacks = [...ans.attacks];
     for (const c of cands) {
       const o = st.objects[c.obj];
       if (o.c.mustAttack && !attacks.some((x) => x.obj === c.obj)) attacks.push({ obj: c.obj, defender: c.defenders[0] });
     }
+    attacks = this.m2FixAttacks(cands, attacks); // goaded creatures / creatures this combat must attack
     const list = [];
     for (const at of attacks) {
       const o = st.objects[at.obj];
@@ -75,8 +78,10 @@ export const combatMethods = {
       list.push(o);
     }
     this.refresh();
+    yield* this.m2Declared$(list); // enlist, exert, attack bookkeeping
     for (const o of list) {
       const e = st.combat.attackers.find((x) => x.obj === o.id);
+      if (!e) continue;
       this.fireTrigger({ type: "attacks", obj: o, defender: e.defender, player: this.defenderPlayer(e.defender), alone: list.length === 1 });
     }
   },

@@ -1,6 +1,7 @@
 // engine-chars.js — computed characteristics (simplified layer system), filter matching, ability lists.
 // Mixed into the Game prototype (methods use `this`).
 import { cmp, colorLetter, PERMANENT_TYPES, BASIC_LAND_MANA, parseManaCost, FACE_DOWN_DEF, CREATURE_TYPES } from "./engine-util.js";
+import { kwSynth } from "./kw-synth.js";
 
 const EMPTY_C = { name: "?", types: [], subtypes: [], supertypes: [], colors: [], keywords: {}, abilities: [], power: 0, toughness: 0, cmc: 0 };
 const LAND_SUBS = new Set(["plains", "island", "swamp", "mountain", "forest", "desert", "gate", "lair", "locus", "cave", "sphere", "mine", "tower", "power-plant", "urza's", "town"]);
@@ -71,6 +72,7 @@ function synthAbilities(d) {
   if (kw.craft && typeof kw.craft === "object") // Craft with X {cost}: {cost}, exile this artifact, exile X you control / X card from your graveyard: return it transformed. Sorcery speed.
     out.push({ kind: "activated", synthetic: "craft", sorcery: true, cost: { mana: kw.craft.cost || "{0}", exileSelf: true, craftWith: kw.craft.with || { types: ["creature"] }, craftCount: kw.craft.n || 1 },
       effects: [{ op: "_craftReturn" }], text: `Craft with ${kw.craft.text || "a creature"} ${kw.craft.cost || ""}`.trim() });
+  out.push(...kwSynth(kw)); // crew, evolve, exalted, myriad, ... (library batch m2)
   // intrinsic mana abilities of basic land types
   if (d.types.includes("land")) {
     const produced = new Set();
@@ -245,6 +247,7 @@ export const charMethods = {
         }
       }
     }
+    this.m2Refresh(bf, act); // goaded / suspected flags, granted keyword abilities (engine-m2.js)
     // pass 3: P/T. Every amount and "affects" filter is evaluated first, while all objects still carry their previous
     // complete P/T (refresh() iterates until stable), then the printed values are reset and the results applied.
     const setOps = [], pumpOps = [];
@@ -258,7 +261,7 @@ export const charMethods = {
       } else if (t === "pump" && (s.st.power || s.st.toughness)) {
         const fixed = s.eff && s.eff.fixedPT; // locked amounts for resolved effects
         for (const o of bf) if (this._affects(s, o)) {
-          const ctx = { source: s.src || o, you: s.you, x: s.eff?.x };
+          const ctx = { source: s.src || o, you: s.you, x: s.eff?.x, obj: o };
           pumpOps.push([o, fixed ? fixed[0] : this.amount(s.st.power || 0, ctx), fixed ? fixed[1] : this.amount(s.st.toughness || 0, ctx)]);
         }
       }
@@ -361,6 +364,7 @@ export const charMethods = {
     if (f.notChosenType && src && src.chosen && src.chosen.creatureType && hasSub(c, src.chosen.creatureType)) return false;
     if (f.sharesTypeWithCommander && !this.sharesTypeWithCommander(o, you)) return false;
     if (f.faceDown != null && !!o.faceDown !== !!f.faceDown) return false;
+    if (!this.m2Matches(o, f, c)) return false;
     if (f.not && this.matches(o, f.not, ctx, "*")) return false;
     if (f.anyOf && Array.isArray(f.anyOf) && f.anyOf.length && !f.anyOf.some((x) => this.matches(o, x, ctx, "*"))) return false;
     return true;
