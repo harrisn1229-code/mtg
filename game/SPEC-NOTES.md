@@ -211,7 +211,13 @@ Cards still to do are split into batches in `lib-ov/batches.json` (`m1`–`m4` =
 - Add scenario tests in `test/lib-<batch>.test.js`: at least one per distinct pattern you automated (more for anything tricky). Keep them fast.
 - Commit your work (in your worktree) with a clear message. Don't push.
 
-**Card batches (b01–b18)** edit only `lib-ov/<batch>.js`, `lib-ov/<batch>.requests.md` and `test/lib-<batch>.test.js`.
+**Mechanics now in the engine** (batches m1–m4 are merged): planeswalkers/loyalty, Sagas/read ahead, Battles, Classes, Level up, Cases,
+monarch, rad, emblems (m4); casting variants and cost mechanics — convoke, dash, evoke, foretell, plot, suspend, madness, miracle, kicker
+variants, gift, offspring, cast-from-graveyard/exile grants (m1); crew/vehicles, goad, extra combats, evolve, myriad, mentor, exert, enlist,
+devour, fabricate, monstrosity, populate (m2); energy, voting, investigate, discover, manifest/cloak/disguise, dredge, ascend, crime (m3).
+Read the "Library automation: m1"–"m4" subsections below before writing overrides; use these instead of re-implementing them.
+
+**Card batches (b01–b17)** edit only `lib-ov/<batch>.js`, `lib-ov/<batch>.requests.md` and `test/lib-<batch>.test.js`.
 **Mechanics batches (m1–m4)** add the mechanic to the engine/parser (and AI decisions, and UI labels if a new prompt or zone needs one), then
 automate the batch's cards. Keep changes additive and local (new helpers/branches, no refactors) because several batches are merged together;
 note what you added under a short "Library automation: <batch>" subsection below.
